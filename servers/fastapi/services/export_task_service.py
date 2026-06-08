@@ -5,7 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError, model_validator
@@ -38,6 +38,10 @@ class PptxToHtmlDocument(BaseModel):
     height: float
     images_dir: str
     fonts_dir: str
+
+
+class PptxToJsonDocument(BaseModel):
+    layouts: list[dict[str, Any]]
 
 
 class PresentationExportTaskResult(BaseModel):
@@ -507,6 +511,44 @@ class ExportTaskService:
             self._ensure_output_readable(output_path)
 
         return HtmlToImagesTaskResult(paths=output_paths)
+
+    async def convert_pptx_to_json(
+        self,
+        pptx_path: str,
+        *,
+        slide_concurrency: int | None = None,
+    ) -> PptxToJsonDocument:
+        if not os.path.isfile(pptx_path):
+            raise HTTPException(status_code=400, detail=f"PPTX not found: {pptx_path}")
+
+        task_payload: dict[str, Any] = {
+            "type": "pptx-to-json",
+            "pptx_path": pptx_path,
+        }
+        if slide_concurrency is not None:
+            task_payload["slide_concurrency"] = slide_concurrency
+
+        try:
+            response_data = await self._run_task(
+                task_payload,
+                "PPTX-to-JSON export task did not produce a response file",
+            )
+
+            output_path = self._resolve_output_path(response_data)
+            with open(output_path, "r", encoding="utf-8") as output_file:
+                output_data = json.load(output_file)
+
+            return PptxToJsonDocument(**output_data)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="PPTX-to-JSON export produced invalid JSON output",
+            ) from exc
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="PPTX-to-JSON export produced invalid output",
+            ) from exc
 
     async def extract_schema(self, url: str) -> ExtractSchemaDocument:
         LOGGER.info(

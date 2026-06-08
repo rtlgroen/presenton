@@ -18,6 +18,7 @@ from models.sql.presentation_layout_code import PresentationLayoutCodeModel
 from models.sql.presentation import PresentationModel
 from models.sql.template import TemplateModel
 from models.sql.template_create_info import TemplateCreateInfoModel
+from models.sql.template_v2 import TemplateV2
 from models.sql.slide import SlideModel
 from models.sql.webhook_subscription import WebhookSubscription
 from utils.get_env import get_migrate_database_on_startup_env
@@ -58,6 +59,7 @@ async def create_db_and_tables():
                         PresentationLayoutCodeModel.__table__,
                         TemplateCreateInfoModel.__table__,
                         TemplateModel.__table__,
+                        TemplateV2.__table__,
                         WebhookSubscription.__table__,
                         AsyncPresentationGenerationTaskModel.__table__,
                         OllamaPullStatus.__table__,

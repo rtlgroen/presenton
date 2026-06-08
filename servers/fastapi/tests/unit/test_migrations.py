@@ -70,7 +70,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
             }
 
-        assert version == "c7b70d0f31b1"
+        assert version == migrations.REVISION_TEMPLATE_V2
         assert "theme" in columns
     finally:
         engine.dispose()
@@ -120,7 +120,7 @@ def test_upgrade_from_theme_stamp_skips_existing_template_create_infos_table(tmp
                 )
             }
 
-        assert version == "c7b70d0f31b1"
+        assert version == migrations.REVISION_TEMPLATE_V2
         assert "template_create_infos" in tables
     finally:
         engine.dispose()
@@ -169,12 +169,60 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
                     text("PRAGMA index_list(chat_history_messages)")
                 )
             }
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    text("SELECT name FROM sqlite_master WHERE type = 'table'")
+                )
+            }
 
-        assert version == "c7b70d0f31b1"
+        assert version == migrations.REVISION_TEMPLATE_V2
         assert {
             "ix_chat_history_messages_conversation_id",
             "ix_chat_history_messages_position",
             "ix_chat_history_messages_presentation_id",
         }.issubset(indexes)
+        assert "template_v2" in tables
     finally:
         engine.dispose()
+
+
+def test_unversioned_database_with_chat_history_stamps_before_template_v2(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{tmp_path / 'legacy-chat.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE presentations (id TEXT PRIMARY KEY)"))
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE chat_history_messages (
+                        id CHAR(32) NOT NULL,
+                        presentation_id CHAR(32) NOT NULL,
+                        conversation_id CHAR(32) NOT NULL,
+                        position INTEGER NOT NULL,
+                        role VARCHAR NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    stamped_revisions = []
+    monkeypatch.setattr(
+        migrations.command,
+        "stamp",
+        lambda _config, revision: stamped_revisions.append(revision),
+    )
+
+    migrations._stamp_legacy_database_if_needed(
+        _alembic_config(database_url), database_url
+    )
+
+    assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
