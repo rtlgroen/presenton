@@ -1,12 +1,15 @@
-import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import logging
+import os
 from json import JSONDecodeError
+from time import perf_counter
 from typing import Any
 
 from llmai import get_client
 from llmai.shared import (
     AssistantMessage,
-    JSONObjectResponse,
+    JSONSchemaResponse,
     SystemMessage,
     UserMessage,
 )
@@ -17,12 +20,16 @@ from utils.llm_config import get_llm_config
 from utils.llm_provider import get_model
 
 
-DEFAULT_VALIDATION_RETRIES = 3
+DEFAULT_VALIDATION_RETRIES = 4
+DEFAULT_LLM_LOG_PREVIEW_CHARS = 4000
+LLM_LOG_PREVIEW_CHARS_ENV = "TEMPLATE_V2_LLM_LOG_PREVIEW_CHARS"
 MAX_PARALLEL_SLIDE_LAYOUTS = 10
+
+LOGGER = logging.getLogger(__name__)
 
 
 GENERATE_SLIDE_LAYOUT_PROMPT = """
-Convert the provided raw SlideLayout JSON object into one flexible SlideLayout JSON object.
+Convert the provided SlideLayouts JSON to flexible and reusable SlideLayouts which can be used as template to generate new slides with different content.
 Return exactly one raw JSON SlideLayout object. Do not include markdown, comments, or explanations.
 
 # Core Rules
@@ -58,6 +65,7 @@ Return exactly one raw JSON SlideLayout object. Do not include markdown, comment
 # Schema Rules
 - Set `fixed: true` for static layout/decorative content.
 - Set `fixed: false` for replaceable placeholders used when generating new presentations.
+- Fixed should be true only for design related elements not for content elements.
 - A group has only `type`, `name`, and `children`; never include group `position`, `size`, or `rotation`.
 - Provide required schema bounds wherever supported:
   - text: `min_length` and `max_length`
@@ -70,31 +78,67 @@ Return exactly one raw JSON SlideLayout object. Do not include markdown, comment
 """
 
 
-def generate_slide_layout(layout: SlideLayout) -> SlideLayout:
+def generate_slide_layout(
+    layout: SlideLayout,
+    slide_index: int | None = None,
+    total_slides: int | None = None,
+) -> SlideLayout:
     '''
     Generate flexible layout for a slide using raw slide layout.
     '''
     client = get_client(config=get_llm_config())
     model = get_model()
+    label = _slide_label(layout.id, slide_index, total_slides)
     messages = [
         SystemMessage(
-            content=_system_prompt_with_schema(
-                GENERATE_SLIDE_LAYOUT_PROMPT,
-                SlideLayout,
-            )
+            # content=_system_prompt_with_schema(
+            #     GENERATE_SLIDE_LAYOUT_PROMPT,
+            #     SlideLayout,
+            # )
+            content=GENERATE_SLIDE_LAYOUT_PROMPT
         ),
         UserMessage(content=_json_dumps_for_prompt(layout.model_dump(mode="json"))),
     ]
 
-    result = _generate_with_validation_retries(
-        client=client,
-        model=model,
-        messages=messages,
-        label=f"slide layout {layout.id}",
-        output_model=SlideLayout,
-        validation_retries=DEFAULT_VALIDATION_RETRIES,
+    LOGGER.info(
+        "[templates.v2.generate] slide generation start label=%s model=%s "
+        "validation_retries=%d max_attempts=%d input_elements=%d",
+        label,
+        model,
+        DEFAULT_VALIDATION_RETRIES,
+        DEFAULT_VALIDATION_RETRIES + 1,
+        len(layout.elements),
     )
-    return SlideLayout.model_validate(result)
+    started_at = perf_counter()
+    try:
+        result = _generate_with_validation_retries(
+            client=client,
+            model=model,
+            messages=messages,
+            label=label,
+            output_model=SlideLayout,
+            validation_retries=DEFAULT_VALIDATION_RETRIES,
+        )
+        generated = SlideLayout.model_validate(result)
+    except Exception:
+        LOGGER.exception(
+            "[templates.v2.generate] slide generation failed label=%s model=%s "
+            "duration_ms=%.1f",
+            label,
+            model,
+            _elapsed_ms(started_at),
+        )
+        raise
+
+    LOGGER.info(
+        "[templates.v2.generate] slide generation complete label=%s model=%s "
+        "duration_ms=%.1f output_elements=%d",
+        label,
+        model,
+        _elapsed_ms(started_at),
+        len(generated.elements),
+    )
+    return generated
 
 
 def generate_template(layouts: SlideLayouts) -> SlideLayouts:
@@ -106,21 +150,62 @@ def generate_template(layouts: SlideLayouts) -> SlideLayouts:
     if not layouts.layouts:
         raise ValueError("layouts must contain at least one slide layout")
 
+    total_slides = len(layouts.layouts)
+    max_workers = min(MAX_PARALLEL_SLIDE_LAYOUTS, total_slides)
+    LOGGER.info(
+        "[templates.v2.generate] template generation start slides=%d "
+        "max_parallel=%d validation_retries=%d max_attempts_per_slide=%d",
+        total_slides,
+        max_workers,
+        DEFAULT_VALIDATION_RETRIES,
+        DEFAULT_VALIDATION_RETRIES + 1,
+    )
+    started_at = perf_counter()
     generated_by_index: dict[int, SlideLayout] = {}
-    with ThreadPoolExecutor(
-        max_workers=min(MAX_PARALLEL_SLIDE_LAYOUTS, len(layouts.layouts))
-    ) as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(generate_slide_layout, layout): index
+            executor.submit(
+                generate_slide_layout,
+                layout,
+                index + 1,
+                total_slides,
+            ): index
             for index, layout in enumerate(layouts.layouts)
         }
         for future in as_completed(futures):
-            generated_by_index[futures[future]] = future.result()
+            index = futures[future]
+            layout_id = layouts.layouts[index].id
+            try:
+                generated_by_index[index] = future.result()
+            except Exception:
+                LOGGER.exception(
+                    "[templates.v2.generate] template generation failed "
+                    "slide_index=%d/%d layout_id=%s duration_ms=%.1f",
+                    index + 1,
+                    total_slides,
+                    layout_id,
+                    _elapsed_ms(started_at),
+                )
+                raise
+            LOGGER.info(
+                "[templates.v2.generate] template slide complete "
+                "slide_index=%d/%d layout_id=%s completed=%d/%d",
+                index + 1,
+                total_slides,
+                layout_id,
+                len(generated_by_index),
+                total_slides,
+            )
 
-    generated_layouts = [
-        generated_by_index[index] for index in range(len(layouts.layouts))
-    ]
-    return SlideLayouts.model_validate({"layouts": generated_layouts})
+    generated_layouts = [generated_by_index[index] for index in range(total_slides)]
+    result = SlideLayouts.model_validate({"layouts": generated_layouts})
+    LOGGER.info(
+        "[templates.v2.generate] template generation complete slides=%d "
+        "duration_ms=%.1f",
+        total_slides,
+        _elapsed_ms(started_at),
+    )
+    return result
 
 
 def _generate_with_validation_retries(
@@ -134,19 +219,55 @@ def _generate_with_validation_retries(
 ) -> dict[str, Any]:
     attempt_messages = list(messages)
     last_error: Exception | None = None
+    max_attempts = validation_retries + 1
 
-    for attempt in range(1, validation_retries + 2):
+    for attempt in range(1, max_attempts + 1):
+        attempt_started_at = perf_counter()
+        LOGGER.info(
+            "[templates.v2.llm] request start label=%s model=%s attempt=%d/%d "
+            "retry=%d/%d messages=%d",
+            label,
+            model,
+            attempt,
+            max_attempts,
+            attempt - 1,
+            validation_retries,
+            len(attempt_messages),
+        )
         try:
             response = client.generate(
                 model=model,
                 messages=attempt_messages,
-                temperature=0,
-                response_format=JSONObjectResponse(),
+                response_format=JSONSchemaResponse(
+                    name="SlideLayoutsResponse",
+                    strict=False,
+                    json_schema=output_model,
+                ),
                 max_tokens=8192,
             )
         except Exception as exc:
             last_error = exc
+            LOGGER.warning(
+                "[templates.v2.llm] request failed label=%s model=%s "
+                "attempt=%d/%d retry=%d/%d duration_ms=%.1f error=%s",
+                label,
+                model,
+                attempt,
+                max_attempts,
+                attempt - 1,
+                validation_retries,
+                _elapsed_ms(attempt_started_at),
+                exc,
+            )
             if attempt > validation_retries:
+                LOGGER.error(
+                    "[templates.v2.llm] retries exhausted after generation error "
+                    "label=%s model=%s attempts=%d validation_retries=%d",
+                    label,
+                    model,
+                    attempt,
+                    validation_retries,
+                )
                 raise
             attempt_messages = _messages_for_generation_error_retry(
                 messages=attempt_messages,
@@ -157,11 +278,49 @@ def _generate_with_validation_retries(
 
         try:
             parsed = _parse_json_content(response.content)
-            return _validate_output_model(parsed, output_model)
+            validated = _validate_output_model(parsed, output_model)
+            LOGGER.info(
+                "[templates.v2.llm] response validated label=%s model=%s "
+                "attempt=%d/%d retry=%d/%d duration_ms=%.1f preview=%s",
+                label,
+                model,
+                attempt,
+                max_attempts,
+                attempt - 1,
+                validation_retries,
+                _elapsed_ms(attempt_started_at),
+                _preview_for_log(response.content),
+            )
+            return validated
         except ValidationError as exc:
             last_error = exc
             if attempt > validation_retries:
+                LOGGER.error(
+                    "[templates.v2.llm] validation failed; retries exhausted "
+                    "label=%s model=%s attempt=%d/%d retry=%d/%d "
+                    "duration_ms=%.1f",
+                    label,
+                    model,
+                    attempt,
+                    max_attempts,
+                    attempt - 1,
+                    validation_retries,
+                    _elapsed_ms(attempt_started_at),
+                )
                 raise
+            LOGGER.warning(
+                "[templates.v2.llm] validation failed; retrying label=%s model=%s "
+                "attempt=%d/%d retry=%d/%d next_attempt=%d/%d duration_ms=%.1f",
+                label,
+                model,
+                attempt,
+                max_attempts,
+                attempt - 1,
+                validation_retries,
+                attempt + 1,
+                max_attempts,
+                _elapsed_ms(attempt_started_at),
+            )
             attempt_messages = _messages_for_model_validation_retry(
                 messages=attempt_messages,
                 response=response,
@@ -172,7 +331,28 @@ def _generate_with_validation_retries(
             )
         except (JSONDecodeError, ValueError) as exc:
             last_error = exc
+            LOGGER.warning(
+                "[templates.v2.llm] JSON parse failed label=%s model=%s "
+                "attempt=%d/%d retry=%d/%d duration_ms=%.1f error=%s preview=%s",
+                label,
+                model,
+                attempt,
+                max_attempts,
+                attempt - 1,
+                validation_retries,
+                _elapsed_ms(attempt_started_at),
+                exc,
+                _preview_for_log(response.content),
+            )
             if attempt > validation_retries:
+                LOGGER.error(
+                    "[templates.v2.llm] retries exhausted after JSON parse failure "
+                    "label=%s model=%s attempts=%d validation_retries=%d",
+                    label,
+                    model,
+                    attempt,
+                    validation_retries,
+                )
                 raise
             attempt_messages = _messages_for_json_repair_retry(
                 messages=attempt_messages,
@@ -375,10 +555,55 @@ def _model_validation_repair_prompt(
 
 def _format_error_for_prompt(error: Exception) -> str:
     if isinstance(error, ValidationError):
-        return _json_dumps_for_prompt(error.errors())
+        return _json_dumps_for_prompt(error.errors(include_input=False))
 
     return str(error)
 
 
 def _json_dumps_for_prompt(value: Any) -> str:
-    return json.dumps(value, indent=2, ensure_ascii=False)
+    return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+
+
+def _slide_label(
+    layout_id: str,
+    slide_index: int | None,
+    total_slides: int | None,
+) -> str:
+    if slide_index is None or total_slides is None:
+        return f"slide layout {layout_id}"
+    return f"slide layout {layout_id} ({slide_index}/{total_slides})"
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return (perf_counter() - started_at) * 1000
+
+
+def _preview_for_log(value: Any) -> str:
+    text = _text_from_content(value)
+    if text is None:
+        text = _json_dumps_for_prompt(value)
+
+    max_chars = _llm_log_preview_chars()
+    if max_chars <= 0:
+        return "<disabled>"
+
+    if len(text) <= max_chars:
+        return text
+
+    return f"{text[:max_chars]}... <truncated {len(text) - max_chars} chars>"
+
+
+def _llm_log_preview_chars() -> int:
+    raw = os.getenv(LLM_LOG_PREVIEW_CHARS_ENV)
+    if raw is None:
+        return DEFAULT_LLM_LOG_PREVIEW_CHARS
+    try:
+        return int(raw)
+    except ValueError:
+        LOGGER.warning(
+            "[templates.v2.llm] invalid %s=%r; using default preview chars=%d",
+            LLM_LOG_PREVIEW_CHARS_ENV,
+            raw,
+            DEFAULT_LLM_LOG_PREVIEW_CHARS,
+        )
+        return DEFAULT_LLM_LOG_PREVIEW_CHARS

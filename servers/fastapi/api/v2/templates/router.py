@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from datetime import datetime
 from typing import Any, Optional
@@ -21,6 +22,7 @@ from utils.file_utils import get_original_file_name
 
 
 TEMPLATES_V2_ROUTER = APIRouter(prefix="/templates", tags=["Templates V2"])
+LOGGER = logging.getLogger(__name__)
 
 
 class CreateTemplateV2Request(BaseModel):
@@ -90,13 +92,27 @@ def _collect_image_urls_from_layouts(layouts_json: dict[str, Any]) -> list[str]:
 
 
 async def _generate_flexible_layouts(raw_layouts: SlideLayouts) -> SlideLayouts:
+    LOGGER.info(
+        "[templates.v2.create] flexible layout generation start slides=%d",
+        len(raw_layouts.layouts),
+    )
     try:
-        return await asyncio.to_thread(generate_template, raw_layouts)
+        generated_layouts = await asyncio.to_thread(generate_template, raw_layouts)
     except ValidationError as exc:
+        LOGGER.exception(
+            "[templates.v2.create] flexible layout generation produced invalid output "
+            "slides=%d",
+            len(raw_layouts.layouts),
+        )
         raise HTTPException(
             status_code=500,
             detail="Flexible layout generation produced invalid output",
         ) from exc
+    LOGGER.info(
+        "[templates.v2.create] flexible layout generation complete slides=%d",
+        len(generated_layouts.layouts),
+    )
+    return generated_layouts
 
 
 @TEMPLATES_V2_ROUTER.get("", response_model=TemplateV2ListResponse)
@@ -147,23 +163,57 @@ async def create_template_v2(
     request: CreateTemplateV2Request = Body(...),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
+    LOGGER.info(
+        "[templates.v2.create] request received pptx_url=%s slide_images=%d "
+        "font_count=%d has_name=%s",
+        request.pptx_url,
+        len(request.slide_image_urls),
+        len(request.fonts or {}),
+        bool((request.name or "").strip()),
+    )
     if not request.slide_image_urls:
+        LOGGER.warning(
+            "[templates.v2.create] rejected request without slide images "
+            "pptx_url=%s",
+            request.pptx_url,
+        )
         raise HTTPException(
             status_code=400, detail="At least one slide image is required"
         )
 
     pptx_path = resolve_app_path_to_filesystem(request.pptx_url)
     if not pptx_path or not os.path.isfile(pptx_path):
+        LOGGER.warning(
+            "[templates.v2.create] rejected request; PPTX file not found "
+            "pptx_url=%s resolved_path=%s",
+            request.pptx_url,
+            pptx_path,
+        )
         raise HTTPException(status_code=400, detail="PPTX file not found")
 
+    LOGGER.info(
+        "[templates.v2.create] converting PPTX to JSON pptx_path=%s",
+        pptx_path,
+    )
     pptx_json = await EXPORT_TASK_SERVICE.convert_pptx_to_json(pptx_path)
     try:
         raw_layouts = SlideLayouts.model_validate(pptx_json.model_dump(mode="json"))
     except ValidationError as exc:
+        LOGGER.exception(
+            "[templates.v2.create] PPTX-to-JSON export produced invalid slide "
+            "layout JSON pptx_path=%s",
+            pptx_path,
+        )
         raise HTTPException(
             status_code=500,
             detail="PPTX-to-JSON export produced invalid slide layout JSON",
         ) from exc
+    LOGGER.info(
+        "[templates.v2.create] PPTX-to-JSON validation complete pptx_path=%s "
+        "slides=%d",
+        pptx_path,
+        len(raw_layouts.layouts),
+    )
 
     generated_layouts = await _generate_flexible_layouts(raw_layouts)
     raw_layouts_json = raw_layouts.model_dump(mode="json", exclude_none=True)
@@ -183,9 +233,20 @@ async def create_template_v2(
             "images": _collect_image_urls_from_layouts(raw_layouts_json),
         },
     )
+    LOGGER.info(
+        "[templates.v2.create] persisting template name=%s slides=%d images=%d",
+        template.name,
+        len(generated_layouts.layouts),
+        len(template.assets.get("images", [])),
+    )
     sql_session.add(template)
     await sql_session.commit()
     await sql_session.refresh(template)
+    LOGGER.info(
+        "[templates.v2.create] template persisted template_id=%s name=%s",
+        template.id,
+        template.name,
+    )
     return template
 
 

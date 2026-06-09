@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Literal, Optional, TypeAlias, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 def _validate_min_max(
@@ -163,16 +163,6 @@ class Text(BaseModel):  # Konva Text
     max_length: int
     min_length: int
 
-    @model_validator(mode="after")
-    def validate_schema_bounds(self):
-        _validate_min_max(
-            self.min_length,
-            self.max_length,
-            min_name="min_length",
-            max_name="max_length",
-        )
-        return self
-
 
 class Container(BaseModel):  # Konva Group
     type: Literal["container"]
@@ -223,22 +213,6 @@ class TextList(BaseModel):  # Konva Group
     max_item_length: int
     min_item_length: int
 
-    @model_validator(mode="after")
-    def validate_schema_bounds(self):
-        _validate_min_max(
-            self.min_items,
-            self.max_items,
-            min_name="min_items",
-            max_name="max_items",
-        )
-        _validate_min_max(
-            self.min_item_length,
-            self.max_item_length,
-            min_name="min_item_length",
-            max_name="max_item_length",
-        )
-        return self
-
 
 class TableCell(BaseModel):
     fill: Optional[Fill] = None
@@ -261,22 +235,6 @@ class Table(BaseModel):
     min_columns: int
     max_rows: int
     min_rows: int
-
-    @model_validator(mode="after")
-    def validate_schema_bounds(self):
-        _validate_min_max(
-            self.min_columns,
-            self.max_columns,
-            min_name="min_columns",
-            max_name="max_columns",
-        )
-        _validate_min_max(
-            self.min_rows,
-            self.max_rows,
-            min_name="min_rows",
-            max_name="max_rows",
-        )
-        return self
 
 
 class Rectangle(BaseModel):
@@ -346,16 +304,6 @@ class Flex(BaseModel):
     max_children: int
     min_children: int
 
-    @model_validator(mode="after")
-    def validate_schema_bounds(self):
-        _validate_min_max(
-            self.min_children,
-            self.max_children,
-            min_name="min_children",
-            max_name="max_children",
-        )
-        return self
-
 
 class Grid(BaseModel):
     type: Literal["grid"]
@@ -375,16 +323,6 @@ class Grid(BaseModel):
     name: str
     max_children: int
     min_children: int
-
-    @model_validator(mode="after")
-    def validate_schema_bounds(self):
-        _validate_min_max(
-            self.min_children,
-            self.max_children,
-            min_name="min_children",
-            max_name="max_children",
-        )
-        return self
 
 
 class Group(BaseModel):
