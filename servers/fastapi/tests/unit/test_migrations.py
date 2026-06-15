@@ -70,7 +70,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
             }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_TEMPLATE_V2_ARTIFACTS
         assert "theme" in columns
     finally:
         engine.dispose()
@@ -120,7 +120,7 @@ def test_upgrade_from_theme_stamp_skips_existing_template_create_infos_table(tmp
                 )
             }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_TEMPLATE_V2_ARTIFACTS
         assert "template_create_infos" in tables
     finally:
         engine.dispose()
@@ -175,14 +175,21 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
                     text("SELECT name FROM sqlite_master WHERE type = 'table'")
                 )
             }
+            template_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+            }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_TEMPLATE_V2_ARTIFACTS
         assert {
             "ix_chat_history_messages_conversation_id",
             "ix_chat_history_messages_position",
             "ix_chat_history_messages_presentation_id",
         }.issubset(indexes)
         assert "template_v2" in tables
+        assert {"cluster_candidates", "clusters", "components"}.issubset(
+            template_columns
+        )
     finally:
         engine.dispose()
 
@@ -226,3 +233,42 @@ def test_unversioned_database_with_chat_history_stamps_before_template_v2(
     )
 
     assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
+
+
+def test_unversioned_database_with_old_template_v2_stamps_before_artifacts(
+    tmp_path, monkeypatch
+):
+    database_url = f"sqlite:///{tmp_path / 'legacy-template-v2.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE template_v2 (
+                        id CHAR(32) NOT NULL,
+                        name VARCHAR NOT NULL,
+                        raw_layouts JSON,
+                        layouts JSON NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    stamped_revisions = []
+    monkeypatch.setattr(
+        migrations.command,
+        "stamp",
+        lambda _config, revision: stamped_revisions.append(revision),
+    )
+
+    migrations._stamp_legacy_database_if_needed(
+        _alembic_config(database_url), database_url
+    )
+
+    assert stamped_revisions == [migrations.REVISION_TEMPLATE_V2]

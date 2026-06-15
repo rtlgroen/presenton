@@ -17,6 +17,15 @@ class TemplateV2(SQLModel, table=True):
     raw_layouts: Optional[dict] = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
+    cluster_candidates: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
+    clusters: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
+    components: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     layouts: dict = Field(sa_column=Column(JSON, nullable=False))
     assets: Optional[dict] = Field(
         default=None, sa_column=Column(JSON, nullable=True)

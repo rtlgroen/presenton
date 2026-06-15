@@ -15,7 +15,7 @@ from api.v2.templates.router import (
 )
 from models.sql.template_v2 import TemplateV2
 from services.export_task_service import PptxToJsonDocument
-from templates.v2.models.layouts import SlideLayouts
+from templates.v2.generation import TemplateGenerationArtifacts
 
 
 RAW_LAYOUTS = {
@@ -43,6 +43,64 @@ RAW_LAYOUTS = {
         }
     ]
 }
+
+TEMPLATE_LAYOUTS = {
+    "layouts": [
+        {
+            "id": "slide_1",
+            "description": "Full slide layout converted from PPTX slide 1.",
+            "components": [
+                {
+                    "id": "photo_component",
+                    "description": "Reusable image component.",
+                    "design_variables": [],
+                    "elements": [
+                        {
+                            "type": "image",
+                            "position": {"x": 100, "y": 120},
+                            "size": {"width": 320, "height": 180},
+                            "data": "/app_data/pptx-to-json/session/images/photo.png",
+                            "fixed": True,
+                            "name": "photo",
+                            "is_icon": False,
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+}
+
+GENERATED_ARTIFACTS = TemplateGenerationArtifacts(
+    cluster_candidates={
+        "slide_count": 1,
+        "candidate_count": 1,
+        "candidates": [
+            {
+                "id": "photo",
+                "description": "Standalone photo image component.",
+                "slide_index": 0,
+                "elements": [1],
+            }
+        ],
+    },
+    clusters={
+        "candidate_count": 1,
+        "cluster_count": 1,
+        "clusters": [{"id": "image_component", "candidates": [0]}],
+    },
+    components={
+        "cluster_count": 1,
+        "component_count": 1,
+        "components": TEMPLATE_LAYOUTS["layouts"][0]["components"],
+    },
+    layouts=TEMPLATE_LAYOUTS,
+    stats={
+        "replaced_candidates": 1,
+        "skipped_overlapping_candidates": 0,
+        "untouched_elements": 1,
+    },
+)
 
 
 class _RowsResult:
@@ -75,7 +133,6 @@ class _ListSession:
 def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async_session):
     pptx_path = tmp_path / "quarterly-review.pptx"
     pptx_path.write_bytes(b"pptx")
-    generated_layouts = SlideLayouts.model_validate(RAW_LAYOUTS)
 
     with patch(
         "api.v2.templates.router.resolve_app_path_to_filesystem",
@@ -85,7 +142,7 @@ def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async
         new=AsyncMock(return_value=PptxToJsonDocument(**RAW_LAYOUTS)),
     ) as convert_mock, patch(
         "api.v2.templates.router.generate_template",
-        new=Mock(return_value=generated_layouts),
+        new=Mock(return_value=GENERATED_ARTIFACTS),
     ) as generate_mock:
         template = asyncio.run(
             create_template_v2(
@@ -102,7 +159,10 @@ def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async
     generate_mock.assert_called_once()
     assert template.name == "quarterly-review"
     assert template.raw_layouts == RAW_LAYOUTS
-    assert template.layouts == RAW_LAYOUTS
+    assert template.cluster_candidates == GENERATED_ARTIFACTS.cluster_candidates
+    assert template.clusters == GENERATED_ARTIFACTS.clusters
+    assert template.components == GENERATED_ARTIFACTS.components
+    assert template.layouts == TEMPLATE_LAYOUTS
     assert template.assets == {
         "fonts": {"Inter": "Inter"},
         "slide_image_urls": ["/app_data/images/slide-1.png"],

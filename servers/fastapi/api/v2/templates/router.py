@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import partial
 from typing import Any, Optional
 from urllib.parse import unquote, urlparse
 import uuid
@@ -15,7 +17,7 @@ from sqlmodel import select
 from models.sql.template_v2 import TemplateV2
 from services.database import get_async_session
 from services.export_task_service import EXPORT_TASK_SERVICE
-from templates.v2.generation import generate_template
+from templates.v2.generation import TemplateGenerationArtifacts, generate_template
 from templates.v2.models.layouts import SlideLayouts
 from utils.asset_directory_utils import resolve_app_path_to_filesystem
 from utils.file_utils import get_original_file_name
@@ -52,6 +54,9 @@ class TemplateV2ListResponse(BaseModel):
 
 class TemplateV2Response(TemplateV2ListItem):
     raw_layouts: Optional[dict[str, Any]] = None
+    cluster_candidates: Optional[dict[str, Any]] = None
+    clusters: Optional[dict[str, Any]] = None
+    components: Optional[dict[str, Any]] = None
     layouts: dict[str, Any]
     assets: Optional[dict[str, Any]] = None
 
@@ -91,28 +96,75 @@ def _collect_image_urls_from_layouts(layouts_json: dict[str, Any]) -> list[str]:
     return images
 
 
-async def _generate_flexible_layouts(raw_layouts: SlideLayouts) -> SlideLayouts:
+async def _generate_template_artifacts(
+    raw_layouts: SlideLayouts,
+) -> TemplateGenerationArtifacts:
     LOGGER.info(
-        "[templates.v2.create] flexible layout generation start slides=%d",
+        "[templates.v2.create] template artifact generation start slides=%d",
         len(raw_layouts.layouts),
     )
     try:
-        generated_layouts = await asyncio.to_thread(generate_template, raw_layouts)
-    except ValidationError as exc:
+        generated_template = await _run_template_generation_thread(
+            generate_template,
+            raw_layouts,
+        )
+        artifacts = _coerce_template_generation_artifacts(generated_template)
+    except (ValidationError, ValueError) as exc:
         LOGGER.exception(
-            "[templates.v2.create] flexible layout generation produced invalid output "
+            "[templates.v2.create] template artifact generation produced invalid output "
             "slides=%d",
             len(raw_layouts.layouts),
         )
         raise HTTPException(
             status_code=500,
-            detail="Flexible layout generation produced invalid output",
+            detail="Template artifact generation produced invalid output",
         ) from exc
+
     LOGGER.info(
-        "[templates.v2.create] flexible layout generation complete slides=%d",
-        len(generated_layouts.layouts),
+        "[templates.v2.create] template artifact generation complete slides=%d "
+        "candidates=%d clusters=%d components=%d",
+        len(raw_layouts.layouts),
+        artifacts.cluster_candidates.get("candidate_count", 0),
+        artifacts.clusters.get("cluster_count", 0),
+        artifacts.components.get("component_count", 0),
     )
-    return generated_layouts
+    return artifacts
+
+
+async def _run_template_generation_thread(func: Any, *args: Any) -> Any:
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="template-v2-generation",
+    ) as executor:
+        return await loop.run_in_executor(executor, partial(func, *args))
+
+
+def _coerce_template_generation_artifacts(
+    generated_template: Any,
+) -> TemplateGenerationArtifacts:
+    if isinstance(generated_template, TemplateGenerationArtifacts):
+        return generated_template
+
+    if isinstance(generated_template, SlideLayouts):
+        layouts_json = generated_template.model_dump(mode="json", exclude_none=True)
+        return TemplateGenerationArtifacts(
+            cluster_candidates={
+                "slide_count": len(generated_template.layouts),
+                "candidate_count": 0,
+                "candidates": [],
+            },
+            clusters={"candidate_count": 0, "cluster_count": 0, "clusters": []},
+            components={"cluster_count": 0, "component_count": 0, "components": []},
+            layouts=layouts_json,
+            stats={
+                "replaced_candidates": 0,
+                "skipped_overlapping_candidates": 0,
+                "untouched_elements": 0,
+            },
+        )
+
+    return TemplateGenerationArtifacts.model_validate(generated_template)
 
 
 @TEMPLATES_V2_ROUTER.get("", response_model=TemplateV2ListResponse)
@@ -215,18 +267,18 @@ async def create_template_v2(
         len(raw_layouts.layouts),
     )
 
-    generated_layouts = await _generate_flexible_layouts(raw_layouts)
+    generation_artifacts = await _generate_template_artifacts(raw_layouts)
     raw_layouts_json = raw_layouts.model_dump(mode="json", exclude_none=True)
-    generated_layouts_json = generated_layouts.model_dump(
-        mode="json", exclude_none=True
-    )
     template = TemplateV2(
         name=(request.name or "").strip() or _derive_template_name(
             request.pptx_url, pptx_path
         ),
         description=request.description,
         raw_layouts=raw_layouts_json,
-        layouts=generated_layouts_json,
+        cluster_candidates=generation_artifacts.cluster_candidates,
+        clusters=generation_artifacts.clusters,
+        components=generation_artifacts.components,
+        layouts=generation_artifacts.layouts,
         assets={
             "fonts": request.fonts or {},
             "slide_image_urls": request.slide_image_urls,
@@ -236,7 +288,7 @@ async def create_template_v2(
     LOGGER.info(
         "[templates.v2.create] persisting template name=%s slides=%d images=%d",
         template.name,
-        len(generated_layouts.layouts),
+        len(raw_layouts.layouts),
         len(template.assets.get("images", [])),
     )
     sql_session.add(template)
