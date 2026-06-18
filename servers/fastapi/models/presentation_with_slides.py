@@ -26,4 +26,4 @@ class PresentationWithSlides(BaseModel):
 
 
 class PresentationDetailWithSlides(PresentationWithSlides):
-    pass
+    components: Optional[Any] = None

@@ -15,6 +15,7 @@ import {
     extractTemplateV2Layouts,
 } from "@/components/slide-editor/lib/template-v2-import";
 import { TemplateV2KonvaSlide } from "./TemplateV2KonvaSlide";
+import { BLANK_TEMPLATE_V2_LAYOUT, isBlankPresentationSlide } from "../_shared/blank-slide";
 
 
 
@@ -26,9 +27,13 @@ export const V1ContentRender = ({ slide, isEditMode, theme, presentationLayout: 
         (state: RootState) => state.presentationGeneration.presentationData?.layout
     );
     const presentationLayout = presentationLayoutOverride ?? reduxPresentationLayout;
+    const presentationComponents = useSelector(
+        (state: RootState) => state.presentationGeneration.presentationData?.components
+    );
 
     const layoutGroup = typeof slide.layout_group === "string" ? slide.layout_group : "";
     const slideLayout = typeof slide.layout === "string" ? slide.layout : "";
+    const isBlankSlide = isBlankPresentationSlide(slide);
     const isTemplateV2Slide = layoutGroup.startsWith("template-v2");
 
     const customTemplateId = layoutGroup.startsWith("custom-") ? layoutGroup.split("custom-")[1] : layoutGroup;
@@ -76,6 +81,23 @@ export const V1ContentRender = ({ slide, isEditMode, theme, presentationLayout: 
         }
     }, [isTemplateV2Slide, isCustomTemplate, customTemplate, slideLayout, layoutGroup]);
 
+    if (isBlankSlide && isTemplateV2Slide) {
+        return (
+            <SlideErrorBoundary label={`Slide ${slide.index + 1}`}>
+                <TemplateV2KonvaSlide
+                    layout={BLANK_TEMPLATE_V2_LAYOUT}
+                    slide={slide}
+                    isEditMode={isEditMode}
+                    components={presentationComponents}
+                />
+            </SlideErrorBoundary>
+        );
+    }
+
+    if (isBlankSlide) {
+        return <div className="h-full w-full bg-white" />;
+    }
+
     if (isTemplateV2Slide) {
         if (!templateV2Layout) {
             return (
@@ -92,6 +114,7 @@ export const V1ContentRender = ({ slide, isEditMode, theme, presentationLayout: 
                     layout={templateV2Layout}
                     slide={slide}
                     isEditMode={isEditMode}
+                    components={presentationComponents}
                 />
             </SlideErrorBoundary>
         );

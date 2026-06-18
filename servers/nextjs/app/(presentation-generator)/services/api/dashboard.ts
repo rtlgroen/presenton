@@ -23,6 +23,8 @@ export interface PresentationResponse {
   thumbnail: string;
   layout?: any;
   structure?: any;
+  components?: any;
+  fonts?: any;
   slides: any[];
 }
 

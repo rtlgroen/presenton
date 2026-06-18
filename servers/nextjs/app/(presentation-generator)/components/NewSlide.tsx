@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { addNewSlide } from "@/store/slices/presentationGeneration";
-import { Loader2, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { notify } from "@/components/ui/sonner";
 import { getCustomTemplateDetails } from "@/app/hooks/useCustomTemplates";
@@ -19,6 +19,7 @@ import {
   extractTemplateV2Layouts,
   type TemplateV2Layout,
 } from "@/components/slide-editor/lib/template-v2-import";
+import { BLANK_SLIDE_LAYOUT_ID } from "../_shared/blank-slide";
 
 interface LayoutItemProps {
   layout: any;
@@ -55,6 +56,7 @@ const LayoutItem = memo(({ layout, onSelect }: LayoutItemProps) => {
     layoutId,
     layoutName,
     v2Layout,
+    isEmptySlide,
   } = layout;
 
   useEffect(() => {
@@ -97,13 +99,22 @@ const LayoutItem = memo(({ layout, onSelect }: LayoutItemProps) => {
         <div
           className="absolute left-0 top-0"
           style={{
-            width: PREVIEW_WIDTH,
-            height: PREVIEW_HEIGHT,
-            transform: `scale(${scale})`,
+            width: isEmptySlide ? "100%" : PREVIEW_WIDTH,
+            height: isEmptySlide ? "100%" : PREVIEW_HEIGHT,
+            transform: isEmptySlide ? undefined : `scale(${scale})`,
             transformOrigin: "top left",
           }}
         >
-          {v2Layout ? (
+          {isEmptySlide ? (
+            <div className="flex h-full w-full items-center justify-center bg-white">
+              <div className="flex flex-col items-center gap-2 text-[#191919]">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E2E2EA] bg-[#FAFAFB]">
+                  <Plus className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-medium">Empty Slide</span>
+              </div>
+            </div>
+          ) : v2Layout ? (
             <TemplateV2LayoutPreview layout={v2Layout} />
           ) : LayoutComponent ? (
             <LayoutComponent data={sampleData} />
@@ -213,9 +224,19 @@ const NewSlideV1 = ({
     };
   }, [isCustomTemplate, isTemplateV2, presentationLayout, templateID]);
 
-  const layoutCountText = `${layouts.length} Layout${
-    layouts.length === 1 ? "" : "s"
-  }`;
+  const emptySlideLayout = {
+    layoutId: BLANK_SLIDE_LAYOUT_ID,
+    layoutName: "Empty Slide",
+    sampleData: {},
+    isEmptySlide: true,
+  };
+  const showEmptySlideLayout = isTemplateV2;
+  const selectableLayouts = showEmptySlideLayout
+    ? [emptySlideLayout, ...layouts]
+    : layouts;
+  const layoutCountText = showEmptySlideLayout
+    ? `${selectableLayouts.length} Option${selectableLayouts.length === 1 ? "" : "s"}`
+    : `${layouts.length} Layout${layouts.length === 1 ? "" : "s"}`;
 
   return (
     <div
@@ -255,9 +276,9 @@ const NewSlideV1 = ({
           <div className="flex h-56 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-[#7C51F8]" />
           </div>
-        ) : layouts.length > 0 ? (
+        ) : selectableLayouts.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {layouts.map((layout: any) => (
+            {selectableLayouts.map((layout: any) => (
               <LayoutItem
                 key={layout.layoutId}
                 layout={layout}

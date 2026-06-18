@@ -275,6 +275,26 @@ def test_get_presentation_preserves_template_v2_detail_payload():
             }
         ]
     }
+    template_components = {
+        "cluster_count": 1,
+        "component_count": 1,
+        "components": [
+            {
+                "id": "hero",
+                "description": "Reusable hero content component.",
+                "position": {"x": 24, "y": 32},
+                "size": {"width": 640, "height": 200},
+                "elements": [
+                    {
+                        "type": "text",
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 640, "height": 80},
+                        "runs": [{"text": "Hero"}],
+                    }
+                ],
+            }
+        ],
+    }
     structure = {"slides": [0]}
     presentation = PresentationModel(
         id=presentation_id,
@@ -291,7 +311,22 @@ def test_get_presentation_preserves_template_v2_detail_payload():
         created_at=now,
         updated_at=now,
     )
-    session = FakeAsyncSession(get_results={presentation_id: presentation})
+    template = TemplateV2(
+        id=uuid.uuid4(),
+        name="presentation",
+        layouts=template_layouts,
+        components=template_components,
+    )
+
+    class _TemplateV2ComponentSession(FakeAsyncSession):
+        async def execute(self, *_args, **_kwargs):
+            class _RowsResult:
+                def all(self):
+                    return [(template.id, template.layouts, template.components)]
+
+            return _RowsResult()
+
+    session = _TemplateV2ComponentSession(get_results={presentation_id: presentation})
 
     response = _run(
         presentation_endpoint.get_presentation(
@@ -303,6 +338,7 @@ def test_get_presentation_preserves_template_v2_detail_payload():
     assert response.version == PresentationVersion.V2_STANDARD
     assert response.layout == template_layouts
     assert response.structure == structure
+    assert response.components == template_components
 
 
 def test_stream_presentation_uses_template_v2_schema_for_content_generation():

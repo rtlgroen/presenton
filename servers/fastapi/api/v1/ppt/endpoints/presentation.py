@@ -103,6 +103,38 @@ def _extract_custom_template_id(layout_name: Optional[str]) -> Optional[uuid.UUI
         return None
 
 
+def _extract_template_v2_id(layout_name: Optional[str]) -> Optional[uuid.UUID]:
+    if not layout_name:
+        return None
+
+    for prefix in ("template-v2-", "template-v2:"):
+        if layout_name.startswith(prefix):
+            try:
+                return uuid.UUID(layout_name[len(prefix) :])
+            except Exception:
+                return None
+    return None
+
+
+def _canonical_template_v2_layout_payload(layout_payload: Any) -> Optional[str]:
+    if not _is_template_v2_layout_payload(layout_payload):
+        return None
+
+    comparable_payload = copy.deepcopy(layout_payload)
+    if isinstance(comparable_payload, dict):
+        for metadata_key in ("name", "template_id", "template_v2_id"):
+            comparable_payload.pop(metadata_key, None)
+
+    try:
+        return json.dumps(
+            comparable_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 async def _resolve_presentation_fonts(
     presentation: PresentationModel,
     slides: List[SlideModel],
@@ -135,6 +167,62 @@ async def _resolve_presentation_fonts(
         for fonts in fonts_list:
             if fonts is not None:
                 return fonts
+
+    return None
+
+
+async def _resolve_presentation_components(
+    presentation: PresentationModel,
+    slides: List[SlideModel],
+    sql_session: AsyncSession,
+):
+    candidate_template_ids: List[uuid.UUID] = []
+    seen = set()
+
+    if isinstance(presentation.layout, dict):
+        for key in ("name", "template_id", "template_v2_id"):
+            value = presentation.layout.get(key)
+            template_id = None
+            if isinstance(value, str):
+                template_id = _extract_template_v2_id(value)
+                if template_id is None:
+                    try:
+                        template_id = uuid.UUID(value)
+                    except Exception:
+                        template_id = None
+            if template_id and template_id not in seen:
+                candidate_template_ids.append(template_id)
+                seen.add(template_id)
+
+    for slide in slides:
+        for value in (slide.layout_group, slide.layout):
+            template_id = _extract_template_v2_id(value)
+            if template_id and template_id not in seen:
+                candidate_template_ids.append(template_id)
+                seen.add(template_id)
+
+    for template_id in candidate_template_ids:
+        template = await sql_session.get(TemplateV2, template_id)
+        if template and template.components is not None:
+            return template.components
+
+    target_layout_payload = _canonical_template_v2_layout_payload(presentation.layout)
+    if not target_layout_payload:
+        return None
+
+    try:
+        result = await sql_session.execute(
+            select(TemplateV2.id, TemplateV2.layouts, TemplateV2.components)
+        )
+        for _template_id, layouts, components in result.all():
+            if components is None:
+                continue
+            if _canonical_template_v2_layout_payload(layouts) == target_layout_payload:
+                return components
+    except Exception:
+        logger.exception(
+            "[presentation.detail] failed to resolve template v2 components"
+        )
 
     return None
 
@@ -347,10 +435,16 @@ async def get_presentation(
     )
     slides = list(slides_result)
     fonts = await _resolve_presentation_fonts(presentation, slides, sql_session)
+    components = await _resolve_presentation_components(
+        presentation,
+        slides,
+        sql_session,
+    )
     return PresentationDetailWithSlides(
         **presentation.model_dump(),
         slides=slides,
         fonts=fonts,
+        components=components,
     )
 
 
@@ -684,6 +778,11 @@ async def stream_presentation(
             **presentation.model_dump(),
             slides=slides,
             fonts=await _resolve_presentation_fonts(presentation, slides, sql_session),
+            components=await _resolve_presentation_components(
+                presentation,
+                slides,
+                sql_session,
+            ),
         )
 
         yield SSECompleteResponse(
@@ -736,11 +835,17 @@ async def update_presentation(
         response_slides,
         sql_session,
     )
+    components = await _resolve_presentation_components(
+        presentation,
+        response_slides,
+        sql_session,
+    )
 
     return PresentationDetailWithSlides(
         **presentation.model_dump(),
         slides=response_slides,
         fonts=fonts,
+        components=components,
     )
 
 
