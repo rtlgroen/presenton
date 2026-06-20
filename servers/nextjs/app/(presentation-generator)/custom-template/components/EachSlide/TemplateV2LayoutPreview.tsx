@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React from "react";
 import { resolveBackendAssetUrl } from "@/utils/api";
+import { withEqualTemplateV2FlowChildSizes } from "@/components/slide-editor/lib/template-v2-import";
 import {
   TemplateV2Component,
   TemplateV2Element,
@@ -286,13 +287,14 @@ function renderContainer(
   mode: RenderMode
 ) {
   const padding = paddingStyle(readRecord(element.padding));
+  const fallbackSize = containerFallbackSize(element);
   const childMode = element.child?.position ? "absolute" : "flow";
 
   return (
     <div
       key={key}
       style={{
-        ...frameStyle(element, mode),
+        ...frameStyle(element, mode, fallbackSize),
         ...boxStyle(element),
         ...padding,
         alignItems: verticalAlign(readString(readRecord(element.alignment).vertical)),
@@ -306,8 +308,34 @@ function renderContainer(
   );
 }
 
+function containerFallbackSize(element: TemplateV2Element) {
+  const child = element.child;
+  if (!child) return undefined;
+
+  const childFallback = Array.isArray(child.children)
+    ? childrenBounds(child.children)
+    : undefined;
+  const childBox = readBox(child, childFallback);
+  const padding = readRecord(element.padding);
+  return {
+    width:
+      childBox.x +
+      (childBox.width ?? 1) +
+      (readNumber(padding.left) ?? 0) +
+      (readNumber(padding.right) ?? 0),
+    height:
+      childBox.y +
+      (childBox.height ?? 1) +
+      (readNumber(padding.top) ?? 0) +
+      (readNumber(padding.bottom) ?? 0),
+  };
+}
+
 function renderFlex(element: TemplateV2Element, key: string, mode: RenderMode) {
   const direction = readString(element.direction) === "row" ? "row" : "column";
+  const children = withEqualTemplateV2FlowChildSizes(
+    element as Record<string, unknown>,
+  ) as TemplateV2Element[];
 
   return (
     <div
@@ -324,7 +352,7 @@ function renderFlex(element: TemplateV2Element, key: string, mode: RenderMode) {
         overflow: "hidden",
       }}
     >
-      {(element.children ?? []).map((child, index) =>
+      {children.map((child, index) =>
         renderElement(child, `${key}-child-${index}`, "flow")
       )}
     </div>
@@ -334,6 +362,9 @@ function renderFlex(element: TemplateV2Element, key: string, mode: RenderMode) {
 function renderGrid(element: TemplateV2Element, key: string, mode: RenderMode) {
   const columns = Math.max(1, Math.floor(readNumber(element.columns) ?? 1));
   const rows = readNumber(element.rows);
+  const children = withEqualTemplateV2FlowChildSizes(
+    element as Record<string, unknown>,
+  ) as TemplateV2Element[];
 
   return (
     <div
@@ -351,7 +382,7 @@ function renderGrid(element: TemplateV2Element, key: string, mode: RenderMode) {
         rowGap: px(readNumber(element.row_gap) ?? readNumber(element.gap) ?? 0),
       }}
     >
-      {(element.children ?? []).map((child, index) =>
+      {children.map((child, index) =>
         renderElement(child, `${key}-child-${index}`, "flow")
       )}
     </div>

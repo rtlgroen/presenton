@@ -338,8 +338,8 @@ export function ElementLayer({
       const nextX = el.type === "ellipse" ? rawX - box.w / 2 : rawX;
       const nextY = el.type === "ellipse" ? rawY - box.h / 2 : rawY;
       const next = resizeElement(el, {
-        x: clamp(nextX, 0, SLIDE_W - box.w),
-        y: clamp(nextY, 0, SLIDE_H - box.h),
+        x: nextX,
+        y: nextY,
       });
       if (path === rootPath(index)) onChange?.(index, next);
       else onChangeAtPath?.(path, next);
@@ -358,8 +358,8 @@ export function ElementLayer({
       node.scaleY(1);
       const next = {
         ...resizeElement(el, {
-          x: clamp(nextX, 0, SLIDE_W - nextW),
-          y: clamp(nextY, 0, SLIDE_H - nextH),
+          x: nextX,
+          y: nextY,
           w: clamp(nextW, 0.1, SLIDE_W),
           h: clamp(nextH, 0.1, SLIDE_H),
         }),

@@ -65,6 +65,7 @@ async def edit_slide(
         slide.content,
         edited_slide_content,
         icon_weight=presentation.get_layout().icon_weight,
+        use_template_v2_asset_fields=slide.layout_group.startswith("template-v2"),
     )
 
     # Always assign a new unique id to the slide

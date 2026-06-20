@@ -250,6 +250,114 @@ export function adaptTemplateV2LayoutToSlide(
   return adaptLayoutToSlide(layout, index);
 }
 
+export function withEqualTemplateV2FlowChildSizes(
+  element: Record<string, unknown>,
+): unknown[] {
+  const children = readArray(element, "children");
+  if (children.length === 0) return children;
+
+  const size = readRecord(element, "size");
+  const width = readNumber(size ?? {}, "width");
+  const height = readNumber(size ?? {}, "height");
+  if (width == null || height == null) return children;
+
+  const padding = readRecord(element, "padding");
+  const contentWidth = Math.max(
+    0.01,
+    width -
+      (readNumber(padding ?? {}, "left") ?? 0) -
+      (readNumber(padding ?? {}, "right") ?? 0),
+  );
+  const contentHeight = Math.max(
+    0.01,
+    height -
+      (readNumber(padding ?? {}, "top") ?? 0) -
+      (readNumber(padding ?? {}, "bottom") ?? 0),
+  );
+  const type = readString(element.type);
+
+  if (type === "flex") {
+    const childTypes = children.map((child) => readString(asRecord(child)?.type));
+    if (
+      childTypes.some((childType) => childType == null) ||
+      new Set(childTypes).size > 1
+    ) {
+      return children;
+    }
+
+    const direction = readString(element.direction) === "column" ? "column" : "row";
+    const gap =
+      direction === "row"
+        ? readNumber(element, "columnGap", "column_gap") ??
+          readNumber(element, "gap") ??
+          0
+        : readNumber(element, "rowGap", "row_gap") ??
+          readNumber(element, "gap") ??
+          0;
+    const availableMain = Math.max(
+      0.01,
+      (direction === "row" ? contentWidth : contentHeight) -
+        gap * Math.max(0, children.length - 1),
+    );
+    const mainSize = availableMain / children.length;
+    return children.map((child) =>
+      withTemplateV2ChildSize(
+        child,
+        direction === "row" ? mainSize : contentWidth,
+        direction === "row" ? contentHeight : mainSize,
+      ),
+    );
+  }
+
+  if (type === "grid") {
+    const columns = Math.max(
+      1,
+      Math.min(children.length, Math.trunc(readNumber(element, "columns") ?? 1)),
+    );
+    const rows = Math.max(
+      1,
+      Math.trunc(readNumber(element, "rows") ?? Math.ceil(children.length / columns)),
+    );
+    const columnGap =
+      readNumber(element, "columnGap", "column_gap") ??
+      readNumber(element, "gap") ??
+      0;
+    const rowGap =
+      readNumber(element, "rowGap", "row_gap") ??
+      readNumber(element, "gap") ??
+      0;
+    const cellWidth = Math.max(
+      0.01,
+      (contentWidth - columnGap * Math.max(0, columns - 1)) / columns,
+    );
+    const cellHeight = Math.max(
+      0.01,
+      (contentHeight - rowGap * Math.max(0, rows - 1)) / rows,
+    );
+    return children.map((child) =>
+      withTemplateV2ChildSize(child, cellWidth, cellHeight),
+    );
+  }
+
+  return children;
+}
+
+function withTemplateV2ChildSize(
+  child: unknown,
+  width: number,
+  height: number,
+) {
+  const record = asRecord(child);
+  if (!record) return child;
+  return {
+    ...record,
+    size: {
+      width: sourceNumber(width),
+      height: sourceNumber(height),
+    },
+  };
+}
+
 export function serializeTemplateV2LayoutFromSlide(
   layout: TemplateV2Layout,
   slide: Slide,
@@ -809,10 +917,10 @@ function applyGeneratedImage(raw: UnknownRecord, value: unknown): UnknownRecord 
   if (!record) return raw;
 
   const url =
-    readString(record.__image_url__) ??
-    readString(record.__icon_url__) ??
     readString(record.image_url) ??
     readString(record.icon_url) ??
+    readString(record.__image_url__) ??
+    readString(record.__icon_url__) ??
     readString(record.url);
 
   if (!url) return raw;
@@ -1162,7 +1270,9 @@ function adaptFlex(raw: UnknownRecord): SlideElement {
     gap: scaleDistance(readNumber(raw, "gap"), X_SCALE),
     columnGap: scaleDistance(readNumber(raw, "columnGap", "column_gap"), X_SCALE),
     rowGap: scaleDistance(readNumber(raw, "rowGap", "row_gap"), Y_SCALE),
-    children: readArray(raw, "children").map(adaptElement).filter(Boolean) as SlideElement[],
+    children: withEqualTemplateV2FlowChildSizes(raw)
+      .map(adaptElement)
+      .filter(Boolean) as SlideElement[],
     maxChildren: readNumber(raw, "maxChildren", "max_children"),
     minChildren: readNumber(raw, "minChildren", "min_children"),
   };
@@ -1180,7 +1290,9 @@ function adaptGrid(raw: UnknownRecord): SlideElement {
     alignItems: readLayoutAlignment(raw, "alignItems", "align_items"),
     justifyItems: readLayoutAlignment(raw, "justifyItems", "justify_items"),
     padding: adaptPadding(readRecord(raw, "padding")),
-    children: readArray(raw, "children").map(adaptElement).filter(Boolean) as SlideElement[],
+    children: withEqualTemplateV2FlowChildSizes(raw)
+      .map(adaptElement)
+      .filter(Boolean) as SlideElement[],
     maxChildren: readNumber(raw, "maxChildren", "max_children"),
     minChildren: readNumber(raw, "minChildren", "min_children"),
   };
@@ -1406,8 +1518,8 @@ function toJsonValue(value: unknown): unknown {
 function adaptPosition(value: UnknownRecord | null): { x: number; y: number } | null {
   if (!value) return null;
   return {
-    x: clamp(round((readNumber(value, "x") ?? 0) * X_SCALE), 0, SLIDE_W),
-    y: clamp(round((readNumber(value, "y") ?? 0) * Y_SCALE), 0, SLIDE_H),
+    x: round((readNumber(value, "x") ?? 0) * X_SCALE),
+    y: round((readNumber(value, "y") ?? 0) * Y_SCALE),
   };
 }
 
@@ -1981,10 +2093,15 @@ function templateV2ContentUpdater(
     return () => element.runs.map((run) => run.text).join("");
   }
   if (element.type === "image" && element.data) {
-    return (currentValue) => ({
-      ...(isRecord(currentValue) ? currentValue : {}),
-      [element.is_icon ? "__icon_url__" : "__image_url__"]: element.data,
-    });
+    return (currentValue) => {
+      const value: UnknownRecord = {
+        ...(isRecord(currentValue) ? currentValue : {}),
+      };
+      delete value.__icon_url__;
+      delete value.__image_url__;
+      value[element.is_icon ? "icon_url" : "image_url"] = element.data;
+      return value;
+    };
   }
   if (element.type === "text-list") {
     return () => element.items.map((item) => item.text);

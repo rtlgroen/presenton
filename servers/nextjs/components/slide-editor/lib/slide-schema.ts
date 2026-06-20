@@ -35,8 +35,10 @@ export const ChartTypeSchema = z.enum(["bar", "line", "donut"]);
 
 export const PositionSchema = z
   .object({
-    x: z.number().min(0).max(SLIDE_W),
-    y: z.number().min(0).max(SLIDE_H),
+    // Elements may intentionally bleed beyond the slide and are clipped by the
+    // slide surface. Keep interaction bounds separate from persisted geometry.
+    x: z.number(),
+    y: z.number(),
   })
   .strict();
 

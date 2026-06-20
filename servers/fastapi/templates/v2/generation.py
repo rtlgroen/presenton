@@ -46,6 +46,11 @@ Convert the provided raw slide elements to components.
 3. Identify group of elements that belongs to each component.
 4. Generate `id` and `description` for the layout.
 
+# General Rules:
+- `id` and `description` must be related to layout and must not be derived from slide content.
+- `id` should be about 2 to 5 words in snake_case format.
+- `description` should be around 15 to 30 words.
+
 # Layout Rules:
 - Build the flexible component layout using `flex`, `grid`, `container`, etc.
 - Use `table` element for table and `chart` element for chart.
@@ -55,7 +60,8 @@ Convert the provided raw slide elements to components.
 
 # Position and Size Rules:
 - Use local coordinates relative to component for elements.
-- Don't provide position and size for elements inside flexible elements like `flex`, `grid`, `container`, etc.
+- Don't provide position for elements inside flexible elements like `flex`, `grid`, `container`, etc.
+- If children of `flex` and `grid` are not equally sized, provide `size` for children.
 - Must provide `position` and `size` for elements inside `group` element.
 
 # Schema Rules:

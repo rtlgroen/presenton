@@ -38,7 +38,12 @@ export function TextDomElement({
     items.forEach((item) => {
       const element = item.element;
       if (element.type !== "text") return;
-      sizes.set(item.path, computeEffectiveFontSize(element));
+      sizes.set(
+        item.path,
+        item.mode === "flow"
+          ? element.font?.size ?? computeEffectiveFontSize(element)
+          : computeEffectiveFontSize(element),
+      );
     });
     return sizes;
   }, [items]);
@@ -87,6 +92,7 @@ export function TextDomElement({
                 renderedRuns.some((run) => run.font) ? (
                   <RichTextRuns
                     baseFont={{ ...(element.font ?? {}), size: effective }}
+                    fontScale={fontScale(element.font?.size, effective)}
                     runs={renderedRuns}
                     scale={scale}
                   />
@@ -134,10 +140,12 @@ function semanticRunContent(run: TextRun): ReactNode {
 
 function RichTextRuns({
   baseFont,
+  fontScale,
   runs,
   scale,
 }: {
   baseFont: Font;
+  fontScale: number;
   runs: TextRun[];
   scale: number;
 }) {
@@ -146,13 +154,33 @@ function RichTextRuns({
       {runs.map((run, index) => (
         <span
           key={`${index}-${run.text}`}
-          style={fontStyle({ font: { ...baseFont, ...(run.font ?? {}) } }, scale)}
+          style={fontStyle(
+            {
+              font: {
+                ...baseFont,
+                ...(run.font ?? {}),
+                size:
+                  run.font?.size != null
+                    ? run.font.size * fontScale
+                    : baseFont.size,
+              },
+            },
+            scale,
+          )}
         >
           {run.text}
         </span>
       ))}
     </>
   );
+}
+
+function fontScale(
+  authoredSize: number | null | undefined,
+  fittedSize: number | null | undefined,
+) {
+  if (authoredSize == null || authoredSize <= 0 || fittedSize == null) return 1;
+  return fittedSize / authoredSize;
 }
 
 function computeEffectiveFontSize(element: TextElement): number {

@@ -18,6 +18,7 @@ import {
   type ElementBox,
 } from "./element-model";
 import { renderMarkdownTextContent } from "./markdown-text";
+import { measureTextHeightInches } from "./textMeasure";
 
 export type RenderMode = "absolute" | "flow";
 
@@ -380,10 +381,11 @@ function flexBoxes(
     sizes = sizes.map((size) => size + free / children.length);
   } else if (free < 0) {
     const shrinks = children.map((child) => child.layout?.shrink ?? 1);
-    const shrinkTotal = shrinks.reduce((sum, shrink) => sum + shrink, 0);
+    const scaledShrinks = shrinks.map((shrink, index) => shrink * sizes[index]);
+    const shrinkTotal = scaledShrinks.reduce((sum, shrink) => sum + shrink, 0);
     if (shrinkTotal > 0) {
       sizes = sizes.map((size, index) =>
-        Math.max(0.01, size + (free * shrinks[index]) / shrinkTotal),
+        Math.max(0.01, size + (free * scaledShrinks[index]) / shrinkTotal),
       );
     }
   }
@@ -453,6 +455,19 @@ function intrinsicTextMainSize(
   }
 
   const width = Math.max(0.1, child.size?.width ?? crossSize);
+  const measured = measureTextHeightInches({
+    text,
+    fontFace: font.family,
+    fontSize: font.size,
+    bold: font.bold,
+    italic: font.italic,
+    lineHeight: font.lineHeight,
+    charSpacing: font.letterSpacing,
+    wrap: font.wrap,
+    w: width,
+  });
+  if (measured != null) return measured;
+
   const averageCharWidth = Math.max(
     0.01,
     (font.size / 72) * TEXT_AVERAGE_CHAR_EM,
@@ -877,11 +892,17 @@ function clampSize(
 
 function normalizeBox(box: ElementBox): ElementBox {
   return {
-    x: clampFinite(box.x, 0, SLIDE_W),
-    y: clampFinite(box.y, 0, SLIDE_H),
+    // Preserve off-slide positions so bleed elements are clipped at the slide
+    // edge instead of being shifted into the visible canvas.
+    x: finiteOr(box.x, 0),
+    y: finiteOr(box.y, 0),
     w: clampFinite(box.w, 0.01, SLIDE_W),
     h: clampFinite(box.h, 0.01, SLIDE_H),
   };
+}
+
+function finiteOr(value: number, fallback: number) {
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function clampFinite(value: number, min: number, max: number) {
