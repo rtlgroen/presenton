@@ -1,3 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const nextjsRoot = path.dirname(fileURLToPath(import.meta.url));
+
 const fastApiRewriteOrigin =
   process.env.FAST_API_INTERNAL_URL ||
   process.env.NEXT_PUBLIC_FAST_API ||
@@ -8,10 +13,18 @@ const backendAssetRewrite = (path) => ({
   destination: `${fastApiRewriteOrigin}/app_data/${path}/:path*`,
 });
 
+const fastApiRewrite = (version) => ({
+  source: `/api/${version}/:path*`,
+  destination: `${fastApiRewriteOrigin}/api/${version}/:path*`,
+});
+
 const nextConfig = {
   reactStrictMode: false,
   distDir: ".next-build",
   output: "standalone",
+  turbopack: {
+    root: nextjsRoot,
+  },
   ...(process.env.NODE_ENV !== "production"
     ? {
         allowedDevOrigins: [
@@ -23,9 +36,11 @@ const nextConfig = {
       }
     : {}),
 
-  // Rewrites for development - proxy backend-served assets to FastAPI.
+  // Rewrites for development - proxy FastAPI APIs and backend-served assets.
   async rewrites() {
     return [
+      fastApiRewrite("v1"),
+      fastApiRewrite("v2"),
       backendAssetRewrite("fonts"),
       backendAssetRewrite("uploads"),
       backendAssetRewrite("images"),
