@@ -70,7 +70,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
             }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_SLIDE_UI
         assert "theme" in columns
     finally:
         engine.dispose()
@@ -120,7 +120,7 @@ def test_upgrade_from_theme_stamp_skips_existing_template_create_infos_table(tmp
                 )
             }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_SLIDE_UI
         assert "template_create_infos" in tables
     finally:
         engine.dispose()
@@ -180,7 +180,7 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
                 for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_SLIDE_UI
         assert {
             "ix_chat_history_messages_conversation_id",
             "ix_chat_history_messages_position",
@@ -219,6 +219,7 @@ def test_consolidated_migration_adds_presentation_version(tmp_path):
                     """
                 )
             )
+            connection.execute(text("CREATE TABLE slides (id TEXT PRIMARY KEY)"))
             connection.execute(
                 text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
             )
@@ -241,11 +242,16 @@ def test_consolidated_migration_adds_presentation_version(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
                 if row[1] == "version"
             )
+            slide_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(slides)"))
+            }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_SLIDE_UI
         assert presentation_version == "v1-standard"
         assert version_column[3] == 1
         assert version_column[4] is None
+        assert "ui" in slide_columns
     finally:
         engine.dispose()
 
@@ -289,6 +295,37 @@ def test_unversioned_database_with_chat_history_stamps_before_template_v2(
     )
 
     assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
+
+
+def test_upgrade_from_template_v2_revision_adds_slide_ui(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'slide-ui.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE slides (id TEXT PRIMARY KEY)"))
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": migrations.REVISION_TEMPLATE_V2},
+            )
+
+        command.upgrade(_alembic_config(database_url), "head")
+
+        with engine.connect() as connection:
+            version = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            slide_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(slides)"))
+            }
+
+        assert version == migrations.REVISION_SLIDE_UI
+        assert "ui" in slide_columns
+    finally:
+        engine.dispose()
 
 
 def test_unversioned_database_with_old_template_v2_stamps_before_consolidated(
@@ -428,7 +465,7 @@ def test_removed_intermediate_revision_upgrades_through_consolidated_migration(
                 for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
-        assert version == migrations.REVISION_TEMPLATE_V2
+        assert version == migrations.REVISION_SLIDE_UI
         assert {"description", "components", "assets"}.issubset(template_columns)
         assert "cluster_candidates" not in template_columns
         assert "clusters" not in template_columns

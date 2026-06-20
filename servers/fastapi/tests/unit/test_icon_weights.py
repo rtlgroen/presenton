@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from models.sql.slide import SlideModel
 from services.icon_finder_service import IconFinderService
@@ -88,4 +88,67 @@ def test_process_slide_fetches_icons_with_template_weight(monkeypatch):
     assert captured == {"query": "success check", "weight": "thin"}
     assert slide.content["icon"]["__icon_url__"].endswith(
         "/static/icons/thin/checks-thin.svg"
+    )
+
+
+def test_process_slide_fetches_every_template_v2_image_and_icon(monkeypatch):
+    icon_queries = []
+
+    async def fake_search_icons(query, k=1, weight=None):
+        icon_queries.append(query)
+        return [f"/static/icons/{query.replace(' ', '-')}.svg"]
+
+    monkeypatch.setattr(
+        process_slides.ICON_FINDER_SERVICE,
+        "search_icons",
+        fake_search_icons,
+    )
+    image_generation_service = Mock()
+    image_generation_service.generate_image = AsyncMock(
+        side_effect=[
+            "/static/generated/market.png",
+            "/static/generated/team.png",
+        ]
+    )
+    slide = SlideModel(
+        presentation=uuid.uuid4(),
+        layout_group="template-v2",
+        layout="layout-1",
+        index=0,
+        content={
+            "hero": {"image_prompt": "market dashboard"},
+            "cards": [
+                {"image_prompt": "collaborative team"},
+                {"icon_query": "growth chart"},
+                {"icon_query": "customer support"},
+            ],
+        },
+        properties=None,
+    )
+
+    assets = asyncio.run(
+        process_slides.process_slide_and_fetch_assets(
+            image_generation_service=image_generation_service,
+            slide=slide,
+            icon_weight="regular",
+        )
+    )
+
+    assert assets == []
+    assert [
+        call.args[0].prompt
+        for call in image_generation_service.generate_image.await_args_list
+    ] == ["market dashboard", "collaborative team"]
+    assert icon_queries == ["growth chart", "customer support"]
+    assert slide.content["hero"]["__image_url__"].endswith(
+        "/static/generated/market.png"
+    )
+    assert slide.content["cards"][0]["__image_url__"].endswith(
+        "/static/generated/team.png"
+    )
+    assert slide.content["cards"][1]["__icon_url__"].endswith(
+        "/static/icons/growth-chart.svg"
+    )
+    assert slide.content["cards"][2]["__icon_url__"].endswith(
+        "/static/icons/customer-support.svg"
     )

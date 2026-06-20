@@ -16,6 +16,7 @@ REVISION_BEFORE_TEMPLATE_CREATE_INFO = "82abdbc476a7"
 REVISION_TEMPLATE_CREATE_INFO = "95b5127e93cd"
 REVISION_CHAT_HISTORY = "c7b70d0f31b1"
 REVISION_TEMPLATE_V2 = "6e4a1b2c3d5f"
+REVISION_SLIDE_UI = "7f5b2c3d4e6a"
 
 
 async def migrate_database_on_startup() -> None:
@@ -110,12 +111,15 @@ def _infer_revision_from_schema(inspector, tables: set[str], head_revision: str)
             "presentations" not in tables
             or _has_presentation_version_column(inspector, tables)
         )
+        slide_ui_ready = "slides" not in tables or _has_column(
+            inspector, "slides", "ui"
+        )
         if (
             final_template_columns.issubset(cols)
             and not {"cluster_candidates", "clusters"}.intersection(cols)
             and presentation_version_ready
         ):
-            return head_revision
+            return head_revision if slide_ui_ready else REVISION_TEMPLATE_V2
         return REVISION_CHAT_HISTORY
     if "chat_history_messages" in tables:
         return REVISION_CHAT_HISTORY
@@ -134,6 +138,11 @@ def _has_presentation_version_column(inspector, tables: set[str]) -> bool:
 
     cols = {c["name"] for c in inspector.get_columns("presentations")}
     return "version" in cols
+
+
+def _has_column(inspector, table_name: str, column_name: str) -> bool:
+    columns = {column["name"] for column in inspector.get_columns(table_name)}
+    return column_name in columns
 
 
 def _stamp_legacy_database_if_needed(config: Config, database_url: str) -> None:

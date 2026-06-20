@@ -14,7 +14,9 @@ import {
   type LayoutAlignment,
   type LayoutItem,
   type Padding,
+  type Position,
   type Shadow,
+  type Size,
   type Slide,
   type SlideElement,
   type Stroke,
@@ -248,6 +250,82 @@ export function adaptTemplateV2LayoutToSlide(
   return adaptLayoutToSlide(layout, index);
 }
 
+export function serializeTemplateV2LayoutFromSlide(
+  layout: TemplateV2Layout,
+  slide: Slide,
+): TemplateV2Layout {
+  const sourceComponents = readArray(layout as UnknownRecord, "components").filter(
+    isRecord,
+  );
+  const usedSourceIndexes = new Set<number>();
+  const components = slide.elements
+    .filter(
+      (element): element is GroupElement =>
+        element.type === "group" && Boolean(element.componentId),
+    )
+    .map((group, index) => {
+      const componentId = group.componentId || `component_${index}`;
+      const sourceIndex = sourceComponents.findIndex(
+        (component, candidateIndex) =>
+          !usedSourceIndexes.has(candidateIndex) &&
+          readString(component.id) === componentId,
+      );
+      const source = sourceIndex >= 0 ? sourceComponents[sourceIndex] : null;
+      if (sourceIndex >= 0) usedSourceIndexes.add(sourceIndex);
+      const sourceElements = source ? readArray(source, "elements") : [];
+
+      return stripNullish({
+        ...(source ?? {}),
+        id: componentId,
+        description:
+          group.componentDescription ??
+          readString(source?.description) ??
+          `Editable ${componentId} component`,
+        position: sourcePosition(group.position),
+        size: sourceSize(group.size),
+        elements: group.children
+          .map((element, elementIndex) =>
+            serializeTemplateV2Element(element, sourceElements[elementIndex]),
+          )
+          .filter(isRecord),
+      });
+    });
+
+  return {
+    ...layout,
+    components,
+  };
+}
+
+export function extractTemplateV2ContentFromSlide(
+  slide: Slide,
+  currentContent: unknown,
+  legacyEditorStateKey?: string,
+): Record<string, unknown> {
+  const content = cloneJsonRecord(currentContent);
+  if (legacyEditorStateKey) delete content[legacyEditorStateKey];
+
+  const componentGroups = slide.elements.filter(
+    (element): element is GroupElement =>
+      element.type === "group" && Boolean(element.componentId),
+  );
+  const componentKeys = templateComponentContentKeys(
+    componentGroups.map((group) => ({ id: group.componentId })),
+  );
+
+  componentGroups.forEach((element, index) => {
+    const componentKey = componentKeys[index];
+    const componentContent = isRecord(content[componentKey])
+      ? cloneJsonRecord(content[componentKey])
+      : componentKey === element.componentId && isRecord(content[element.componentId])
+        ? cloneJsonRecord(content[element.componentId])
+      : {};
+    updateTemplateV2ContentFromElement(element, componentContent);
+    content[componentKey] = componentContent;
+  });
+  return content;
+}
+
 export function normalizeTemplateV2Slide(slide: Slide): Slide {
   return {
     ...slide,
@@ -383,13 +461,9 @@ function componentToGroupElement(
   const elements = readArray(raw, "elements");
   if (elements.length === 0) return null;
 
-  const shouldOffset = shouldOffsetComponentElements(raw, elements);
-  const renderedElements = elements
-    .map((element) =>
-      shouldOffset ? offsetElementByComponentPosition(element, raw) : element,
-    )
-    .filter((element): element is UnknownRecord => Boolean(asRecord(element)));
-  const frame = rawElementsFrame(renderedElements) ?? rawComponentFrame(raw);
+  const renderedElements = elements.filter(isRecord);
+  const componentFrame = rawComponentFrame(raw);
+  const frame = componentFrame ?? rawElementsFrame(renderedElements);
   if (!frame) return null;
 
   const componentId =
@@ -404,9 +478,11 @@ function componentToGroupElement(
     type: "group",
     position: { x: frame.x, y: frame.y },
     size: { width: frame.width, height: frame.height },
-    children: renderedElements.map((element) =>
-      localizeRawElementToFrame(element, frame),
-    ),
+    children: componentFrame
+      ? renderedElements
+      : renderedElements.map((element) =>
+          localizeRawElementToFrame(element, frame),
+        ),
     name: componentId,
     componentId,
     componentInstanceId: `${componentId}:${componentIndex}`,
@@ -862,55 +938,6 @@ function applyGeneratedChart(raw: UnknownRecord, value: unknown): UnknownRecord 
     ...raw,
     title: readString(record.title) ?? raw.title,
     data: readArray(record, "data"),
-  };
-}
-
-function shouldOffsetComponentElements(
-  component: UnknownRecord,
-  elements: unknown[],
-) {
-  const position = readRecord(component, "position");
-  const size = readRecord(component, "size");
-  if (!position) return false;
-  if (!size) return true;
-
-  const width = readNumber(size, "width") ?? SOURCE_W;
-  const height = readNumber(size, "height") ?? SOURCE_H;
-  const framedElements = elements.map(asRecord).filter(Boolean);
-  if (framedElements.length === 0) return true;
-
-  return framedElements.every((element) => {
-    const elementPosition = readRecord(element, "position");
-    const elementSize = readRecord(element, "size");
-    if (!elementPosition) return true;
-    const x = readNumber(elementPosition, "x") ?? 0;
-    const y = readNumber(elementPosition, "y") ?? 0;
-    const elementWidth = readNumber(elementSize ?? {}, "width") ?? 0;
-    const elementHeight = readNumber(elementSize ?? {}, "height") ?? 0;
-    return x + elementWidth <= width + 1 && y + elementHeight <= height + 1;
-  });
-}
-
-function offsetElementByComponentPosition(
-  element: unknown,
-  component: UnknownRecord,
-): unknown {
-  const raw = asRecord(element);
-  const componentPosition = readRecord(component, "position");
-  const elementPosition = readRecord(raw, "position");
-  if (!raw || !componentPosition || !elementPosition) return element;
-
-  return {
-    ...raw,
-    position: {
-      ...elementPosition,
-      x:
-        (readNumber(componentPosition, "x") ?? 0) +
-        (readNumber(elementPosition, "x") ?? 0),
-      y:
-        (readNumber(componentPosition, "y") ?? 0) +
-        (readNumber(elementPosition, "y") ?? 0),
-    },
   };
 }
 
@@ -1629,6 +1656,406 @@ function titleFromLayout(layout: TemplateV2Layout, index: number) {
   const id = readString(layout.id);
   const slideNumber = id?.match(/\d+/)?.[0] ?? `${index + 1}`;
   return truncateString(`Slide ${slideNumber}`, 60);
+}
+
+function serializeTemplateV2Element(
+  element: SlideElement,
+  sourceValue: unknown,
+): UnknownRecord | null {
+  const source = asRecord(sourceValue) ?? {};
+  const base = serializeTemplateV2ElementBase(element, source);
+
+  switch (element.type) {
+    case "text":
+      return stripNullish({
+        ...base,
+        type: "text",
+        font: sourceFont(element.font),
+        alignment: element.alignment,
+        fill: element.fill,
+        stroke: sourceStroke(element.stroke),
+        runs: element.runs.map((run) =>
+          stripNullish({ text: run.text, font: sourceFont(run.font) }),
+        ),
+        min_length: element.minLength,
+        max_length: element.maxLength,
+      });
+    case "container":
+      return stripNullish({
+        ...base,
+        type: "container",
+        alignment: element.alignment,
+        fill: element.fill,
+        stroke: sourceStroke(element.stroke),
+        border_radius: sourceBorderRadius(element.borderRadius),
+        padding: sourcePadding(element.padding),
+        child: element.child
+          ? serializeTemplateV2Element(element.child, source.child)
+          : null,
+      });
+    case "image":
+      return stripNullish({
+        ...base,
+        type: "image",
+        data: element.data,
+        name: element.name ?? element.componentSlot,
+        fit: element.fit,
+        border_radius: sourceBorderRadius(element.borderRadius),
+        is_icon: element.is_icon,
+      });
+    case "text-list":
+      return stripNullish({
+        ...base,
+        type: "text-list",
+        font: sourceFont(element.font),
+        marker: element.marker,
+        items: element.items.map((item) => [{ text: item.text }]),
+        min_items: element.minItems,
+        max_items: element.maxItems,
+        min_item_length: element.minItemLength,
+        max_item_length: element.maxItemLength,
+      });
+    case "table":
+      return stripNullish({
+        ...base,
+        type: "table",
+        columns: element.columns.map(serializeTemplateV2TableCell),
+        rows: element.rows.map((row) =>
+          row.map(serializeTemplateV2TableCell),
+        ),
+        min_columns: element.minColumns,
+        max_columns: element.maxColumns,
+        min_rows: element.minRows,
+        max_rows: element.maxRows,
+      });
+    case "rectangle":
+      return stripNullish({
+        ...base,
+        type: "rectangle",
+        fill: element.fill,
+        stroke: sourceStroke(element.stroke),
+        border_radius: sourceBorderRadius(element.borderRadius),
+      });
+    case "ellipse":
+      return stripNullish({
+        ...base,
+        type: "ellipse",
+        fill: element.fill,
+        stroke: sourceStroke(element.stroke),
+      });
+    case "line":
+      return stripNullish({
+        ...base,
+        type: "line",
+        stroke: sourceStroke(element.stroke),
+      });
+    case "chart":
+      return stripNullish({
+        ...base,
+        type: "chart",
+        chart_type: element.chartType,
+        data: element.data,
+        title: element.title,
+        color: element.color,
+        axis_color: element.axisColor,
+        label_color: element.labelColor,
+        show_values: element.showValues,
+      });
+    case "flex":
+      return serializeTemplateV2ChildrenElement(
+        base,
+        "flex",
+        element,
+        readArray(source, "children"),
+        {
+          direction: element.direction,
+          wrap: element.wrap,
+          align_items: element.alignItems,
+          justify_content: element.justifyContent,
+          padding: sourcePadding(element.padding),
+          gap: sourceDistance(element.gap, X_SCALE),
+          column_gap: sourceDistance(element.columnGap, X_SCALE),
+          row_gap: sourceDistance(element.rowGap, Y_SCALE),
+          min_children: element.minChildren,
+          max_children: element.maxChildren,
+        },
+      );
+    case "grid":
+      return serializeTemplateV2ChildrenElement(
+        base,
+        "grid",
+        element,
+        readArray(source, "children"),
+        {
+          columns: element.columns,
+          rows: element.rows,
+          align_items: element.alignItems,
+          justify_items: element.justifyItems,
+          padding: sourcePadding(element.padding),
+          gap: sourceDistance(element.gap, X_SCALE),
+          column_gap: sourceDistance(element.columnGap, X_SCALE),
+          row_gap: sourceDistance(element.rowGap, Y_SCALE),
+          min_children: element.minChildren,
+          max_children: element.maxChildren,
+        },
+      );
+    case "group":
+      return serializeTemplateV2ChildrenElement(
+        base,
+        "group",
+        element,
+        readArray(source, "children"),
+        {
+          min_children: element.minChildren,
+          max_children: element.maxChildren,
+        },
+      );
+    case "list-view":
+    case "grid-view":
+      return source;
+    case "svg":
+      return Object.keys(source).length > 0 ? source : null;
+  }
+}
+
+function serializeTemplateV2ElementBase(
+  element: SlideElement,
+  source: UnknownRecord,
+): UnknownRecord {
+  return stripNullish({
+    ...source,
+    position: sourcePosition(element.position),
+    size: sourceSize(element.size),
+    rotation: element.rotation,
+    decorative: element.decorative,
+    name: element.componentSlot ?? readString(source.name),
+    shadow: sourceShadow(element.shadow),
+  });
+}
+
+function serializeTemplateV2ChildrenElement(
+  base: UnknownRecord,
+  type: "flex" | "grid" | "group",
+  element: Extract<SlideElement, { children: SlideElement[] }>,
+  sourceChildren: unknown[],
+  fields: UnknownRecord,
+): UnknownRecord {
+  return stripNullish({
+    ...base,
+    ...fields,
+    type,
+    children: element.children
+      .map((child, index) =>
+        serializeTemplateV2Element(child, sourceChildren[index]),
+      )
+      .filter(isRecord),
+  });
+}
+
+function serializeTemplateV2TableCell(cell: TableCell): UnknownRecord {
+  return stripNullish({
+    fill: cell.fill,
+    stroke: sourceStroke(cell.stroke),
+    text: cell.text
+      ? stripNullish({ text: cell.text, font: sourceFont(cell.font) })
+      : null,
+  });
+}
+
+function sourcePosition(value: Position | null | undefined) {
+  return value
+    ? { x: sourceNumber(value.x / X_SCALE), y: sourceNumber(value.y / Y_SCALE) }
+    : null;
+}
+
+function sourceSize(value: Size | null | undefined) {
+  return value
+    ? {
+        width: sourceNumber(value.width / X_SCALE),
+        height: sourceNumber(value.height / Y_SCALE),
+      }
+    : null;
+}
+
+function sourceFont(value: Font | null | undefined) {
+  if (!value) return null;
+  return stripNullish({
+    ...value,
+    size:
+      value.size == null
+        ? null
+        : sourceNumber(value.size / SOURCE_PX_TO_PT),
+    line_height: value.lineHeight,
+    letter_spacing: value.letterSpacing,
+    lineHeight: undefined,
+    letterSpacing: undefined,
+  });
+}
+
+function sourceStroke(value: Stroke | null | undefined) {
+  if (!value) return null;
+  return {
+    ...value,
+    width: sourceNumber(value.width / SOURCE_PX_TO_PT),
+  };
+}
+
+function sourceBorderRadius(value: BorderRadius | null | undefined) {
+  if (!value) return null;
+  return {
+    tl: sourceNumber(value.tl / X_SCALE),
+    tr: sourceNumber(value.tr / X_SCALE),
+    bl: sourceNumber(value.bl / X_SCALE),
+    br: sourceNumber(value.br / X_SCALE),
+  };
+}
+
+function sourcePadding(value: Padding | null | undefined) {
+  if (!value) return null;
+  return {
+    top: sourceNumber(value.top / Y_SCALE),
+    right: sourceNumber(value.right / X_SCALE),
+    bottom: sourceNumber(value.bottom / Y_SCALE),
+    left: sourceNumber(value.left / X_SCALE),
+  };
+}
+
+function sourceShadow(value: Shadow | null | undefined) {
+  if (!value) return null;
+  return stripNullish({
+    ...value,
+    blur:
+      value.blur == null ? null : sourceNumber(value.blur / X_SCALE),
+    offset_x:
+      value.offsetX == null ? null : sourceNumber(value.offsetX / X_SCALE),
+    offset_y:
+      value.offsetY == null ? null : sourceNumber(value.offsetY / Y_SCALE),
+    offsetX: undefined,
+    offsetY: undefined,
+  });
+}
+
+function sourceDistance(value: number | null | undefined, scale: number) {
+  return value == null ? null : sourceNumber(value / scale);
+}
+
+function sourceNumber(value: number) {
+  return Math.round(value * 10000) / 10000;
+}
+
+function updateTemplateV2ContentFromElement(
+  element: SlideElement,
+  componentContent: Record<string, unknown>,
+) {
+  const slot = readString(element.componentSlot);
+  const updater = templateV2ContentUpdater(element);
+  if (slot && updater) {
+    if (!updateMatchingTemplateV2Content(componentContent, slot, updater)) {
+      componentContent[slot] = updater(undefined);
+    }
+  }
+
+  if ("children" in element && Array.isArray(element.children)) {
+    element.children.forEach((child) =>
+      updateTemplateV2ContentFromElement(child, componentContent),
+    );
+  }
+  if (element.type === "container" && element.child) {
+    updateTemplateV2ContentFromElement(element.child, componentContent);
+  }
+  if (
+    (element.type === "list-view" || element.type === "grid-view") &&
+    element.item
+  ) {
+    updateTemplateV2ContentFromElement(element.item, componentContent);
+  }
+}
+
+type TemplateV2ContentUpdater = (currentValue: unknown) => unknown;
+
+function templateV2ContentUpdater(
+  element: SlideElement,
+): TemplateV2ContentUpdater | null {
+  if (element.decorative !== false) return null;
+  if (element.type === "text") {
+    return () => element.runs.map((run) => run.text).join("");
+  }
+  if (element.type === "image" && element.data) {
+    return (currentValue) => ({
+      ...(isRecord(currentValue) ? currentValue : {}),
+      [element.is_icon ? "__icon_url__" : "__image_url__"]: element.data,
+    });
+  }
+  if (element.type === "text-list") {
+    return () => element.items.map((item) => item.text);
+  }
+  if (element.type === "table") {
+    return () => ({
+      columns: element.columns.map((cell) => cell.text ?? ""),
+      rows: element.rows.map((row) => row.map((cell) => cell.text ?? "")),
+    });
+  }
+  if (element.type === "chart") {
+    return () => ({ title: element.title ?? null, data: element.data });
+  }
+  return null;
+}
+
+function updateMatchingTemplateV2Content(
+  value: unknown,
+  slot: string,
+  updater: TemplateV2ContentUpdater,
+): boolean {
+  const candidates = templateV2ContentSlotCandidates(slot);
+  if (isRecord(value)) {
+    for (const candidate of candidates) {
+      if (Object.prototype.hasOwnProperty.call(value, candidate)) {
+        value[candidate] = updater(value[candidate]);
+        return true;
+      }
+    }
+    return Object.values(value).some((child) =>
+      updateMatchingTemplateV2Content(child, slot, updater),
+    );
+  }
+  if (Array.isArray(value)) {
+    const preferredIndex = templateV2RepeatedContentIndex(slot);
+    if (
+      preferredIndex != null &&
+      preferredIndex < value.length &&
+      updateMatchingTemplateV2Content(value[preferredIndex], slot, updater)
+    ) {
+      return true;
+    }
+    return value.some(
+      (child, index) =>
+        index !== preferredIndex &&
+        updateMatchingTemplateV2Content(child, slot, updater),
+    );
+  }
+  return false;
+}
+
+function templateV2ContentSlotCandidates(slot: string): string[] {
+  const withoutNumericToken = slot.replace(/_\d+(?=_|$)/g, "");
+  const withoutPrefix = withoutNumericToken.includes("_")
+    ? withoutNumericToken.slice(withoutNumericToken.indexOf("_") + 1)
+    : withoutNumericToken;
+  return Array.from(new Set([slot, withoutNumericToken, withoutPrefix]));
+}
+
+function templateV2RepeatedContentIndex(slot: string): number | null {
+  const match = slot.match(/_(\d+)(?=_|$)/);
+  return match ? Math.max(0, Number(match[1]) - 1) : null;
+}
+
+function cloneJsonRecord(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {};
+  try {
+    return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+  } catch {
+    return { ...value };
+  }
 }
 
 function readValue(

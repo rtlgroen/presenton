@@ -149,9 +149,11 @@ def test_slide_model_get_new_slide_branches():
         content={"a": 1},
         speaker_note="n",
         properties={"x": True},
+        ui={"id": "layout-1", "components": []},
     )
     assert base.get_new_slide(pid, None).content == {"a": 1}
     assert base.get_new_slide(pid, {"b": 2}).content == {"b": 2}
+    assert base.get_new_slide(pid).ui == {"id": "layout-1", "components": []}
 
 
 def test_sse_response_frame_format():

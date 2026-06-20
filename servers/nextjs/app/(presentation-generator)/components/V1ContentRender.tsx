@@ -12,7 +12,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Loader2 } from "lucide-react";
 import { RootState } from "@/store/store";
 import {
-    extractTemplateV2Layouts,
+    type TemplateV2Layout,
 } from "@/components/slide-editor/lib/template-v2-import";
 import { TemplateV2KonvaSlide } from "./TemplateV2KonvaSlide";
 import { BLANK_TEMPLATE_V2_LAYOUT, isBlankPresentationSlide } from "../_shared/blank-slide";
@@ -20,13 +20,9 @@ import { BLANK_TEMPLATE_V2_LAYOUT, isBlankPresentationSlide } from "../_shared/b
 
 
 
-export const V1ContentRender = ({ slide, isEditMode, theme, presentationLayout: presentationLayoutOverride }: { slide: any, isEditMode: boolean, theme?: any, enableEditMode?: boolean, presentationLayout?: unknown }) => {
+export const V1ContentRender = ({ slide, isEditMode, theme }: { slide: any, isEditMode: boolean, theme?: any, enableEditMode?: boolean, presentationLayout?: unknown }) => {
     const dispatch = useDispatch();
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const reduxPresentationLayout = useSelector(
-        (state: RootState) => state.presentationGeneration.presentationData?.layout
-    );
-    const presentationLayout = presentationLayoutOverride ?? reduxPresentationLayout;
     const presentationComponents = useSelector(
         (state: RootState) => state.presentationGeneration.presentationData?.components
     );
@@ -49,13 +45,14 @@ export const V1ContentRender = ({ slide, isEditMode, theme, presentationLayout: 
     const templateV2Layout = useMemo(() => {
         if (!isTemplateV2Slide) return null;
 
-        const layouts = extractTemplateV2Layouts(presentationLayout);
-        const layoutId = slideLayout.startsWith("template-v2:")
-            ? slideLayout.slice("template-v2:".length)
-            : slideLayout;
-
-        return layouts.find((layout) => layout.id === layoutId) ?? null;
-    }, [isTemplateV2Slide, presentationLayout, slideLayout]);
+        const slideUi = slide.ui;
+        return slideUi &&
+            typeof slideUi === "object" &&
+            !Array.isArray(slideUi) &&
+            Array.isArray(slideUi.components)
+            ? slideUi as TemplateV2Layout
+            : null;
+    }, [isTemplateV2Slide, slide.ui]);
 
     // Memoize layout resolution to prevent unnecessary recalculations
     const Layout = useMemo(() => {
