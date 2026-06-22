@@ -1,12 +1,6 @@
 import Konva from "konva";
 import { useRef, type RefObject } from "react";
-import {
-  SLIDE_H,
-  SLIDE_W,
-  type Slide,
-  type SlideElement,
-} from "../../../lib/slide-schema";
-import { clamp } from "../../../editorUtils";
+import type { Slide, SlideElement } from "../../../lib/slide-schema";
 import { elementBox, resizeElement } from "../../../lib/element-model";
 
 type GroupDragState = {
@@ -86,8 +80,8 @@ export function useGroupDrag({
         element: (() => {
           const box = elementBox(element);
           return resizeElement(element, {
-            x: clamp(box.x + dx, 0, SLIDE_W - box.w),
-            y: clamp(box.y + dy, 0, SLIDE_H - box.h),
+            x: box.x + dx,
+            y: box.y + dy,
           });
         })(),
       })),

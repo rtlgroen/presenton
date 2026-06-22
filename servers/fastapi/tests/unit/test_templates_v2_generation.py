@@ -1,32 +1,35 @@
-import uuid
+import json
 
+import pytest
 from llmai.shared import AssistantMessage, SystemMessage, UserMessage
 from pydantic import BaseModel, Field, ValidationError
 
 from templates.v2.generation import (
-    Cluster,
-    ClusterCandidate,
-    Component,
-    ComponentCluster,
-    ComponentClusterCandidate,
-    _apply_design_variable,
-    _cluster_candidate_payload,
-    _cluster_candidates_artifact,
-    _cluster_payload,
-    _clusters_artifact,
-    _component_payload,
-    _components_artifact,
+    GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT,
     _messages_for_json_repair_retry,
     _messages_for_model_validation_retry,
-    build_template_layouts,
+    _slide_image_content,
+    generate_slide_layout,
+    generate_template,
 )
-from templates.v2.models.layouts import SlideLayouts
+from templates.v2.models.elements import Image as TemplateImage
+from templates.v2.models.layouts import RawSlideLayout, RawSlideLayouts, SlideLayout
 
 
 class _FakeResponse:
-    def __init__(self, content, messages):
+    def __init__(self, content, messages=None):
         self.content = content
-        self.messages = messages
+        self.messages = messages or []
+
+
+class _FakeClient:
+    def __init__(self, content):
+        self.content = content
+        self.calls = []
+
+    def generate(self, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeResponse(self.content)
 
 
 class _ProviderResponseItem:
@@ -37,359 +40,191 @@ class _RetrySchema(BaseModel):
     title: str = Field(min_length=5)
 
 
-def test_design_variable_uses_source_expression_and_explicit_target_path():
-    component = Component(
-        id="metric_card",
-        description="Reusable metric card with scalable typography.",
-        position={"x": 0, "y": 0},
-        size={"width": 200, "height": 100},
-        design_variables=[
-            {
-                "name": "scale_variant",
-                "type": "object",
-                "options": [{"width": 240, "font_size": 28}],
-                "effect": [
-                    {"source": "$.width", "target": "elements.0.size.width"},
-                    {
-                        "source": "$.font_size",
-                        "target": "elements.1.runs.0.font.size",
-                    },
-                ],
-            }
-        ],
-        elements=[
-            {
-                "type": "rectangle",
-                "position": {"x": 0, "y": 0},
-                "size": {"width": 200, "height": 100},
-            },
-            {
-                "type": "text",
-                "position": {"x": 20, "y": 20},
-                "size": {"width": 160, "height": 40},
-                "fixed": False,
-                "name": "metric",
-                "min_length": 10,
-                "max_length": 20,
-                "runs": [{"text": "Metric", "font": {"size": 20}}],
-            },
-        ],
-    )
-    component_data = component.model_dump(mode="json", exclude_none=True)
-
-    _apply_design_variable(
-        component_data["elements"],
-        component_data["design_variables"][0],
-        {"width": 240, "font_size": 28},
-    )
-
-    assert component_data["elements"][0]["size"]["width"] == 240
-    assert component_data["elements"][1]["runs"][0]["font"]["size"] == 28
-
-
-def test_build_template_layouts_replaces_candidates_and_keeps_fallbacks():
-    raw_layouts = SlideLayouts.model_validate(
+def _raw_layout(layout_id: str = "source_slide") -> RawSlideLayout:
+    return RawSlideLayout.model_validate(
         {
-            "layouts": [
-                {
-                    "id": "slide_1",
-                    "description": "Raw slide.",
-                    "elements": [
-                        {
-                            "type": "rectangle",
-                            "position": {"x": 10, "y": 20},
-                            "size": {"width": 100, "height": 80},
-                            "fill": {"color": "#ffffff"},
-                        },
-                        {
-                            "type": "rectangle",
-                            "position": {"x": 200, "y": 20},
-                            "size": {"width": 100, "height": 80},
-                            "fill": {"color": "#eeeeee"},
-                        },
-                    ],
-                }
-            ]
-        }
-    )
-    candidates = [
-        ClusterCandidate(
-            id="left_card",
-            description="Standalone rectangle component.",
-            slide_index=0,
-            elements=[0],
-        )
-    ]
-    clusters = [Cluster(id="card", candidates=[0])]
-    components = [
-        Component(
-            id="card_component",
-            description="Reusable rectangle card component.",
-            position={"x": 0, "y": 0},
-            size={"width": 100, "height": 80},
-            design_variables=[],
-            elements=[
-                {
-                    "type": "rectangle",
-                    "position": {"x": 0, "y": 0},
-                    "size": {"width": 100, "height": 80},
-                    "fill": {"color": "#ffffff"},
-                }
-            ],
-        )
-    ]
-
-    template, stats = build_template_layouts(
-        raw_layouts,
-        candidates,
-        clusters,
-        components,
-    )
-
-    layout = template["layouts"][0]
-    assert "elements" not in layout
-    assert [component["id"] for component in layout["components"]] == [
-        "card_component",
-        "slide_1_element_2",
-    ]
-    assert layout["components"][0]["position"] == {"x": 10.0, "y": 20.0}
-    assert layout["components"][0]["size"] == {"width": 100.0, "height": 80.0}
-    assert layout["components"][0]["elements"][0]["position"] == {"x": 0.0, "y": 0.0}
-    assert layout["components"][1]["position"] == {"x": 200.0, "y": 20.0}
-    assert layout["components"][1]["elements"][0]["position"] == {"x": 0.0, "y": 0.0}
-    assert stats.replaced_candidates == 1
-    assert stats.skipped_overlapping_candidates == 0
-    assert stats.untouched_elements == 1
-
-
-def test_build_template_layouts_assigns_uuid_layout_ids(monkeypatch):
-    layout_ids = iter(
-        [
-            uuid.UUID("00000000-0000-0000-0000-000000000101"),
-            uuid.UUID("00000000-0000-0000-0000-000000000102"),
-        ]
-    )
-    monkeypatch.setattr(
-        "templates.v2.generation.uuid.uuid4",
-        lambda: next(layout_ids),
-    )
-    raw_layouts = SlideLayouts.model_validate(
-        {
-            "layouts": [
-                {"id": "slide_1", "description": "First slide.", "elements": []},
-                {"id": "slide_2", "description": "Second slide.", "elements": []},
-            ]
-        }
-    )
-
-    template, stats = build_template_layouts(raw_layouts, [], [], [])
-
-    assert [layout["id"] for layout in template["layouts"]] == [
-        "00000000-0000-0000-0000-000000000101",
-        "00000000-0000-0000-0000-000000000102",
-    ]
-    assert stats.replaced_candidates == 0
-    assert stats.skipped_overlapping_candidates == 0
-    assert stats.untouched_elements == 0
-
-
-def test_build_template_layouts_promotes_overlapping_child_to_parent_candidate():
-    raw_layouts = SlideLayouts.model_validate(
-        {
-            "layouts": [
-                {
-                    "id": "slide_1",
-                    "description": "Raw slide.",
-                    "elements": [
-                        {
-                            "type": "rectangle",
-                            "position": {"x": 20, "y": 30},
-                            "size": {"width": 180, "height": 90},
-                            "fill": {"color": "#f4f4f4"},
-                        },
-                        {
-                            "type": "text",
-                            "position": {"x": 40, "y": 50},
-                            "size": {"width": 120, "height": 30},
-                            "fixed": False,
-                            "name": "title",
-                            "max_length": 40,
-                            "min_length": 20,
-                            "runs": [{"text": "Original title"}],
-                        },
-                    ],
-                }
-            ]
-        }
-    )
-    candidates = [
-        ClusterCandidate(
-            id="title_only",
-            description="Standalone title text component.",
-            slide_index=0,
-            elements=[1],
-        ),
-        ClusterCandidate(
-            id="title_card",
-            description="Card with background rectangle and title text.",
-            slide_index=0,
-            elements=[0, 1],
-        ),
-    ]
-    clusters = [
-        Cluster(id="title_cluster", candidates=[0]),
-        Cluster(id="card_cluster", candidates=[1]),
-    ]
-    components = [
-        Component(
-            id="title_component",
-            description="Reusable standalone title component.",
-            position={"x": 0, "y": 0},
-            size={"width": 120, "height": 30},
-            design_variables=[],
-            elements=[
+            "id": layout_id,
+            "description": "Source slide with a title block.",
+            "elements": [
                 {
                     "type": "text",
-                    "position": {"x": 0, "y": 0},
-                    "size": {"width": 120, "height": 30},
-                    "fixed": False,
+                    "position": {"x": 100, "y": 80},
+                    "size": {"width": 600, "height": 80},
+                    "decorative": False,
                     "name": "title",
-                    "max_length": 40,
                     "min_length": 20,
-                    "runs": [{"text": "Placeholder"}],
+                    "max_length": 40,
+                    "runs": [{"text": "Original title"}],
                 }
             ],
-        ),
-        Component(
-            id="card_component",
-            description="Reusable card with title component.",
-            position={"x": 0, "y": 0},
-            size={"width": 180, "height": 90},
-            design_variables=[],
-            elements=[
-                {
-                    "type": "rectangle",
-                    "position": {"x": 0, "y": 0},
-                    "size": {"width": 180, "height": 90},
-                    "fill": {"color": "#f4f4f4"},
-                },
-                {
-                    "type": "text",
-                    "position": {"x": 20, "y": 20},
-                    "size": {"width": 120, "height": 30},
-                    "fixed": False,
-                    "name": "title",
-                    "max_length": 40,
-                    "min_length": 20,
-                    "runs": [{"text": "Placeholder"}],
-                },
-            ],
-        ),
-    ]
-
-    template, stats = build_template_layouts(
-        raw_layouts,
-        candidates,
-        clusters,
-        components,
+        }
     )
 
-    layout_components = template["layouts"][0]["components"]
-    assert [component["id"] for component in layout_components] == ["card_component"]
-    assert layout_components[0]["position"] == {"x": 20.0, "y": 30.0}
-    assert layout_components[0]["size"] == {"width": 180.0, "height": 90.0}
-    assert layout_components[0]["elements"][1]["runs"] == [{"text": "Original title"}]
-    assert stats.replaced_candidates == 1
-    assert stats.skipped_overlapping_candidates == 1
-    assert stats.untouched_elements == 0
 
-
-def test_component_payload_localizes_candidate_elements_and_strips_fixed_fields():
-    cluster = ComponentCluster(
-        id="cards",
-        candidates=[
-            ComponentClusterCandidate(
-                id="card_one",
-                slide_index=0,
-                description="Card with background and title.",
-                elements=[
-                    {
-                        "type": "rectangle",
-                        "position": {"x": 100, "y": 120},
-                        "size": {"width": 200, "height": 80},
-                        "fill": {"color": "#ffffff"},
-                    },
+def _generated_layout(layout_id: str = "title_slide") -> dict:
+    return {
+        "id": layout_id,
+        "description": "Reusable slide with a prominent title block.",
+        "components": [
+            {
+                "id": "title_block",
+                "description": "Reusable prominent title text block.",
+                "position": {"x": 100, "y": 80},
+                "size": {"width": 600, "height": 80},
+                "elements": [
                     {
                         "type": "text",
-                        "position": {"x": 120, "y": 140},
-                        "size": {"width": 160, "height": 30},
-                        "fixed": False,
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 600, "height": 80},
+                        "decorative": False,
                         "name": "title",
-                        "max_length": 40,
                         "min_length": 20,
-                        "runs": [{"text": "Candidate title"}],
-                    },
+                        "max_length": 40,
+                        "runs": [{"text": "Original title"}],
+                    }
                 ],
-            )
-        ],
-    )
-
-    payload = _component_payload(cluster)
-    assert set(payload) == {"component_group"}
-    assert set(payload["component_group"]) == {"id", "components"}
-    candidate = payload["component_group"]["components"][0]
-
-    assert candidate["position"] == {"x": 100.0, "y": 120.0}
-    assert candidate["size"] == {"width": 200.0, "height": 80.0}
-    assert candidate["elements"][0]["position"] == {"x": 0.0, "y": 0.0}
-    assert candidate["elements"][1]["position"] == {"x": 20.0, "y": 20.0}
-    assert "fixed" not in candidate["elements"][1]
-
-
-def test_generation_artifacts_and_prompt_payloads_use_reference_shapes():
-    candidate = ClusterCandidate(
-        id="title_card",
-        description="Card with a title and decorative background.",
-        slide_index=0,
-        elements=[0],
-    )
-    cluster = Cluster(id="title_cards", candidates=[0])
-    component = Component(
-        id="title_card",
-        description="Reusable title card with a decorative background.",
-        position={"x": 0, "y": 0},
-        size={"width": 100, "height": 50},
-        elements=[
-            {
-                "type": "rectangle",
-                "position": {"x": 0, "y": 0},
-                "size": {"width": 100, "height": 50},
             }
         ],
-    )
-    elements = SlideLayouts.model_validate(
-        {
-            "layouts": [
-                {
-                    "id": "slide_1",
-                    "description": "Source slide.",
-                    "elements": component.elements,
-                }
-            ]
-        }
-    ).layouts[0].elements
+    }
 
-    assert set(_cluster_candidate_payload(elements)) == {"elements"}
-    assert set(_cluster_payload([candidate])) == {"components"}
-    assert _cluster_candidates_artifact([candidate]) == {
-        "candidates": [candidate.model_dump(mode="json", exclude_none=True)]
-    }
-    assert _clusters_artifact([cluster]) == {
-        "clusters": [cluster.model_dump(mode="json", exclude_none=True)]
-    }
-    assert _components_artifact([component]) == {
-        "components": [component.model_dump(mode="json", exclude_none=True)]
-    }
+
+def test_template_image_supports_optional_overlay_color():
+    image = TemplateImage.model_validate(
+        {
+            "type": "image",
+            "data": "/app_data/image.png",
+            "color": "rgba(0, 0, 0, 0.35)",
+            "decorative": True,
+            "name": "background",
+            "is_icon": False,
+        }
+    )
+    image_without_overlay = TemplateImage.model_validate(
+        {
+            "type": "image",
+            "decorative": True,
+            "name": "background",
+            "is_icon": False,
+        }
+    )
+
+    assert image.color == "rgba(0, 0, 0, 0.35)"
+    assert image_without_overlay.color is None
+
+
+def test_generate_slide_layout_requests_complete_layout(monkeypatch):
+    client = _FakeClient(_generated_layout())
+    monkeypatch.setattr("templates.v2.generation.get_client", lambda **_kwargs: client)
+    monkeypatch.setattr("templates.v2.generation.get_llm_config", lambda: {})
+    monkeypatch.setattr("templates.v2.generation.get_model", lambda: "test-model")
+
+    result = generate_slide_layout(
+        _raw_layout(),
+        2,
+        "https://example.com/slide-3.png",
+    )
+
+    assert result == SlideLayout.model_validate(_generated_layout())
+    result_element = result.model_dump(mode="json")["components"][0]["elements"][0]
+    assert result_element["decorative"] is False
+    assert "fixed" not in result_element
+    assert len(client.calls) == 1
+    call = client.calls[0]
+    assert call["response_format"].json_schema is SlideLayout
+    assert call["response_format"].name == "SlideLayoutResponse"
+    assert call["max_tokens"] == 16384
+    assert call["messages"][0].content == GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
+    user_content = call["messages"][1].content
+    assert user_content[0].url == "https://example.com/slide-3.png"
+    payload = json.loads(user_content[1])
+    assert payload[0]["id"] == "source_slide"
+    assert payload[0]["elements"][0]["runs"][0]["text"] == (
+        "Original title"
+    )
+
+
+def test_generate_template_generates_each_slide_and_preserves_order(monkeypatch):
+    raw_layouts = RawSlideLayouts(
+        layouts=[_raw_layout("first"), _raw_layout("second")]
+    )
+    calls = []
+
+    def fake_generate(source_layout, slide_index, slide_image_url):
+        calls.append((source_layout.id, slide_index, slide_image_url))
+        return SlideLayout.model_validate(
+            _generated_layout(f"generated_{source_layout.id}")
+        )
+
+    monkeypatch.setattr(
+        "templates.v2.generation.generate_slide_layout", fake_generate
+    )
+
+    generated = generate_template(
+        raw_layouts,
+        ["https://example.com/first.png", "https://example.com/second.png"],
+    )
+
+    assert sorted(calls) == [
+        ("first", 0, "https://example.com/first.png"),
+        ("second", 1, "https://example.com/second.png"),
+    ]
+    assert [layout.id for layout in generated.layouts] == [
+        "generated_first",
+        "generated_second",
+    ]
+
+
+def test_generate_template_rejects_empty_source():
+    with pytest.raises(ValueError, match="at least one"):
+        generate_template(RawSlideLayouts(layouts=[]), [])
+
+
+def test_generate_template_requires_one_image_per_layout():
+    with pytest.raises(ValueError, match="one image for each layout"):
+        generate_template(
+            RawSlideLayouts(layouts=[_raw_layout("first"), _raw_layout("second")]),
+            ["https://example.com/first.png"],
+        )
+
+
+def test_slide_image_content_embeds_local_image_bytes(tmp_path, monkeypatch):
+    image_path = tmp_path / "slide.png"
+    image_path.write_bytes(b"png-image-bytes")
+    monkeypatch.setattr(
+        "templates.v2.generation.resolve_image_path_to_filesystem",
+        lambda _url: str(image_path),
+    )
+
+    image_content = _slide_image_content("/app_data/images/slide.png")
+
+    assert image_content.data == b"png-image-bytes"
+    assert image_content.mime_type == "image/png"
+    assert image_content.url is None
+
+
+def test_slide_layout_rejects_duplicate_component_ids():
+    layout = _generated_layout()
+    layout["components"].append(layout["components"][0])
+
+    with pytest.raises(ValidationError, match="component ids must be unique"):
+        SlideLayout.model_validate(layout)
+
+
+def test_slide_layout_does_not_accept_fixed_component_metadata():
+    layout = _generated_layout()
+    element = layout["components"][0]["elements"][0]
+    element["fixed"] = element.pop("decorative")
+
+    with pytest.raises(ValidationError):
+        SlideLayout.model_validate(layout)
+
+
+def test_direct_generation_prompt_uses_decorative_element_metadata():
+    assert "Convert the provided raw slide elements to components" in (
+        GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
+    )
+    assert "`decorative=true`" in GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
+    assert "`decorative=false`" in GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
 
 
 def test_json_repair_retry_rebuilds_messages_without_provider_response_items():
@@ -406,7 +241,7 @@ def test_json_repair_retry_rebuilds_messages_without_provider_response_items():
     retry_messages = _messages_for_json_repair_retry(
         messages=original_messages,
         response=response,
-        label="component",
+        label="slide layout",
         error=ValueError("invalid JSON"),
     )
 
@@ -429,19 +264,15 @@ def test_validation_retry_rebuilds_messages_without_provider_response_items():
         content=invalid_response,
         messages=[provider_response_item],
     )
-    try:
+    with pytest.raises(ValidationError) as exc:
         _RetrySchema.model_validate(invalid_response)
-    except ValidationError as exc:
-        validation_error = exc
-    else:
-        raise AssertionError("expected validation error")
 
     retry_messages = _messages_for_model_validation_retry(
         messages=original_messages,
         response=response,
-        label="component",
+        label="slide layout",
         output_model=_RetrySchema,
-        error=validation_error,
+        error=exc.value,
         invalid_response=invalid_response,
     )
 

@@ -133,6 +133,7 @@ export interface TemplateV2Element {
   text?: string | null;
   data?: string | null;
   fit?: string | null;
+  color?: string | null;
   child?: TemplateV2Element | null;
   children?: TemplateV2Element[] | null;
   items?: TemplateV2TextRun[][] | null;

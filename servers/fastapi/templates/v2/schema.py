@@ -6,7 +6,7 @@ import copy
 import re
 from typing import Any
 
-from .models.layouts import SlideLayout
+from .models.layouts import RawSlideLayout
 
 
 CONTENT_TYPES = {"text", "image", "text-list", "table", "chart"}
@@ -22,7 +22,11 @@ COMPONENT_SCHEMA_METADATA_KEYS = {
 }
 
 
-def extract_slide_schema_from_layout(layout: SlideLayout) -> dict[str, Any]:
+def _is_editable_element(element: dict[str, Any]) -> bool:
+    return element.get("decorative") is False
+
+
+def extract_slide_schema_from_layout(layout: RawSlideLayout) -> dict[str, Any]:
     """
     Take slide layout and return content schema from slide layout.
     """
@@ -147,7 +151,7 @@ def _node_for_element(element: dict[str, Any]) -> tuple[str, dict[str, Any]] | N
 
         return name, schema
 
-    if element_type not in CONTENT_TYPES or element.get("fixed") is not False:
+    if element_type not in CONTENT_TYPES or not _is_editable_element(element):
         return None
 
     name = _element_name(element)
@@ -553,7 +557,7 @@ def _component_schema_nodes_for_element(
 
     if (
         element_type in CONTENT_TYPES
-        and element.get("fixed") is False
+        and _is_editable_element(element)
         and name is not None
     ):
         return [

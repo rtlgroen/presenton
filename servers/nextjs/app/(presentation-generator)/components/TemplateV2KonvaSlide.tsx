@@ -26,7 +26,9 @@ import { notify } from "@/components/ui/sonner";
 import {
   adaptTemplateV2LayoutToSlide,
   applyGeneratedSlideContentToLayout,
+  extractTemplateV2ContentFromSlide,
   normalizeTemplateV2Slide,
+  serializeTemplateV2LayoutFromSlide,
   type TemplateV2Layout,
 } from "@/components/slide-editor/lib/template-v2-import";
 import {
@@ -105,6 +107,7 @@ export function TemplateV2KonvaSlide({
     <Provider key={slide.id ?? `${slide.layout}-${slide.index}`}>
       <TemplateV2KonvaSlideBody
         initialSlide={initialSlide}
+        layout={layout}
         presentationSlide={slide}
         isEditMode={isEditMode}
         components={components}
@@ -116,11 +119,13 @@ export function TemplateV2KonvaSlide({
 function TemplateV2KonvaSlideBody({
   initialSlide,
   isEditMode,
+  layout,
   presentationSlide,
   components,
 }: {
   initialSlide: KonvaSlideData;
   isEditMode: boolean;
+  layout: TemplateV2Layout;
   presentationSlide: any;
   components?: unknown;
 }) {
@@ -205,20 +210,24 @@ function TemplateV2KonvaSlideBody({
     const serialized = JSON.stringify(activeSlide);
     if (serialized === lastSyncedSlideRef.current) return;
     lastSyncedSlideRef.current = serialized;
+    const nextContent = extractTemplateV2ContentFromSlide(
+      activeSlide,
+      presentationSlide.content,
+      TEMPLATE_V2_KONVA_SLIDE_CONTENT_KEY,
+    );
+    const nextUi = serializeTemplateV2LayoutFromSlide(layout, activeSlide);
 
     dispatch(
       updateSlide({
         index: presentationSlide.index,
         slide: {
           ...presentationSlide,
-          content: {
-            ...(presentationSlide.content ?? {}),
-            [TEMPLATE_V2_KONVA_SLIDE_CONTENT_KEY]: activeSlide,
-          },
+          content: nextContent,
+          ui: nextUi,
         },
       }),
     );
-  }, [activeSlide, dispatch, isEditMode, presentationSlide]);
+  }, [activeSlide, dispatch, isEditMode, layout, presentationSlide]);
 
   useEffect(() => {
     if (!isEditMode) return;

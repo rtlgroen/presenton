@@ -15,7 +15,7 @@ from api.v2.templates.router import (
 )
 from models.sql.template_v2 import TemplateV2
 from services.export_task_service import PptxToJsonDocument
-from templates.v2.generation import TemplateGenerationArtifacts
+from templates.v2.models.layouts import SlideLayouts
 
 
 RAW_LAYOUTS = {
@@ -35,7 +35,7 @@ RAW_LAYOUTS = {
                     "position": {"x": 100, "y": 120},
                     "size": {"width": 320, "height": 180},
                     "data": "/app_data/pptx-to-json/session/images/photo.png",
-                    "fixed": True,
+                    "decorative": True,
                     "name": "photo",
                     "is_icon": False,
                 }
@@ -53,14 +53,15 @@ TEMPLATE_LAYOUTS = {
                 {
                     "id": "photo_component",
                     "description": "Reusable image component.",
-                    "design_variables": [],
+                    "position": {"x": 100, "y": 120},
+                    "size": {"width": 320, "height": 180},
                     "elements": [
                         {
                             "type": "image",
-                            "position": {"x": 100, "y": 120},
+                            "position": {"x": 0, "y": 0},
                             "size": {"width": 320, "height": 180},
                             "data": "/app_data/pptx-to-json/session/images/photo.png",
-                            "fixed": True,
+                            "decorative": True,
                             "name": "photo",
                             "is_icon": False,
                         }
@@ -71,30 +72,7 @@ TEMPLATE_LAYOUTS = {
     ]
 }
 
-GENERATED_ARTIFACTS = TemplateGenerationArtifacts(
-    cluster_candidates={
-        "candidates": [
-            {
-                "id": "photo",
-                "description": "Standalone photo image component.",
-                "slide_index": 0,
-                "elements": [1],
-            }
-        ],
-    },
-    clusters={
-        "clusters": [{"id": "image_component", "candidates": [0]}],
-    },
-    components={
-        "components": TEMPLATE_LAYOUTS["layouts"][0]["components"],
-    },
-    layouts=TEMPLATE_LAYOUTS,
-    stats={
-        "replaced_candidates": 1,
-        "skipped_overlapping_candidates": 0,
-        "untouched_elements": 1,
-    },
-)
+GENERATED_LAYOUTS = SlideLayouts.model_validate(TEMPLATE_LAYOUTS)
 
 
 class _RowsResult:
@@ -128,11 +106,6 @@ class _ListSession:
 def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async_session):
     pptx_path = tmp_path / "quarterly-review.pptx"
     pptx_path.write_bytes(b"pptx")
-    generated_artifacts = GENERATED_ARTIFACTS.model_copy(deep=True)
-    generated_artifacts.cluster_candidates["candidate_count"] = 1
-    generated_artifacts.clusters["cluster_count"] = 1
-    generated_artifacts.components["component_count"] = 1
-
     with patch(
         "api.v2.templates.router.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
@@ -141,7 +114,7 @@ def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async
         new=AsyncMock(return_value=PptxToJsonDocument(**RAW_LAYOUTS)),
     ) as convert_mock, patch(
         "api.v2.templates.router.generate_template",
-        new=Mock(return_value=generated_artifacts),
+        new=Mock(return_value=GENERATED_LAYOUTS),
     ) as generate_mock:
         template = asyncio.run(
             create_template_v2(
@@ -158,9 +131,7 @@ def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async
     generate_mock.assert_called_once()
     assert template.name == "quarterly-review"
     assert template.raw_layouts == RAW_LAYOUTS
-    assert template.cluster_candidates == GENERATED_ARTIFACTS.cluster_candidates
-    assert template.clusters == GENERATED_ARTIFACTS.clusters
-    assert template.components == GENERATED_ARTIFACTS.components
+    assert template.components is None
     assert template.layouts == TEMPLATE_LAYOUTS
     assert template.assets == {
         "fonts": {"Inter": "Inter"},

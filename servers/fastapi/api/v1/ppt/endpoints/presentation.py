@@ -329,6 +329,19 @@ def _is_template_v2_layout_payload(layout_payload: Any) -> bool:
     )
 
 
+def _template_v2_slide_ui(
+    layout_payload: Any,
+    layout_id: str,
+) -> Optional[dict[str, Any]]:
+    if not _is_template_v2_layout_payload(layout_payload):
+        return None
+
+    for layout in layout_payload["layouts"]:
+        if isinstance(layout, dict) and str(layout.get("id")) == str(layout_id):
+            return copy.deepcopy(layout)
+    return None
+
+
 def _get_presentation_stream_layout(
     presentation: PresentationModel,
 ) -> PresentationLayoutModel:
@@ -690,6 +703,7 @@ async def stream_presentation(
                 index=i,
                 speaker_note=slide_content.get("__speaker_note__", ""),
                 content=slide_content,
+                ui=_template_v2_slide_ui(presentation.layout, slide_layout.id),
             )
             slides.append(slide)
 

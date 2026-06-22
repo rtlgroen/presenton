@@ -48,7 +48,7 @@ def test_chat_memory_resolves_template_v2_layout_schemas():
                         "elements": [
                             {
                                 "type": "image",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "photo",
                                 "is_icon": False,
                             }

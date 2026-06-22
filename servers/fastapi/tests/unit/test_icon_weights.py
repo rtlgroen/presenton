@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from models.sql.slide import SlideModel
 from services.icon_finder_service import IconFinderService
@@ -89,3 +89,147 @@ def test_process_slide_fetches_icons_with_template_weight(monkeypatch):
     assert slide.content["icon"]["__icon_url__"].endswith(
         "/static/icons/thin/checks-thin.svg"
     )
+
+
+def test_process_slide_fetches_every_template_v2_image_and_icon(monkeypatch):
+    icon_queries = []
+
+    async def fake_search_icons(query, k=1, weight=None):
+        icon_queries.append(query)
+        return [f"/static/icons/{query.replace(' ', '-')}.svg"]
+
+    monkeypatch.setattr(
+        process_slides.ICON_FINDER_SERVICE,
+        "search_icons",
+        fake_search_icons,
+    )
+    image_generation_service = Mock()
+    image_generation_service.generate_image = AsyncMock(
+        side_effect=[
+            "/static/generated/market.png",
+            "/static/generated/team.png",
+        ]
+    )
+    slide = SlideModel(
+        presentation=uuid.uuid4(),
+        layout_group="template-v2",
+        layout="layout-1",
+        index=0,
+        content={
+            "hero": {"image_prompt": "market dashboard"},
+            "cards": [
+                {"image_prompt": "collaborative team"},
+                {"icon_query": "growth chart"},
+                {"icon_query": "customer support"},
+            ],
+        },
+        properties=None,
+    )
+
+    assets = asyncio.run(
+        process_slides.process_slide_and_fetch_assets(
+            image_generation_service=image_generation_service,
+            slide=slide,
+            icon_weight="regular",
+        )
+    )
+
+    assert assets == []
+    assert [
+        call.args[0].prompt
+        for call in image_generation_service.generate_image.await_args_list
+    ] == ["market dashboard", "collaborative team"]
+    assert icon_queries == ["growth chart", "customer support"]
+    assert slide.content["hero"]["image_url"].endswith(
+        "/static/generated/market.png"
+    )
+    assert slide.content["cards"][0]["image_url"].endswith(
+        "/static/generated/team.png"
+    )
+    assert slide.content["cards"][1]["icon_url"].endswith(
+        "/static/icons/growth-chart.svg"
+    )
+    assert slide.content["cards"][2]["icon_url"].endswith(
+        "/static/icons/customer-support.svg"
+    )
+    assert "__image_url__" not in slide.content["hero"]
+    assert "__image_url__" not in slide.content["cards"][0]
+    assert "__icon_url__" not in slide.content["cards"][1]
+    assert "__icon_url__" not in slide.content["cards"][2]
+
+
+def test_process_template_v2_edit_reuses_assets_with_clean_url_fields(monkeypatch):
+    search_icons = AsyncMock()
+    monkeypatch.setattr(
+        process_slides.ICON_FINDER_SERVICE,
+        "search_icons",
+        search_icons,
+    )
+    image_generation_service = Mock()
+    image_generation_service.generate_image = AsyncMock()
+    old_content = {
+        "hero": {
+            "image_prompt": "market dashboard",
+            "__image_url__": "/static/generated/market.png",
+        },
+        "badge": {
+            "icon_query": "growth chart",
+            "__icon_url__": "/static/icons/growth-chart.svg",
+        },
+    }
+    new_content = {
+        "hero": {"image_prompt": "market dashboard"},
+        "badge": {"icon_query": "growth chart"},
+    }
+
+    assets = asyncio.run(
+        process_slides.process_old_and_new_slides_and_fetch_assets(
+            image_generation_service=image_generation_service,
+            old_slide_content=old_content,
+            new_slide_content=new_content,
+            use_template_v2_asset_fields=True,
+        )
+    )
+
+    assert assets == []
+    image_generation_service.generate_image.assert_not_awaited()
+    search_icons.assert_not_awaited()
+    assert new_content["hero"] == {
+        "image_prompt": "market dashboard",
+        "image_url": "/static/generated/market.png",
+    }
+    assert new_content["badge"] == {
+        "icon_query": "growth chart",
+        "icon_url": "/static/icons/growth-chart.svg",
+    }
+
+
+def test_template_v2_placeholders_use_clean_url_fields():
+    slide = SlideModel(
+        presentation=uuid.uuid4(),
+        layout_group="template-v2-template-id",
+        layout="layout-1",
+        index=0,
+        content={
+            "hero": {
+                "image_prompt": "market dashboard",
+                "__image_url__": "/old-image.png",
+            },
+            "badge": {
+                "icon_query": "growth chart",
+                "__icon_url__": "/old-icon.svg",
+            },
+        },
+        properties=None,
+    )
+
+    process_slides.process_slide_add_placeholder_assets(slide)
+
+    assert slide.content["hero"]["image_url"].endswith(
+        "/static/images/placeholder.jpg"
+    )
+    assert slide.content["badge"]["icon_url"].endswith(
+        "/static/icons/placeholder.svg"
+    )
+    assert "__image_url__" not in slide.content["hero"]
+    assert "__icon_url__" not in slide.content["badge"]

@@ -17,8 +17,8 @@ from sqlmodel import select
 from models.sql.template_v2 import TemplateV2
 from services.database import get_async_session
 from services.export_task_service import EXPORT_TASK_SERVICE
-from templates.v2.generation import TemplateGenerationArtifacts, generate_template
-from templates.v2.models.layouts import SlideLayouts
+from templates.v2.generation import generate_template
+from templates.v2.models.layouts import RawSlideLayouts, SlideLayouts
 from utils.asset_directory_utils import resolve_app_path_to_filesystem
 from utils.file_utils import get_original_file_name
 
@@ -55,8 +55,6 @@ class TemplateV2ListResponse(BaseModel):
 
 class TemplateV2Response(TemplateV2ListItem):
     raw_layouts: Optional[dict[str, Any]] = None
-    cluster_candidates: Optional[dict[str, Any]] = None
-    clusters: Optional[dict[str, Any]] = None
     components: Optional[dict[str, Any]] = None
     layouts: dict[str, Any]
     assets: Optional[dict[str, Any]] = None
@@ -106,39 +104,39 @@ def _count_layouts(layouts_json: Any) -> int:
     return 0
 
 
-async def _generate_template_artifacts(
-    raw_layouts: SlideLayouts,
-) -> TemplateGenerationArtifacts:
+async def _generate_slide_layouts(
+    raw_layouts: RawSlideLayouts,
+    slide_image_urls: list[str],
+) -> SlideLayouts:
     LOGGER.info(
-        "[templates.v2.create] template artifact generation start slides=%d",
+        "[templates.v2.create] slide layout generation start slides=%d",
         len(raw_layouts.layouts),
     )
     try:
-        generated_template = await _run_template_generation_thread(
+        generated_layouts = await _run_template_generation_thread(
             generate_template,
             raw_layouts,
+            slide_image_urls,
         )
-        artifacts = _coerce_template_generation_artifacts(generated_template)
+        layouts = _coerce_generated_slide_layouts(generated_layouts)
     except (ValidationError, ValueError) as exc:
         LOGGER.exception(
-            "[templates.v2.create] template artifact generation produced invalid output "
+            "[templates.v2.create] slide layout generation produced invalid output "
             "slides=%d",
             len(raw_layouts.layouts),
         )
         raise HTTPException(
             status_code=500,
-            detail="Template artifact generation produced invalid output",
+            detail="Slide layout generation produced invalid output",
         ) from exc
 
     LOGGER.info(
-        "[templates.v2.create] template artifact generation complete slides=%d "
-        "candidates=%d clusters=%d components=%d",
-        len(raw_layouts.layouts),
-        len(artifacts.cluster_candidates.get("candidates", [])),
-        len(artifacts.clusters.get("clusters", [])),
-        len(artifacts.components.get("components", [])),
+        "[templates.v2.create] slide layout generation complete slides=%d "
+        "components=%d",
+        len(layouts.layouts),
+        sum(len(layout.components) for layout in layouts.layouts),
     )
-    return artifacts
+    return layouts
 
 
 async def _run_template_generation_thread(func: Any, *args: Any) -> Any:
@@ -150,27 +148,10 @@ async def _run_template_generation_thread(func: Any, *args: Any) -> Any:
         return await loop.run_in_executor(executor, partial(func, *args))
 
 
-def _coerce_template_generation_artifacts(
-    generated_template: Any,
-) -> TemplateGenerationArtifacts:
-    if isinstance(generated_template, TemplateGenerationArtifacts):
-        return generated_template
-
-    if isinstance(generated_template, SlideLayouts):
-        layouts_json = generated_template.model_dump(mode="json", exclude_none=True)
-        return TemplateGenerationArtifacts(
-            cluster_candidates={"candidates": []},
-            clusters={"clusters": []},
-            components={"components": []},
-            layouts=layouts_json,
-            stats={
-                "replaced_candidates": 0,
-                "skipped_overlapping_candidates": 0,
-                "untouched_elements": 0,
-            },
-        )
-
-    return TemplateGenerationArtifacts.model_validate(generated_template)
+def _coerce_generated_slide_layouts(generated_layouts: Any) -> SlideLayouts:
+    if isinstance(generated_layouts, SlideLayouts):
+        return generated_layouts
+    return SlideLayouts.model_validate(generated_layouts)
 
 
 @TEMPLATES_V2_ROUTER.get("", response_model=TemplateV2ListResponse)
@@ -257,7 +238,9 @@ async def create_template_v2(
     )
     pptx_json = await EXPORT_TASK_SERVICE.convert_pptx_to_json(pptx_path)
     try:
-        raw_layouts = SlideLayouts.model_validate(pptx_json.model_dump(mode="json"))
+        raw_layouts = RawSlideLayouts.model_validate(
+            pptx_json.model_dump(mode="json")
+        )
     except ValidationError as exc:
         LOGGER.exception(
             "[templates.v2.create] PPTX-to-JSON export produced invalid slide "
@@ -275,24 +258,24 @@ async def create_template_v2(
         len(raw_layouts.layouts),
     )
 
-    generation_artifacts = await _generate_template_artifacts(raw_layouts)
-    raw_layouts_json = raw_layouts.model_dump(mode="json", exclude_none=True)
+    if len(request.slide_image_urls) != len(raw_layouts.layouts):
+        raise HTTPException(
+            status_code=400,
+            detail="Exactly one slide image is required for each slide layout",
+        )
+
+    generated_layouts = await _generate_slide_layouts(
+        raw_layouts,
+        request.slide_image_urls,
+    )
+    raw_layouts_json = pptx_json.model_dump(mode="json", exclude_none=True)
     template = TemplateV2(
         name=(request.name or "").strip() or _derive_template_name(
             request.pptx_url, pptx_path
         ),
         description=request.description,
         raw_layouts=raw_layouts_json,
-        cluster_candidates={
-            "candidates": generation_artifacts.cluster_candidates.get(
-                "candidates", []
-            )
-        },
-        clusters={"clusters": generation_artifacts.clusters.get("clusters", [])},
-        components={
-            "components": generation_artifacts.components.get("components", [])
-        },
-        layouts=generation_artifacts.layouts,
+        layouts=generated_layouts.model_dump(mode="json", exclude_none=True),
         assets={
             "fonts": request.fonts or {},
             "slide_image_urls": request.slide_image_urls,

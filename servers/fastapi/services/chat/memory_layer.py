@@ -507,6 +507,9 @@ class PresentationChatMemoryLayer:
                 old_slide_content=existing_slide.content or {},
                 new_slide_content=updated_content,
                 icon_weight=icon_weight,
+                use_template_v2_asset_fields=existing_slide.layout_group.startswith(
+                    "template-v2"
+                ),
             )
 
             existing_slide.id = uuid.uuid4()

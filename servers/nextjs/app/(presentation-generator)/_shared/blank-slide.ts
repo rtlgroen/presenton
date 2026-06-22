@@ -9,7 +9,7 @@ export const BLANK_TEMPLATE_V2_LAYOUT = {
       position: { x: 0, y: 0 },
       size: { width: 1280, height: 720 },
       fill: { color: "#FFFFFF" },
-      fixed: true,
+      decorative: true,
     },
   ],
 };

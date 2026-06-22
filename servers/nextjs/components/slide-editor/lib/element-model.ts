@@ -1,4 +1,3 @@
-import { SLIDE_H, SLIDE_W } from "./slide-schema";
 import type {
   BorderRadius,
   ChartElement,
@@ -77,8 +76,8 @@ export function moveElement<T extends SlideElement>(
 ): T {
   const box = elementBox(element);
   return resizeElement(element, {
-    x: clamp(box.x + dx, 0, SLIDE_W - box.w),
-    y: clamp(box.y + dy, 0, SLIDE_H - box.h),
+    x: box.x + dx,
+    y: box.y + dy,
   });
 }
 
@@ -215,8 +214,4 @@ export function isShapeElement(
   element: SlideElement,
 ): element is RectangleElement | Extract<SlideElement, { type: "ellipse" }> {
   return element.type === "rectangle" || element.type === "ellipse";
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
 }

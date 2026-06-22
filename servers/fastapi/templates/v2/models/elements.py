@@ -158,7 +158,7 @@ class Text(BaseModel):  # Konva Text
     runs: Optional[list[TextRun]] = None
 
     # Schema
-    fixed: bool
+    decorative: bool
     name: str
     max_length: int
     min_length: int
@@ -178,7 +178,7 @@ class Container(BaseModel):  # Konva Group
     child: Optional[SlideElement] = None
 
     # Schema
-    fixed: bool
+    decorative: bool
 
 
 class Image(BaseModel):  # Konva Image
@@ -189,9 +189,10 @@ class Image(BaseModel):  # Konva Image
     data: Optional[str] = None
     fit: Optional[ImageFit] = None
     border_radius: Optional[BorderRadius] = None
+    color: Optional[str] = None
 
     # Schema
-    fixed: bool
+    decorative: bool
     name: str
     is_icon: bool
 
@@ -206,7 +207,7 @@ class TextList(BaseModel):  # Konva Group
     items: Optional[list[list[TextRun]]] = None
 
     # Schema
-    fixed: bool
+    decorative: bool
     name: str
     max_items: int
     min_items: int
@@ -229,7 +230,7 @@ class Table(BaseModel):
     rows: list[list[TableCell]]
 
     # Schema
-    fixed: bool
+    decorative: bool
     name: str
     max_columns: int
     min_columns: int
@@ -281,7 +282,7 @@ class Chart(BaseModel):
     show_values: Optional[bool] = None
 
     # Schema
-    fixed: bool
+    decorative: bool
     name: str
 
 

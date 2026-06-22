@@ -1,4 +1,4 @@
-from templates.v2.models.layouts import SlideLayout
+from templates.v2.models.layouts import RawSlideLayout
 from templates.v2.schema import (
     extract_slide_schema_from_layout,
     get_component_schema,
@@ -7,7 +7,7 @@ from templates.v2.schema import (
 
 
 def test_extract_slide_schema_from_layout_extracts_editable_content():
-    layout = SlideLayout.model_validate(
+    layout = RawSlideLayout.model_validate(
         {
             "id": "content_slide",
             "description": "Editable content with static decoration.",
@@ -18,30 +18,30 @@ def test_extract_slide_schema_from_layout_extracts_editable_content():
                 },
                 {
                     "type": "text",
-                    "fixed": False,
+                    "decorative": False,
                     "name": "title",
                     "min_length": 4,
                     "max_length": 8,
                 },
                 {
                     "type": "text",
-                    "fixed": True,
+                    "decorative": True,
                     "name": "static_label",
                     "min_length": 1,
                     "max_length": 2,
                 },
                 {
                     "type": "image",
-                    "fixed": False,
+                    "decorative": False,
                     "name": "hero_image",
                     "is_icon": False,
                 },
                 {
                     "type": "container",
-                    "fixed": True,
+                    "decorative": True,
                     "child": {
                         "type": "text",
-                        "fixed": False,
+                        "decorative": False,
                         "name": "caption",
                         "min_length": 2,
                         "max_length": 4,
@@ -53,7 +53,7 @@ def test_extract_slide_schema_from_layout_extracts_editable_content():
                     "children": [
                         {
                             "type": "text-list",
-                            "fixed": False,
+                            "decorative": False,
                             "name": "bullets",
                             "min_items": 2,
                             "max_items": 4,
@@ -62,7 +62,7 @@ def test_extract_slide_schema_from_layout_extracts_editable_content():
                         },
                         {
                             "type": "chart",
-                            "fixed": False,
+                            "decorative": False,
                             "name": "chart",
                             "chart_type": "bar",
                             "data": [],
@@ -121,7 +121,7 @@ def test_extract_slide_schema_from_layout_extracts_editable_content():
 
 
 def test_extract_slide_schema_from_layout_collapses_repeated_children_to_array():
-    layout = SlideLayout.model_validate(
+    layout = RawSlideLayout.model_validate(
         {
             "id": "cards_slide",
             "description": "Repeated card layout.",
@@ -141,14 +141,14 @@ def test_extract_slide_schema_from_layout_collapses_repeated_children_to_array()
                             "children": [
                                 {
                                     "type": "text",
-                                    "fixed": False,
+                                    "decorative": False,
                                     "name": "title_1",
                                     "min_length": 3,
                                     "max_length": 6,
                                 },
                                 {
                                     "type": "image",
-                                    "fixed": False,
+                                    "decorative": False,
                                     "name": "icon_1",
                                     "is_icon": True,
                                 },
@@ -160,14 +160,14 @@ def test_extract_slide_schema_from_layout_collapses_repeated_children_to_array()
                             "children": [
                                 {
                                     "type": "text",
-                                    "fixed": False,
+                                    "decorative": False,
                                     "name": "title_2",
                                     "min_length": 3,
                                     "max_length": 6,
                                 },
                                 {
                                     "type": "image",
-                                    "fixed": False,
+                                    "decorative": False,
                                     "name": "icon_2",
                                     "is_icon": True,
                                 },
@@ -218,20 +218,20 @@ def test_get_component_schema_extracts_generated_component_content():
         "elements": [
             {
                 "type": "text",
-                "fixed": False,
+                "decorative": False,
                 "name": "headline",
                 "min_length": 4,
                 "max_length": 12,
             },
             {
                 "type": "image",
-                "fixed": False,
+                "decorative": False,
                 "name": "icon",
                 "is_icon": True,
             },
             {
                 "type": "table",
-                "fixed": False,
+                "decorative": False,
                 "name": "metrics",
                 "min_columns": 2,
                 "max_columns": 4,
@@ -319,7 +319,7 @@ def test_get_component_schema_collapses_repeated_component_children_to_array():
                         "children": [
                             {
                                 "type": "text",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "title_1",
                                 "min_length": 3,
                                 "max_length": 8,
@@ -332,7 +332,7 @@ def test_get_component_schema_collapses_repeated_component_children_to_array():
                         "children": [
                             {
                                 "type": "text",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "title_2",
                                 "min_length": 5,
                                 "max_length": 12,
@@ -381,7 +381,7 @@ def test_get_template_schema_strips_component_metadata():
                         "elements": [
                             {
                                 "type": "image",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "photo",
                                 "is_icon": False,
                             }
@@ -442,7 +442,7 @@ def test_get_template_schema_numbers_duplicate_component_fields_from_zero():
                         "elements": [
                             {
                                 "type": "text",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "value",
                                 "min_length": 1,
                                 "max_length": 8,
@@ -455,7 +455,7 @@ def test_get_template_schema_numbers_duplicate_component_fields_from_zero():
                         "elements": [
                             {
                                 "type": "text",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "value",
                                 "min_length": 1,
                                 "max_length": 8,

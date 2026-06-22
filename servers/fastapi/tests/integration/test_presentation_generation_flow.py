@@ -13,6 +13,7 @@ from models.presentation_and_path import PresentationAndPath
 from models.presentation_outline_model import SlideOutlineModel
 from models.presentation_structure_model import PresentationStructureModel
 from models.sql.presentation import PresentationModel, PresentationVersion
+from models.sql.slide import SlideModel
 from models.sql.template_v2 import TemplateV2
 from templates.presentation_layout import PresentationLayoutModel, SlideLayoutModel
 from tests.conftest import FakeAsyncSession
@@ -127,6 +128,7 @@ def test_generate_presentation_handler_full_flow_uses_mocked_dependencies(fake_a
     assert response.edit_path == f"/presentation?id={presentation_id}"
     assert len(fake_async_session.added_all) == 2
     assert all(slide.presentation == presentation_id for slide in fake_async_session.added_all)
+    assert all(slide.ui is None for slide in fake_async_session.added_all)
 
 
 def test_create_presentation_requires_and_stores_version(fake_async_session):
@@ -217,7 +219,7 @@ def test_prepare_presentation_accepts_template_v2_layout_id():
                         "elements": [
                             {
                                 "type": "text",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "headline",
                             }
                         ],
@@ -356,7 +358,7 @@ def test_stream_presentation_uses_template_v2_schema_for_content_generation():
                         "elements": [
                             {
                                 "type": "text",
-                                "fixed": False,
+                                "decorative": False,
                                 "name": "headline",
                                 "min_length": 2,
                                 "max_length": 32,
@@ -441,6 +443,11 @@ def test_stream_presentation_uses_template_v2_schema_for_content_generation():
         },
         "required": ["headline"],
     }
+    generated_slides = [
+        item for item in session.added_all if isinstance(item, SlideModel)
+    ]
+    assert len(generated_slides) == 1
+    assert generated_slides[0].ui == template_layouts["layouts"][0]
 
 
 def test_generate_presentation_sync_rejects_invalid_slide_count(fake_async_session):

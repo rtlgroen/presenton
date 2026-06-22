@@ -132,6 +132,14 @@ function SlideImagePicture({
         width={drawW}
         height={drawH}
       />
+      {element.color ? (
+        <Rect
+          width={width}
+          height={height}
+          fill={element.color}
+          listening={false}
+        />
+      ) : null}
     </Group>
   );
 }

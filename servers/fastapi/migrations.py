@@ -15,9 +15,8 @@ LEGACY_BASELINE_REVISION = "00b3c27a13bc"
 REVISION_BEFORE_TEMPLATE_CREATE_INFO = "82abdbc476a7"
 REVISION_TEMPLATE_CREATE_INFO = "95b5127e93cd"
 REVISION_CHAT_HISTORY = "c7b70d0f31b1"
-REVISION_TEMPLATE_V2 = "4b2c5d6e7f8a"
-REVISION_TEMPLATE_V2_ARTIFACTS = "9f1a2b3c4d5e"
-REVISION_PRESENTATION_VERSION = "2d7c8f9a0b1c"
+REVISION_TEMPLATE_V2 = "6e4a1b2c3d5f"
+REVISION_SLIDE_UI = "7f5b2c3d4e6a"
 
 
 async def migrate_database_on_startup() -> None:
@@ -73,7 +72,7 @@ def _repair_orphan_alembic_revision(config: Config, database_url: str) -> None:
 
     engine = create_engine(database_url)
     try:
-        with engine.connect() as connection:
+        with engine.begin() as connection:
             inspector = inspect(connection)
             tables = set(inspector.get_table_names())
             if "alembic_version" not in tables:
@@ -89,7 +88,10 @@ def _repair_orphan_alembic_revision(config: Config, database_url: str) -> None:
                 flush=True,
             )
             target = _infer_revision_from_schema(inspector, tables, head)
-            command.stamp(config, target)
+            connection.execute(
+                text("UPDATE alembic_version SET version_num = :revision"),
+                {"revision": target},
+            )
     finally:
         engine.dispose()
 
@@ -98,13 +100,27 @@ def _infer_revision_from_schema(inspector, tables: set[str], head_revision: str)
     """Best-effort: map existing SQLite/Postgres schema to our linear migration chain."""
     if "template_v2" in tables:
         cols = {c["name"] for c in inspector.get_columns("template_v2")}
-        if {"cluster_candidates", "clusters", "components"}.issubset(cols):
-            if _has_presentation_version_column(inspector, tables):
-                return head_revision
-            return REVISION_TEMPLATE_V2_ARTIFACTS
-        return REVISION_TEMPLATE_V2
-    if _has_presentation_version_column(inspector, tables):
-        return head_revision
+        final_template_columns = {
+            "description",
+            "raw_layouts",
+            "components",
+            "layouts",
+            "assets",
+        }
+        presentation_version_ready = (
+            "presentations" not in tables
+            or _has_presentation_version_column(inspector, tables)
+        )
+        slide_ui_ready = "slides" not in tables or _has_column(
+            inspector, "slides", "ui"
+        )
+        if (
+            final_template_columns.issubset(cols)
+            and not {"cluster_candidates", "clusters"}.intersection(cols)
+            and presentation_version_ready
+        ):
+            return head_revision if slide_ui_ready else REVISION_TEMPLATE_V2
+        return REVISION_CHAT_HISTORY
     if "chat_history_messages" in tables:
         return REVISION_CHAT_HISTORY
     if "template_create_infos" in tables:
@@ -122,6 +138,11 @@ def _has_presentation_version_column(inspector, tables: set[str]) -> bool:
 
     cols = {c["name"] for c in inspector.get_columns("presentations")}
     return "version" in cols
+
+
+def _has_column(inspector, table_name: str, column_name: str) -> bool:
+    columns = {column["name"] for column in inspector.get_columns(table_name)}
+    return column_name in columns
 
 
 def _stamp_legacy_database_if_needed(config: Config, database_url: str) -> None:

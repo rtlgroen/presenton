@@ -35,8 +35,10 @@ export const ChartTypeSchema = z.enum(["bar", "line", "donut"]);
 
 export const PositionSchema = z
   .object({
-    x: z.number().min(0).max(SLIDE_W),
-    y: z.number().min(0).max(SLIDE_H),
+    // Elements may intentionally bleed beyond the slide and are clipped by the
+    // slide surface. Keep interaction bounds separate from persisted geometry.
+    x: z.number(),
+    y: z.number(),
   })
   .strict();
 
@@ -178,7 +180,7 @@ export const DesignVariableSchema = z
   .strict();
 
 const elementBaseShape = {
-  fixed: z.boolean().nullish(),
+  decorative: z.boolean().nullish(),
   position: PositionSchema.nullish(),
   size: SizeSchema.nullish(),
   rotation: z.number().min(-360).max(360).nullish(),
@@ -213,7 +215,7 @@ export const TextElementSchema = z
   .strict();
 
 type ElementBaseOutput = {
-  fixed?: boolean | null | undefined;
+  decorative?: boolean | null | undefined;
   position?: z.infer<typeof PositionSchema> | null | undefined;
   size?: z.infer<typeof SizeSchema> | null | undefined;
   rotation?: number | null | undefined;
@@ -333,6 +335,7 @@ export const ImageElementSchema = z
     name: z.string().max(120).nullish(),
     fit: ImageFitSchema.nullish(),
     borderRadius: BorderRadiusSchema.nullish(),
+    color: z.string().nullish(),
     is_icon: z.boolean().nullish(),
   })
   .strict();

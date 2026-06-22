@@ -70,7 +70,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
             }
 
-        assert version == migrations.REVISION_PRESENTATION_VERSION
+        assert version == migrations.REVISION_SLIDE_UI
         assert "theme" in columns
     finally:
         engine.dispose()
@@ -120,7 +120,7 @@ def test_upgrade_from_theme_stamp_skips_existing_template_create_infos_table(tmp
                 )
             }
 
-        assert version == migrations.REVISION_PRESENTATION_VERSION
+        assert version == migrations.REVISION_SLIDE_UI
         assert "template_create_infos" in tables
     finally:
         engine.dispose()
@@ -180,21 +180,21 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
                 for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
-        assert version == migrations.REVISION_PRESENTATION_VERSION
+        assert version == migrations.REVISION_SLIDE_UI
         assert {
             "ix_chat_history_messages_conversation_id",
             "ix_chat_history_messages_position",
             "ix_chat_history_messages_presentation_id",
         }.issubset(indexes)
         assert "template_v2" in tables
-        assert {"cluster_candidates", "clusters", "components"}.issubset(
-            template_columns
-        )
+        assert "components" in template_columns
+        assert "cluster_candidates" not in template_columns
+        assert "clusters" not in template_columns
     finally:
         engine.dispose()
 
 
-def test_upgrade_from_template_v2_artifacts_adds_presentation_version(tmp_path):
+def test_consolidated_migration_adds_presentation_version(tmp_path):
     database_url = f"sqlite:///{tmp_path / 'presentation-version.db'}"
     engine = create_engine(database_url)
     try:
@@ -219,12 +219,13 @@ def test_upgrade_from_template_v2_artifacts_adds_presentation_version(tmp_path):
                     """
                 )
             )
+            connection.execute(text("CREATE TABLE slides (id TEXT PRIMARY KEY)"))
             connection.execute(
                 text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
             )
             connection.execute(
                 text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
-                {"revision": migrations.REVISION_TEMPLATE_V2_ARTIFACTS},
+                {"revision": migrations.REVISION_CHAT_HISTORY},
             )
 
         command.upgrade(_alembic_config(database_url), "head")
@@ -241,11 +242,16 @@ def test_upgrade_from_template_v2_artifacts_adds_presentation_version(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
                 if row[1] == "version"
             )
+            slide_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(slides)"))
+            }
 
-        assert version == migrations.REVISION_PRESENTATION_VERSION
+        assert version == migrations.REVISION_SLIDE_UI
         assert presentation_version == "v1-standard"
         assert version_column[3] == 1
         assert version_column[4] is None
+        assert "ui" in slide_columns
     finally:
         engine.dispose()
 
@@ -291,7 +297,38 @@ def test_unversioned_database_with_chat_history_stamps_before_template_v2(
     assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
 
 
-def test_unversioned_database_with_old_template_v2_stamps_before_artifacts(
+def test_upgrade_from_template_v2_revision_adds_slide_ui(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'slide-ui.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE slides (id TEXT PRIMARY KEY)"))
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": migrations.REVISION_TEMPLATE_V2},
+            )
+
+        command.upgrade(_alembic_config(database_url), "head")
+
+        with engine.connect() as connection:
+            version = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            slide_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(slides)"))
+            }
+
+        assert version == migrations.REVISION_SLIDE_UI
+        assert "ui" in slide_columns
+    finally:
+        engine.dispose()
+
+
+def test_unversioned_database_with_old_template_v2_stamps_before_consolidated(
     tmp_path, monkeypatch
 ):
     database_url = f"sqlite:///{tmp_path / 'legacy-template-v2.db'}"
@@ -327,10 +364,10 @@ def test_unversioned_database_with_old_template_v2_stamps_before_artifacts(
         _alembic_config(database_url), database_url
     )
 
-    assert stamped_revisions == [migrations.REVISION_TEMPLATE_V2]
+    assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
 
 
-def test_unversioned_database_with_template_v2_artifacts_stamps_before_version(
+def test_unversioned_database_with_template_v2_artifacts_stamps_before_consolidated(
     tmp_path, monkeypatch
 ):
     database_url = f"sqlite:///{tmp_path / 'legacy-template-v2-artifacts.db'}"
@@ -370,4 +407,67 @@ def test_unversioned_database_with_template_v2_artifacts_stamps_before_version(
         _alembic_config(database_url), database_url
     )
 
-    assert stamped_revisions == [migrations.REVISION_TEMPLATE_V2_ARTIFACTS]
+    assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
+
+
+def test_removed_intermediate_revision_upgrades_through_consolidated_migration(
+    tmp_path,
+):
+    database_url = f"sqlite:///{tmp_path / 'removed-template-v2-revision.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE presentations (
+                        id TEXT PRIMARY KEY,
+                        version VARCHAR NOT NULL
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE template_v2 (
+                        id CHAR(32) NOT NULL,
+                        name VARCHAR NOT NULL,
+                        raw_layouts JSON,
+                        layouts JSON NOT NULL,
+                        cluster_candidates JSON,
+                        clusters JSON,
+                        components JSON,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES ('2d7c8f9a0b1c')")
+            )
+
+        config = _alembic_config(database_url)
+        migrations._repair_orphan_alembic_revision(config, database_url)
+        command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            version = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            template_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+            }
+
+        assert version == migrations.REVISION_SLIDE_UI
+        assert {"description", "components", "assets"}.issubset(template_columns)
+        assert "cluster_candidates" not in template_columns
+        assert "clusters" not in template_columns
+    finally:
+        engine.dispose()
