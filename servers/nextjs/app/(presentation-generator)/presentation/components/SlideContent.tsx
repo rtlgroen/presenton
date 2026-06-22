@@ -64,6 +64,7 @@ const SlideContent = ({
     ? slideLayoutGroup
     : slideLayoutGroup || slideLayoutTemplateId;
   const isTemplateV2Slide = slideTemplateId.startsWith("template-v2");
+  const canEditSlideWithPrompt = !isTemplateV2Slide;
 
   const openTemplateV2ComponentDrawer = () => {
     if (typeof window === "undefined") return;
@@ -271,72 +272,74 @@ const SlideContent = ({
                 </button>
               )}
 
-              <Popover
-                open={isEditPopoverOpen}
-                onOpenChange={setIsEditPopoverOpen}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex px-3.5 py-2.5 items-center justify-center rounded-full bg-[#F7F6F9] font-syne"
-                  >
-                    <ToolTip content="Update slide using prompt">
-                      <Pencil className="h-4 w-4" />
-                    </ToolTip>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  side="bottom"
-                  align="center"
-                  sideOffset={12}
-                  className="z-30 w-[340px] rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl font-syne"
+              {canEditSlideWithPrompt && (
+                <Popover
+                  open={isEditPopoverOpen}
+                  onOpenChange={setIsEditPopoverOpen}
                 >
-                  <div className="border-b border-gray-100 px-4 py-3">
-                    <p className="text-sm font-semibold text-gray-900">
-                      Update slide
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Describe how this slide should be improved.
-                    </p>
-                  </div>
-                  <form
-                    className="flex flex-col gap-3 p-4"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleSubmit();
-                    }}
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex px-3.5 py-2.5 items-center justify-center rounded-full bg-[#F7F6F9] font-syne"
+                    >
+                      <ToolTip content="Update slide using prompt">
+                        <Pencil className="h-4 w-4" />
+                      </ToolTip>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="bottom"
+                    align="center"
+                    sideOffset={12}
+                    className="z-30 w-[340px] rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl font-syne"
                   >
-                    <Textarea
-                      id={`slide-${slide.index}-prompt`}
-                      value={editPrompt}
-                      placeholder="Enter your prompt here..."
-                      className="min-h-[110px] max-h-[180px] w-full resize-none rounded-xl border border-gray-200 p-3 text-sm focus-visible:ring-1 focus-visible:ring-[#5141e5]"
-                      disabled={isUpdating}
-                      onChange={(e) => setEditPrompt(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter" || e.shiftKey || isUpdating)
-                          return;
+                    <div className="border-b border-gray-100 px-4 py-3">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Update slide
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Describe how this slide should be improved.
+                      </p>
+                    </div>
+                    <form
+                      className="flex flex-col gap-3 p-4"
+                      onSubmit={(e) => {
                         e.preventDefault();
                         handleSubmit();
                       }}
-                      rows={5}
-                      wrap="soft"
-                    />
-                    <button
-                      disabled={isUpdating}
-                      type="submit"
-                      className={`ml-auto flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9034EA] to-[#5146E5] px-4 py-2 text-sm font-medium text-white transition-opacity ${
-                        isUpdating
-                          ? "cursor-not-allowed opacity-70"
-                          : "hover:opacity-90"
-                      }`}
                     >
-                      {isUpdating ? "Updating..." : "Update"}
-                      <SendHorizontal className="h-4 w-4" />
-                    </button>
-                  </form>
-                </PopoverContent>
-              </Popover>
+                      <Textarea
+                        id={`slide-${slide.index}-prompt`}
+                        value={editPrompt}
+                        placeholder="Enter your prompt here..."
+                        className="min-h-[110px] max-h-[180px] w-full resize-none rounded-xl border border-gray-200 p-3 text-sm focus-visible:ring-1 focus-visible:ring-[#5141e5]"
+                        disabled={isUpdating}
+                        onChange={(e) => setEditPrompt(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter" || e.shiftKey || isUpdating)
+                            return;
+                          e.preventDefault();
+                          handleSubmit();
+                        }}
+                        rows={5}
+                        wrap="soft"
+                      />
+                      <button
+                        disabled={isUpdating}
+                        type="submit"
+                        className={`ml-auto flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9034EA] to-[#5146E5] px-4 py-2 text-sm font-medium text-white transition-opacity ${
+                          isUpdating
+                            ? "cursor-not-allowed opacity-70"
+                            : "hover:opacity-90"
+                        }`}
+                      >
+                        {isUpdating ? "Updating..." : "Update"}
+                        <SendHorizontal className="h-4 w-4" />
+                      </button>
+                    </form>
+                  </PopoverContent>
+                </Popover>
+              )}
 
               {slide?.speaker_note && (
                 <Popover
