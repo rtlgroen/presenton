@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT: ${NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT:-${USE_SLIDE_EDITOR_IMPORT:-false}}
     ports:
       # You can replace 5001 with any other port number of your choice to run Presenton on a different port number.
       - "${PRESENTON_HOST_HTTP_PORT:-5001}:80"
@@ -19,6 +21,7 @@ services:
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HOST_HTTP_PORT:-5001}
       - MIGRATE_DATABASE_ON_STARTUP=true
       - USE_SLIDE_EDITOR_IMPORT=${USE_SLIDE_EDITOR_IMPORT:-false}
+      - NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT=${NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT:-${USE_SLIDE_EDITOR_IMPORT:-false}}
       - CAN_CHANGE_KEYS=${CAN_CHANGE_KEYS:-}
       - LLM=${LLM:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -112,6 +115,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT: ${NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT:-${USE_SLIDE_EDITOR_IMPORT:-false}}
     deploy:
       resources:
         reservations:
@@ -131,6 +136,7 @@ services:
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HOST_HTTP_PORT:-5000}
       - MIGRATE_DATABASE_ON_STARTUP=true
       - USE_SLIDE_EDITOR_IMPORT=${USE_SLIDE_EDITOR_IMPORT:-false}
+      - NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT=${NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT:-${USE_SLIDE_EDITOR_IMPORT:-false}}
       - CAN_CHANGE_KEYS=${CAN_CHANGE_KEYS:-}
       - LLM=${LLM:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -240,6 +246,7 @@ services:
       - START_OLLAMA=${START_OLLAMA:-false}
       - MIGRATE_DATABASE_ON_STARTUP=true
       - USE_SLIDE_EDITOR_IMPORT=${USE_SLIDE_EDITOR_IMPORT:-false}
+      - NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT=${NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT:-${USE_SLIDE_EDITOR_IMPORT:-false}}
       - CAN_CHANGE_KEYS=${CAN_CHANGE_KEYS:-}
       - LLM=${LLM:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -353,6 +360,7 @@ services:
       - START_OLLAMA=${START_OLLAMA:-false}
       - MIGRATE_DATABASE_ON_STARTUP=true
       - USE_SLIDE_EDITOR_IMPORT=${USE_SLIDE_EDITOR_IMPORT:-false}
+      - NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT=${NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT:-${USE_SLIDE_EDITOR_IMPORT:-false}}
       - CAN_CHANGE_KEYS=${CAN_CHANGE_KEYS:-}
       - LLM=${LLM:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

@@ -50,6 +50,35 @@ import MarkdownRenderer from "@/components/MarkDownRender";
 import { cn } from "@/lib/utils";
 
 const MAX_EXPORT_TITLE_LENGTH = 40;
+const ENABLED_FEATURE_FLAG_VALUES = new Set(["1", "true", "yes", "on"]);
+
+function isEnabledFeatureFlag(value: string | undefined): boolean {
+  return ENABLED_FEATURE_FLAG_VALUES.has((value ?? "").trim().toLowerCase());
+}
+
+function hasTemplateV2Slides(slides: unknown): boolean {
+  return (
+    Array.isArray(slides) &&
+    slides.some(
+      (slide) =>
+        slide &&
+        typeof slide === "object" &&
+        typeof (slide as any).layout_group === "string" &&
+        (slide as any).layout_group.startsWith("template-v2")
+    )
+  );
+}
+
+function hasTemplateV2Layouts(layout: unknown): boolean {
+  if (!layout || typeof layout !== "object") return false;
+  const layouts = (layout as any).layouts;
+  if (Array.isArray(layouts)) return true;
+  return Boolean(
+    layouts &&
+      typeof layouts === "object" &&
+      Array.isArray((layouts as any).layouts)
+  );
+}
 
 const buildSafeExportFileName = (
   rawTitle: string | null | undefined,
@@ -111,8 +140,28 @@ const PresentationHeader = ({
   const { presentationData, isStreaming } = useSelector(
     (state: RootState) => state.presentationGeneration
   );
+  const isSlideEditorImportEnabled = isEnabledFeatureFlag(
+    process.env.NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT ??
+      process.env.USE_SLIDE_EDITOR_IMPORT
+  );
+  const firstSlideLayout =
+    typeof presentationData?.slides?.[0]?.layout === "string"
+      ? presentationData.slides[0].layout
+      : "";
+  const shouldShowThemeSelector = Boolean(
+    presentationData &&
+      !isSlideEditorImportEnabled &&
+      !hasTemplateV2Slides(presentationData.slides) &&
+      !hasTemplateV2Layouts(presentationData.layout) &&
+      presentationData.slides &&
+      !firstSlideLayout.includes("custom")
+  );
 
   useEffect(() => {
+    if (!shouldShowThemeSelector || themes.length > 0) {
+      return;
+    }
+
     const load = async () => {
       try {
         const [customThemes] = await Promise.all([ThemeApi.getThemes()]);
@@ -121,10 +170,8 @@ const PresentationHeader = ({
         notify.error("Could not load themes", e?.message || "Failed to load themes.");
       }
     };
-    if (themes.length === 0) {
-      load();
-    }
-  }, []);
+    load();
+  }, [shouldShowThemeSelector, themes.length]);
 
   const { onUndo, onRedo, canUndo, canRedo } = usePresentationUndoRedo();
 
@@ -491,14 +538,12 @@ const PresentationHeader = ({
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             </div>
           )}
-          {presentationData &&
-            presentationData.slides &&
-            !presentationData.slides[0].layout.includes("custom") && (
+          {shouldShowThemeSelector && (
               <ThemeSelector
                 current_theme={presentationData?.theme || {}}
                 themes={themes}
               />
-            )}
+          )}
 
           <div className="flex items-center gap-2 bg-[#F6F6F9] px-3.5 h-[38px] border border-[#EDECEC] rounded-[80px]">
             <ToolTip content="Regenerate Presentation">
