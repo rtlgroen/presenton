@@ -118,9 +118,11 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
   const src = typeof element.data === "string" ? element.data.trim() : "";
   if (!src) return null;
   const color = readString(element.color);
+  const resolvedSrc = resolveBackendAssetUrl(src);
   const borderRadius = borderRadiusPx(
     readRecord(element.borderRadius ?? element.border_radius),
   );
+  const fit = imageFit(element.fit);
 
   return (
     <div
@@ -134,11 +136,11 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
       <img
         alt=""
         draggable={false}
-        src={resolveBackendAssetUrl(src)}
+        src={resolvedSrc}
         style={{
           display: "block",
           height: "100%",
-          objectFit: imageFit(element.fit),
+          objectFit: fit,
           width: "100%",
         }}
       />
@@ -148,8 +150,16 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
           style={{
             backgroundColor: color,
             inset: 0,
+            maskImage: `url(${resolvedSrc})`,
+            maskPosition: "center",
+            maskRepeat: "no-repeat",
+            maskSize: fit === "fill" ? "100% 100%" : fit,
             pointerEvents: "none",
             position: "absolute",
+            WebkitMaskImage: `url(${resolvedSrc})`,
+            WebkitMaskPosition: "center",
+            WebkitMaskRepeat: "no-repeat",
+            WebkitMaskSize: fit === "fill" ? "100% 100%" : fit,
           }}
         />
       ) : null}

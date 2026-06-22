@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect } from "react-konva";
 import type { ImageElement as ImageEl } from "../../lib/slide-schema";
+import { withHash } from "../../editorUtils";
 import {
   konvaCornerRadius,
   rotationProps,
@@ -80,13 +81,17 @@ function SlideImagePicture({
     if (!element.data) return;
     const src = element.data;
     let cancelled = false;
-    void loadKonvaImage(src).then((next) => {
-      if (!cancelled) setLoaded({ image: next, src });
+    void loadKonvaImage(src).then(async (next) => {
+      const image =
+        next && element.color
+          ? (await tintImageWithAlpha(next, element.color)) ?? next
+          : next;
+      if (!cancelled) setLoaded({ image, src });
     });
     return () => {
       cancelled = true;
     };
-  }, [element.data]);
+  }, [element.color, element.data]);
 
   const image = loaded && loaded.src === element.data ? loaded.image : null;
 
@@ -132,16 +137,59 @@ function SlideImagePicture({
         width={drawW}
         height={drawH}
       />
-      {element.color ? (
-        <Rect
-          width={width}
-          height={height}
-          fill={element.color}
-          listening={false}
-        />
-      ) : null}
     </Group>
   );
+}
+
+async function tintImageWithAlpha(
+  image: HTMLImageElement,
+  color: string,
+): Promise<HTMLImageElement | null> {
+  const rgb = parseHexRgb(color);
+  if (!rgb || typeof document === "undefined") return null;
+
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const context = canvas.getContext("2d");
+    if (!context || canvas.width <= 0 || canvas.height <= 0) return null;
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] === 0) continue;
+      pixels[index] = rgb.red;
+      pixels[index + 1] = rgb.green;
+      pixels[index + 2] = rgb.blue;
+    }
+    context.putImageData(imageData, 0, 0);
+
+    return await loadImageFromDataUrl(canvas.toDataURL("image/png"));
+  } catch {
+    return null;
+  }
+}
+
+function parseHexRgb(color: string) {
+  const hex = withHash(color.trim()).slice(1);
+  if (!/^[0-9A-Fa-f]{6}$/.test(hex)) return null;
+  return {
+    red: parseInt(hex.slice(0, 2), 16),
+    green: parseInt(hex.slice(2, 4), 16),
+    blue: parseInt(hex.slice(4, 6), 16),
+  };
+}
+
+function loadImageFromDataUrl(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const image = new window.Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+    if (image.complete) resolve(image);
+  });
 }
 
 function roundedRectPath(

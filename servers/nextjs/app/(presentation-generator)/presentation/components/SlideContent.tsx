@@ -186,7 +186,9 @@ const SlideContent = ({
         <div
           data-layout={slide.layout}
           data-group={slide.layout_group}
-          className={` w-full  group font-syne  `}
+          className={`w-full group font-syne ${
+            isTemplateV2Slide ? "relative md:pt-[72px]" : ""
+          }`}
         >
           {/* <V1ContentRender slide={slide} isEditMode={true} theme={null} /> */}
           {isChatEditing && (
