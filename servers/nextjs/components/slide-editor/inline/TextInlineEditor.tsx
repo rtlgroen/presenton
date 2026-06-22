@@ -49,6 +49,8 @@ export function TextInlineEditor({
         fontStyle: font.italic ? "italic" : "normal",
         textAlign: element.alignment?.horizontal ?? "left",
         lineHeight: font.lineHeight ?? 1.15,
+        background: "transparent",
+        caretColor: withHash(font.color),
         letterSpacing:
           ((font.letterSpacing ?? 0) / 100) * PT_TO_PX * (scale / PX_PER_IN),
       }}
