@@ -48,6 +48,7 @@ import {
   type ElementPath,
 } from "@/components/slide-editor/lib/element-path";
 import { resolveSlideLayout } from "@/components/slide-editor/lib/layout-resolver";
+import { chartDraftFromElement } from "@/components/slide-editor/inline";
 import { SlideSurface } from "@/components/slide-editor/slide-surface";
 import { WorkspaceInlineEditors } from "@/components/slide-editor/workspace/WorkspaceInlineEditors";
 import { WorkspaceToolbars } from "@/components/slide-editor/workspace/WorkspaceToolbars";
@@ -55,6 +56,9 @@ import {
   canRedoAtom,
   canUndoAtom,
   deckAtom,
+  editingChartDraftAtom,
+  editingChartIndexAtom,
+  editingChartPathAtom,
   editingTextIndexAtom,
   editingTextPathAtom,
   insertElementsAtom,
@@ -83,6 +87,11 @@ type TextInlineEditHit = {
 };
 
 type ImageEditHit = {
+  rootIndex: number;
+  path: ElementPath;
+};
+
+type ChartEditHit = {
   rootIndex: number;
   path: ElementPath;
 };
@@ -150,6 +159,9 @@ function TemplateV2KonvaSlideBody({
   const lastImagePointerRef = useRef<{ path: ElementPath; ts: number } | null>(
     null,
   );
+  const lastChartPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
+    null,
+  );
   const suppressImageDoubleClickRef = useRef(false);
   const lastTextPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
     null,
@@ -179,6 +191,9 @@ function TemplateV2KonvaSlideBody({
   const updateElementAtPath = useSetAtom(updateElementAtPathAtom);
   const setEditingTextIndex = useSetAtom(editingTextIndexAtom);
   const setEditingTextPath = useSetAtom(editingTextPathAtom);
+  const setEditingChartIndex = useSetAtom(editingChartIndexAtom);
+  const setEditingChartPath = useSetAtom(editingChartPathAtom);
+  const setEditingChartDraft = useSetAtom(editingChartDraftAtom);
   const activeSlide = deck.slides[0];
   const componentItems = useMemo(
     () => extractTemplateV2ComponentItems(components),
@@ -380,10 +395,49 @@ function TemplateV2KonvaSlideBody({
     (hit: TextInlineEditHit) => {
       activateSurface();
       selectElement({ index: hit.rootIndex, path: hit.path });
+      setEditingChartIndex(null);
+      setEditingChartPath(null);
+      setEditingChartDraft("");
       setEditingTextIndex(hit.rootIndex);
       setEditingTextPath(hit.path);
     },
-    [activateSurface, selectElement, setEditingTextIndex, setEditingTextPath],
+    [
+      activateSurface,
+      selectElement,
+      setEditingChartDraft,
+      setEditingChartIndex,
+      setEditingChartPath,
+      setEditingTextIndex,
+      setEditingTextPath,
+    ],
+  );
+
+  const openChartInlineEditor = useCallback(
+    (hit: ChartEditHit) => {
+      const element = getElementAtPath(activeSlide, hit.path);
+      if (element?.type !== "chart") {
+        notify.warning("Chart unavailable", "Select a chart before editing.");
+        return;
+      }
+
+      activateSurface();
+      selectElement({ index: hit.rootIndex, path: hit.path });
+      setEditingTextIndex(null);
+      setEditingTextPath(null);
+      setEditingChartDraft(chartDraftFromElement(element));
+      setEditingChartIndex(hit.rootIndex);
+      setEditingChartPath(hit.path);
+    },
+    [
+      activateSurface,
+      activeSlide,
+      selectElement,
+      setEditingChartDraft,
+      setEditingChartIndex,
+      setEditingChartPath,
+      setEditingTextIndex,
+      setEditingTextPath,
+    ],
   );
 
   const findTextAtClientPoint = useCallback(
@@ -442,6 +496,34 @@ function TemplateV2KonvaSlideBody({
     [activeSlide],
   );
 
+  const findChartAtClientPoint = useCallback(
+    (clientX: number, clientY: number): ChartEditHit | null => {
+      const root = rootRef.current;
+      if (!root) return null;
+      const rect = root.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+
+      const x = ((clientX - rect.left) / rect.width) * SLIDE_W;
+      const y = ((clientY - rect.top) / rect.height) * SLIDE_H;
+      const hit = resolveSlideLayout(activeSlide)
+        .slice()
+        .reverse()
+        .find((item) => {
+          if (item.element.type !== "chart") return false;
+          const box = elementBox(item.element);
+          return (
+            x >= box.x &&
+            x <= box.x + box.w &&
+            y >= box.y &&
+            y <= box.y + box.h
+          );
+        });
+
+      return hit ? { rootIndex: hit.rootIndex, path: hit.sourcePath } : null;
+    },
+    [activeSlide],
+  );
+
   const handleRootPointerDownCapture = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       activateSurface();
@@ -452,6 +534,7 @@ function TemplateV2KonvaSlideBody({
       const hit = findTextAtClientPoint(event.clientX, event.clientY);
       if (hit) {
         lastImagePointerRef.current = null;
+        lastChartPointerRef.current = null;
         const now = Date.now();
         const last = lastTextPointerRef.current;
         const isRepeatedClick =
@@ -467,9 +550,30 @@ function TemplateV2KonvaSlideBody({
         return;
       }
 
+      const chartHit = findChartAtClientPoint(event.clientX, event.clientY);
+      if (chartHit) {
+        lastImagePointerRef.current = null;
+        const now = Date.now();
+        const last = lastChartPointerRef.current;
+        const isRepeatedClick =
+          last?.path === chartHit.path &&
+          now - last.ts <= INLINE_EDIT_DOUBLE_CLICK_MS;
+        lastChartPointerRef.current = { path: chartHit.path, ts: now };
+        lastTextPointerRef.current = null;
+
+        if (!isRepeatedClick) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        lastChartPointerRef.current = null;
+        openChartInlineEditor(chartHit);
+        return;
+      }
+
       const imageHit = findImageAtClientPoint(event.clientX, event.clientY);
       if (!imageHit) {
         lastImagePointerRef.current = null;
+        lastChartPointerRef.current = null;
         lastTextPointerRef.current = null;
         return;
       }
@@ -480,6 +584,7 @@ function TemplateV2KonvaSlideBody({
         last?.path === imageHit.path &&
         now - last.ts <= INLINE_EDIT_DOUBLE_CLICK_MS;
       lastImagePointerRef.current = { path: imageHit.path, ts: now };
+      lastChartPointerRef.current = null;
       lastTextPointerRef.current = null;
 
       if (!isRepeatedClick) return;
@@ -492,8 +597,10 @@ function TemplateV2KonvaSlideBody({
     },
     [
       activateSurface,
+      findChartAtClientPoint,
       findImageAtClientPoint,
       findTextAtClientPoint,
+      openChartInlineEditor,
       openImageUpload,
       openTextInlineEditor,
     ],
@@ -508,8 +615,20 @@ function TemplateV2KonvaSlideBody({
         event.preventDefault();
         event.stopPropagation();
         lastImagePointerRef.current = null;
+        lastChartPointerRef.current = null;
         lastTextPointerRef.current = null;
         openTextInlineEditor(hit);
+        return;
+      }
+
+      const chartHit = findChartAtClientPoint(event.clientX, event.clientY);
+      if (chartHit) {
+        event.preventDefault();
+        event.stopPropagation();
+        lastImagePointerRef.current = null;
+        lastChartPointerRef.current = null;
+        lastTextPointerRef.current = null;
+        openChartInlineEditor(chartHit);
         return;
       }
 
@@ -530,6 +649,8 @@ function TemplateV2KonvaSlideBody({
     [
       findImageAtClientPoint,
       findTextAtClientPoint,
+      findChartAtClientPoint,
+      openChartInlineEditor,
       openImageUpload,
       openTextInlineEditor,
     ],
@@ -545,6 +666,7 @@ function TemplateV2KonvaSlideBody({
 
       const hit =
         findTextAtClientPoint(event.clientX, event.clientY) ??
+        findChartAtClientPoint(event.clientX, event.clientY) ??
         findImageAtClientPoint(event.clientX, event.clientY);
       if (!hit) return;
 
@@ -555,6 +677,7 @@ function TemplateV2KonvaSlideBody({
     },
     [
       activateSurface,
+      findChartAtClientPoint,
       findImageAtClientPoint,
       findTextAtClientPoint,
       selectElement,
