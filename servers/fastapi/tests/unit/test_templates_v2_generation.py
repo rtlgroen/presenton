@@ -1,4 +1,5 @@
 import json
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from templates.v2.generation import (
     CLUSTER_SIMILAR_COMPONENTS_SYSTEM_PROMPT,
     GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT,
+    _generate_preview_candidate,
     _messages_for_json_repair_retry,
     _messages_for_model_validation_retry,
     _slide_image_content,
@@ -135,7 +137,7 @@ def test_template_image_supports_optional_overlay_color():
     assert image_without_overlay.color is None
 
 
-def test_generate_slide_layout_requests_complete_layout(monkeypatch):
+def test_generate_slide_layout_requests_complete_layout(monkeypatch, caplog):
     preview_tool_call = AssistantToolCall(
         id="preview-call-1",
         name="previewSlide",
@@ -158,6 +160,7 @@ def test_generate_slide_layout_requests_complete_layout(monkeypatch):
             mime_type="image/png",
         ),
     )
+    caplog.set_level(logging.INFO, logger="templates.v2.generation")
 
     result = generate_slide_layout(
         _raw_layout(),
@@ -174,10 +177,12 @@ def test_generate_slide_layout_requests_complete_layout(monkeypatch):
     assert isinstance(preview_call["tools"][0], PreviewSlideTool)
     assert preview_call["tools"][0].input_schema is SlideLayout
     assert preview_call["tool_choice"] == {
-        "mode": "required",
+        "mode": "auto",
         "tools": ["previewSlide"],
     }
-    assert preview_call["max_tokens"] == 16384
+    assert preview_call["response_format"].json_schema is SlideLayout
+    assert preview_call["response_format"].name == "SlideLayoutResponse"
+    assert "max_tokens" not in preview_call
     assert preview_call["messages"][0].content == GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
     user_content = preview_call["messages"][1].content
     assert user_content[0].url == "https://example.com/slide-3.png"
@@ -190,12 +195,141 @@ def test_generate_slide_layout_requests_complete_layout(monkeypatch):
     final_call = client.calls[1]
     assert final_call["response_format"].json_schema is SlideLayout
     assert final_call["response_format"].name == "SlideLayoutResponse"
-    assert final_call["max_tokens"] == 16384
+    assert "max_tokens" not in final_call
     assert isinstance(final_call["messages"][-2], ToolResponseMessage)
     feedback = final_call["messages"][-1]
     assert isinstance(feedback, UserMessage)
     assert feedback.content[0].data == b"rendered-preview"
     assert "Review this rendered candidate" in feedback.content[1]
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("slide 3: preview slide called" in message for message in messages)
+    assert any("slide 3: preview slide rendered" in message for message in messages)
+    assert any("slide 3: slide layout JSON returned" in message for message in messages)
+
+
+def test_generate_slide_layout_accepts_direct_schema_response(monkeypatch, caplog):
+    client = _FakeClient(responses=[_FakeResponse(_generated_layout())])
+    monkeypatch.setattr("templates.v2.generation.get_client", lambda **_kwargs: client)
+    monkeypatch.setattr("templates.v2.generation.get_llm_config", lambda: {})
+    monkeypatch.setattr("templates.v2.generation.get_model", lambda: "test-model")
+    monkeypatch.setattr(
+        PreviewSlideTool,
+        "render",
+        lambda _self, _layout: pytest.fail("preview should not be rendered"),
+    )
+    caplog.set_level(logging.INFO, logger="templates.v2.generation")
+
+    result = generate_slide_layout(
+        _raw_layout(),
+        0,
+        "https://example.com/slide-1.png",
+    )
+
+    assert result == SlideLayout.model_validate(_generated_layout())
+    assert len(client.calls) == 1
+    call = client.calls[0]
+    assert call["tool_choice"] == {
+        "mode": "auto",
+        "tools": ["previewSlide"],
+    }
+    assert call["response_format"].json_schema is SlideLayout
+    assert call["response_format"].name == "SlideLayoutResponse"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("slide 1: slide layout JSON returned" in message for message in messages)
+
+
+def test_generate_preview_candidate_returns_last_preview_tool_json(monkeypatch, caplog):
+    preview_tool_call = AssistantToolCall(
+        id="preview-call-1",
+        name="previewSlide",
+        arguments=json.dumps(_generated_layout()),
+    )
+    client = _FakeClient(
+        responses=[_FakeResponse(None, tool_calls=[preview_tool_call])]
+    )
+    monkeypatch.setattr(
+        PreviewSlideTool,
+        "render",
+        lambda _self, _layout: pytest.fail("preview should not be rendered"),
+    )
+    caplog.set_level(logging.INFO, logger="templates.v2.generation")
+
+    result = _generate_preview_candidate(
+        client=client,
+        model="test-model",
+        messages=[
+            SystemMessage(content=GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT),
+            UserMessage(content="{}"),
+        ],
+        label="slide layout",
+        preview_tool=PreviewSlideTool(),
+        validation_retries=0,
+    )
+
+    assert result == SlideLayout.model_validate(_generated_layout())
+    assert len(client.calls) == 1
+    call = client.calls[0]
+    assert call["response_format"].json_schema is SlideLayout
+    assert "max_tokens" not in call
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "slide layout: returning preview slide JSON as final" in message
+        for message in messages
+    )
+
+
+def test_generate_slide_layout_returns_second_preview_tool_json(monkeypatch, caplog):
+    first_preview_tool_call = AssistantToolCall(
+        id="preview-call-1",
+        name="previewSlide",
+        arguments=json.dumps(_generated_layout("first_candidate")),
+    )
+    second_preview_tool_call = AssistantToolCall(
+        id="preview-call-2",
+        name="previewSlide",
+        arguments=json.dumps(_generated_layout("second_candidate")),
+    )
+    client = _FakeClient(
+        responses=[
+            _FakeResponse(None, tool_calls=[first_preview_tool_call]),
+            _FakeResponse(None, tool_calls=[second_preview_tool_call]),
+            _FakeResponse(_generated_layout("should_not_be_requested")),
+        ]
+    )
+    render_calls = []
+
+    def fake_render(_self, layout):
+        render_calls.append(layout.id)
+        return ImageContentPart(
+            data=b"rendered-preview",
+            mime_type="image/png",
+        )
+
+    monkeypatch.setattr("templates.v2.generation.get_client", lambda **_kwargs: client)
+    monkeypatch.setattr("templates.v2.generation.get_llm_config", lambda: {})
+    monkeypatch.setattr("templates.v2.generation.get_model", lambda: "test-model")
+    monkeypatch.setattr(PreviewSlideTool, "render", fake_render)
+    caplog.set_level(logging.INFO, logger="templates.v2.generation")
+
+    result = generate_slide_layout(
+        _raw_layout(),
+        0,
+        "https://example.com/slide-1.png",
+    )
+
+    assert result == SlideLayout.model_validate(_generated_layout("second_candidate"))
+    assert render_calls == ["first_candidate"]
+    assert len(client.calls) == 2
+    second_call = client.calls[1]
+    assert isinstance(second_call["messages"][-2], ToolResponseMessage)
+    assert second_call["messages"][-2].id == "preview-call-1"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("slide 1: preview slide called" in message for message in messages)
+    assert any("preview_call=2" in message for message in messages)
+    assert any(
+        "slide 1: returning preview slide JSON as final" in message
+        for message in messages
+    )
 
 
 def test_generate_template_generates_each_slide_and_preserves_order(monkeypatch):

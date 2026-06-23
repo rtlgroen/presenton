@@ -25,7 +25,25 @@ def _configure_application_logging() -> None:
     """Honor LOG_LEVEL (default INFO) so template/export diagnostics are visible."""
     raw = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
     level = getattr(logging, raw, logging.INFO)
-    logging.getLogger().setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    if root_logger.handlers:
+        return
+
+    logger_cursor: logging.Logger | None = logging.getLogger("uvicorn.error")
+    visible_handlers: list[logging.Handler] = []
+    while logger_cursor is not None:
+        visible_handlers.extend(logger_cursor.handlers)
+        if not logger_cursor.propagate:
+            break
+        logger_cursor = logger_cursor.parent
+
+    for handler in visible_handlers:
+        root_logger.addHandler(handler)
+
+    if not root_logger.handlers:
+        logging.basicConfig(level=level)
 
 
 def _is_truthy(value: str | None) -> bool:

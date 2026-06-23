@@ -12,10 +12,11 @@ from typing import Any, Callable
 from llmai import get_client
 from llmai.shared import (
     AssistantMessage,
-    AssistantToolCall,
     ImageContentPart,
     JSONSchemaResponse,
     SystemMessage,
+    ToolChoice,
+    ToolChoiceMode,
     ToolResponseMessage,
     UserMessage,
 )
@@ -31,7 +32,7 @@ from templates.v2.models.layouts import (
     SlideLayout,
     SlideLayouts,
 )
-from templates.v2.tools import PreviewSlideTool
+from templates.v2.tools import PREVIEW_SLIDE_TOOL_NAME, PreviewSlideTool
 from utils.asset_directory_utils import resolve_image_path_to_filesystem
 from utils.llm_config import get_llm_config
 from utils.llm_provider import get_model
@@ -52,7 +53,7 @@ Convert the provided raw slide elements to components.
 2. Divide the slide into a list of components using slide image.
 3. Identify group of elements that belongs to each component.
 4. Generate `id` and `description` for the layout.
-5. Call `previewSlide` with the complete candidate SlideLayout before returning it.
+5. Call `previewSlide` to visualize generated slide layout.
 
 # General Rules:
 - `id` and `description` must be related to layout and must not be derived from slide content.
@@ -79,6 +80,9 @@ Convert the provided raw slide elements to components.
 - Set `decorative=false` for content elements which should be replaced while creating new slide.
 - If `flex` or `grid` contains list of same items, set the `max_length`, `min_length`, and other schema related constraints same for items.
 - For same items arranged in `flex`/`grid` derive schema fields by averaging between those similar items.
+
+# Preview Tool Rules:
+- Use `previewSlide` tool just once to check for issues in generated slide layout.
 """
 
 CLUSTER_SIMILAR_COMPONENTS_SYSTEM_PROMPT = """
@@ -288,45 +292,14 @@ def generate_slide_layout(
         ),
     ]
     preview_tool = PreviewSlideTool()
-    candidate_layout, preview_messages, preview_tool_call = _generate_preview_candidate(
+    return _generate_preview_candidate(
         client=client,
         model=model,
         messages=messages,
-        label=f"slide layout {slide_index + 1}",
+        label=f"slide {slide_index + 1}",
         preview_tool=preview_tool,
         validation_retries=DEFAULT_VALIDATION_RETRIES,
-        max_tokens=16384,
     )
-    preview_image = preview_tool.render(candidate_layout)
-    feedback_messages = [
-        *preview_messages,
-        ToolResponseMessage(
-            id=preview_tool_call.id,
-            content=["The slide preview was rendered successfully."],
-        ),
-        UserMessage(
-            content=[
-                preview_image,
-                (
-                    "Review this rendered candidate against the original slide image. "
-                    "Fix visual problems such as incorrect grouping, alignment, sizing, "
-                    "overflow, spacing, colors, and local coordinates. Return the complete "
-                    "final SlideLayout JSON, even when no changes are needed."
-                ),
-            ]
-        ),
-    ]
-    layout_json = _generate_with_validation_retries(
-        client=client,
-        model=model,
-        messages=feedback_messages,
-        label=f"slide layout {slide_index + 1}",
-        output_model=SlideLayout,
-        response_name="SlideLayoutResponse",
-        validation_retries=DEFAULT_VALIDATION_RETRIES,
-        max_tokens=16384,
-    )
-    return SlideLayout.model_validate(layout_json)
 
 
 def _generate_preview_candidate(
@@ -337,23 +310,35 @@ def _generate_preview_candidate(
     label: str,
     preview_tool: PreviewSlideTool,
     validation_retries: int,
-    max_tokens: int,
-) -> tuple[SlideLayout, list[Any], AssistantToolCall]:
+) -> SlideLayout:
     attempt_messages = list(messages)
     last_error: Exception | None = None
     max_attempts = validation_retries + 1
+    preview_call_count = 0
 
     for attempt in range(1, max_attempts + 1):
+        attempt_started_at = perf_counter()
+        LOGGER.info(
+            "[templates.v2.llm] %s: requesting slide layout attempt=%d/%d model=%s",
+            label,
+            attempt,
+            max_attempts,
+            model,
+        )
         try:
             response = client.generate(
                 model=model,
                 messages=attempt_messages,
                 tools=[preview_tool],
-                tool_choice={
-                    "mode": "required",
-                    "tools": [preview_tool.name],
-                },
-                max_tokens=max_tokens,
+                tool_choice=ToolChoice(
+                    mode=ToolChoiceMode.AUTO,
+                    tools=[PREVIEW_SLIDE_TOOL_NAME],
+                ),
+                response_format=JSONSchemaResponse(
+                    name="SlideLayoutResponse",
+                    strict=False,
+                    json_schema=SlideLayout,
+                ),
             )
             tool_call = next(
                 (
@@ -364,38 +349,127 @@ def _generate_preview_candidate(
                 None,
             )
             if tool_call is None:
-                raise ValueError(f"{preview_tool.name} was not called")
+                parsed = _parse_json_content(response.content)
+                layout = SlideLayout.model_validate(parsed)
+                LOGGER.info(
+                    "[templates.v2.llm] %s: slide layout JSON returned "
+                    "attempt=%d/%d duration_ms=%.1f components=%d",
+                    label,
+                    attempt,
+                    max_attempts,
+                    _elapsed_ms(attempt_started_at),
+                    len(layout.components),
+                )
+                return layout
 
             arguments = json.loads(tool_call.arguments or "{}")
             if not isinstance(arguments, dict):
                 raise ValueError(f"{preview_tool.name} arguments must be a JSON object")
             candidate_layout = SlideLayout.model_validate(arguments)
+            preview_call_count += 1
+            LOGGER.info(
+                "[templates.v2.llm] %s: preview slide called attempt=%d/%d "
+                "preview_call=%d components=%d",
+                label,
+                attempt,
+                max_attempts,
+                preview_call_count,
+                len(candidate_layout.components),
+            )
+            if preview_call_count > 1 or attempt > validation_retries:
+                LOGGER.info(
+                    "[templates.v2.llm] %s: returning preview slide JSON as final "
+                    "attempt=%d/%d preview_call=%d duration_ms=%.1f components=%d",
+                    label,
+                    attempt,
+                    max_attempts,
+                    preview_call_count,
+                    _elapsed_ms(attempt_started_at),
+                    len(candidate_layout.components),
+                )
+                return candidate_layout
+
+            LOGGER.info(
+                "[templates.v2.llm] %s: rendering preview slide attempt=%d/%d",
+                label,
+                attempt,
+                max_attempts,
+            )
+            preview_image = preview_tool.render(candidate_layout)
+            LOGGER.info(
+                "[templates.v2.llm] %s: preview slide rendered attempt=%d/%d "
+                "duration_ms=%.1f",
+                label,
+                attempt,
+                max_attempts,
+                _elapsed_ms(attempt_started_at),
+            )
             response_text = _text_from_content(getattr(response, "content", None))
             assistant_message = AssistantMessage(
                 content=[response_text] if response_text else None,
                 tool_calls=[tool_call],
             )
-            return (
-                candidate_layout,
-                [*attempt_messages, assistant_message],
-                tool_call,
+            attempt_messages = [
+                *attempt_messages,
+                assistant_message,
+                ToolResponseMessage(
+                    id=tool_call.id,
+                    content=["The slide preview was rendered successfully."],
+                ),
+                UserMessage(
+                    content=[
+                        preview_image,
+                        (
+                            "Review this rendered candidate against the original slide image. "
+                            "Fix visual problems such as incorrect grouping, alignment, sizing, "
+                            "overflow, spacing, colors, and local coordinates. Return the complete "
+                            "final SlideLayout JSON, even when no changes are needed."
+                        ),
+                    ]
+                ),
+            ]
+            LOGGER.info(
+                "[templates.v2.llm] %s: asking LLM to review rendered preview "
+                "attempt=%d/%d",
+                label,
+                attempt,
+                max_attempts,
             )
         except (JSONDecodeError, ValidationError, ValueError) as exc:
             last_error = exc
+            LOGGER.warning(
+                "[templates.v2.llm] %s: invalid slide layout response "
+                "attempt=%d/%d duration_ms=%.1f error=%s",
+                label,
+                attempt,
+                max_attempts,
+                _elapsed_ms(attempt_started_at),
+                exc,
+            )
             if attempt > validation_retries:
                 raise
             attempt_messages = [
                 *attempt_messages,
                 UserMessage(
                     content=(
-                        f"The previous {preview_tool.name} call for {label} was invalid. "
-                        "Call the tool again with one complete SlideLayout JSON object.\n\n"
+                        f"The previous response for {label} was invalid. "
+                        "Return one complete SlideLayout JSON object, or call "
+                        f"{preview_tool.name} with one complete SlideLayout JSON object.\n\n"
                         f"errors:\n{_format_error_for_prompt(exc)}"
                     )
                 ),
             ]
         except Exception as exc:
             last_error = exc
+            LOGGER.warning(
+                "[templates.v2.llm] %s: preview slide flow failed "
+                "attempt=%d/%d duration_ms=%.1f error=%s",
+                label,
+                attempt,
+                max_attempts,
+                _elapsed_ms(attempt_started_at),
+                exc,
+            )
             if attempt > validation_retries:
                 raise
             attempt_messages = [
