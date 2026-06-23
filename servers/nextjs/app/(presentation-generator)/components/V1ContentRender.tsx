@@ -20,7 +20,19 @@ import { BLANK_TEMPLATE_V2_LAYOUT, isBlankPresentationSlide } from "../_shared/b
 
 
 
-export const V1ContentRender = ({ slide, isEditMode, theme }: { slide: any, isEditMode: boolean, theme?: any, enableEditMode?: boolean, presentationLayout?: unknown }) => {
+export const V1ContentRender = ({
+    slide,
+    isEditMode,
+    theme,
+    renderIndex,
+}: {
+    slide: any,
+    isEditMode: boolean,
+    theme?: any,
+    renderIndex?: number,
+    enableEditMode?: boolean,
+    presentationLayout?: unknown,
+}) => {
     const dispatch = useDispatch();
     const containerRef = useRef<HTMLDivElement | null>(null);
     const presentationComponents = useSelector(
@@ -86,6 +98,7 @@ export const V1ContentRender = ({ slide, isEditMode, theme }: { slide: any, isEd
                     slide={slide}
                     isEditMode={isEditMode}
                     components={presentationComponents}
+                    renderIndex={renderIndex}
                 />
             </SlideErrorBoundary>
         );
@@ -112,6 +125,7 @@ export const V1ContentRender = ({ slide, isEditMode, theme }: { slide: any, isEd
                     slide={slide}
                     isEditMode={isEditMode}
                     components={presentationComponents}
+                    renderIndex={renderIndex}
                 />
             </SlideErrorBoundary>
         );

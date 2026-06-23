@@ -75,6 +75,23 @@ export const TEMPLATE_V2_KONVA_SLIDE_CONTENT_KEY =
   "__template_v2_konva_slide__";
 export const TEMPLATE_V2_COMPONENT_DRAWER_EVENT =
   "presenton:template-v2-component-drawer";
+export const TEMPLATE_V2_INSERT_ELEMENTS_EVENT =
+  "presenton:template-v2-insert-elements";
+export const TEMPLATE_V2_SURFACE_SELECTED_EVENT =
+  "presenton:template-v2-surface-selected";
+
+export type TemplateV2InsertElementsDetail = {
+  elements: SlideElement[];
+  label?: string;
+  slideId?: string | number | null;
+  slideIndex?: number | null;
+  handled?: boolean;
+};
+
+export type TemplateV2SurfaceSelectedDetail = {
+  slideId?: string | number | null;
+  slideIndex?: number | null;
+};
 
 const STAGE_WIDTH = 1280;
 const STAGE_HEIGHT = 720;
@@ -101,6 +118,7 @@ type TemplateV2KonvaSlideProps = {
   slide: any;
   isEditMode: boolean;
   components?: unknown;
+  renderIndex?: number;
 };
 
 export function TemplateV2KonvaSlide({
@@ -108,6 +126,7 @@ export function TemplateV2KonvaSlide({
   slide,
   isEditMode,
   components,
+  renderIndex,
 }: TemplateV2KonvaSlideProps) {
   const initialSlide = useMemo(
     () => buildKonvaSlide(layout, slide),
@@ -133,6 +152,7 @@ export function TemplateV2KonvaSlide({
         presentationSlide={slide}
         isEditMode={isEditMode}
         components={components}
+        renderIndex={renderIndex}
       />
     </Provider>
   );
@@ -144,12 +164,14 @@ function TemplateV2KonvaSlideBody({
   layout,
   presentationSlide,
   components,
+  renderIndex,
 }: {
   initialSlide: KonvaSlideData;
   isEditMode: boolean;
   layout: TemplateV2Layout;
   presentationSlide: any;
   components?: unknown;
+  renderIndex?: number;
 }) {
   const dispatch = useDispatch();
   const surfaceId = useId();
@@ -206,16 +228,37 @@ function TemplateV2KonvaSlideBody({
       document.documentElement.dataset.templateV2KonvaActiveSurface === surfaceId,
     [surfaceId],
   );
+  const surfaceSlideIndex = useMemo(() => {
+    const index =
+      typeof renderIndex === "number" ? renderIndex : Number(presentationSlide.index);
+    return Number.isFinite(index) ? index : null;
+  }, [presentationSlide.index, renderIndex]);
 
   const activateSurface = useCallback(() => {
     document.documentElement.dataset.templateV2KonvaActiveSurface = surfaceId;
-  }, [surfaceId]);
+    if (surfaceSlideIndex != null) {
+      document.documentElement.dataset.templateV2KonvaActiveSlideIndex =
+        String(surfaceSlideIndex);
+    }
+    window.dispatchEvent(
+      new CustomEvent<TemplateV2SurfaceSelectedDetail>(
+        TEMPLATE_V2_SURFACE_SELECTED_EVENT,
+        {
+          detail: {
+            slideId: presentationSlide.id ?? null,
+            slideIndex: surfaceSlideIndex,
+          },
+        },
+      ),
+    );
+  }, [presentationSlide.id, surfaceId, surfaceSlideIndex]);
 
   const clearSurface = useCallback(() => {
     if (
       document.documentElement.dataset.templateV2KonvaActiveSurface === surfaceId
     ) {
       delete document.documentElement.dataset.templateV2KonvaActiveSurface;
+      delete document.documentElement.dataset.templateV2KonvaActiveSlideIndex;
     }
   }, [surfaceId]);
 
@@ -282,7 +325,7 @@ function TemplateV2KonvaSlideBody({
       if (
         !eventSlideId &&
         typeof detail.slideIndex === "number" &&
-        detail.slideIndex !== presentationSlide.index
+        (surfaceSlideIndex == null || detail.slideIndex !== surfaceSlideIndex)
       ) {
         return;
       }
@@ -301,7 +344,57 @@ function TemplateV2KonvaSlideBody({
         handleOpenComponentDrawer,
       );
     };
-  }, [activateSurface, isEditMode, presentationSlide.id, presentationSlide.index]);
+  }, [activateSurface, isEditMode, presentationSlide.id, surfaceSlideIndex]);
+
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const handleInsertElements = (event: Event) => {
+      const detail = (event as CustomEvent<TemplateV2InsertElementsDetail>)
+        .detail;
+      if (!detail?.elements?.length) return;
+
+      const slideId = presentationSlide.id ? String(presentationSlide.id) : null;
+      const eventSlideId =
+        detail.slideId !== undefined && detail.slideId !== null
+          ? String(detail.slideId)
+          : null;
+      const hasTarget =
+        Boolean(eventSlideId) || typeof detail.slideIndex === "number";
+
+      if (eventSlideId && slideId && eventSlideId !== slideId) return;
+      if (
+        !eventSlideId &&
+        typeof detail.slideIndex === "number" &&
+        (surfaceSlideIndex == null || detail.slideIndex !== surfaceSlideIndex)
+      ) {
+        return;
+      }
+      if (!hasTarget && !isSurfaceActive()) return;
+
+      activateSurface();
+      insertElements(detail.elements);
+      detail.handled = true;
+    };
+
+    window.addEventListener(
+      TEMPLATE_V2_INSERT_ELEMENTS_EVENT,
+      handleInsertElements,
+    );
+    return () => {
+      window.removeEventListener(
+        TEMPLATE_V2_INSERT_ELEMENTS_EVENT,
+        handleInsertElements,
+      );
+    };
+  }, [
+    activateSurface,
+    insertElements,
+    isEditMode,
+    isSurfaceActive,
+    presentationSlide.id,
+    surfaceSlideIndex,
+  ]);
 
   const handleInsertComponent = (item: TemplateV2ComponentItem) => {
     if (item.elements.length === 0) {

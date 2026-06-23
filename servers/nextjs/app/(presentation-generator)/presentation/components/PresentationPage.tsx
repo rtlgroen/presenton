@@ -30,6 +30,10 @@ import { applyPresentationThemeToElement } from "../utils/applyPresentationTheme
 
 import PresentationHeader from "./PresentationHeader";
 import PresentationActions from "./PresentationActions";
+import {
+  TEMPLATE_V2_SURFACE_SELECTED_EVENT,
+  type TemplateV2SurfaceSelectedDetail,
+} from "../../components/TemplateV2KonvaSlide";
 
 function hasTemplateV2Layouts(layout: unknown): boolean {
   if (!layout || typeof layout !== "object") return false;
@@ -320,6 +324,30 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
     chatTargetedSlides.length,
     glowingSlideIndex,
   ]);
+
+  useEffect(() => {
+    const handleTemplateV2SurfaceSelected = (event: Event) => {
+      const detail = (event as CustomEvent<TemplateV2SurfaceSelectedDetail>)
+        .detail;
+      const slideIndex = detail?.slideIndex;
+      if (typeof slideIndex !== "number") return;
+      if (slideIndex < 0 || slideIndex >= totalSlides) return;
+      setSelectedSlide((current) =>
+        current === slideIndex ? current : slideIndex
+      );
+    };
+
+    window.addEventListener(
+      TEMPLATE_V2_SURFACE_SELECTED_EVENT,
+      handleTemplateV2SurfaceSelected
+    );
+    return () => {
+      window.removeEventListener(
+        TEMPLATE_V2_SURFACE_SELECTED_EVENT,
+        handleTemplateV2SurfaceSelected
+      );
+    };
+  }, [totalSlides]);
 
   // Presentation Mode View
   if (isPresentMode) {

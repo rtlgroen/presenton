@@ -210,7 +210,11 @@ const SlideContent = ({
             </div>
           )}
           <div className="relative">
-            <SlideScale slide={slide} theme={presentationData?.theme || null} />
+            <SlideScale
+              slide={slide}
+              theme={presentationData?.theme || null}
+              renderIndex={index}
+            />
           </div>
           {!showNewSlideSelection && (
             <div className="group-hover:opacity-100 hidden md:block opacity-0 transition-opacity my-4 duration-300">
