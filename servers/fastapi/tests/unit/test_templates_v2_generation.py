@@ -276,11 +276,16 @@ def test_generate_preview_candidate_returns_last_preview_tool_json(monkeypatch, 
     client = _FakeClient(
         responses=[_FakeResponse(None, tool_calls=[preview_tool_call])]
     )
-    monkeypatch.setattr(
-        PreviewSlideTool,
-        "render",
-        lambda _self, _layout: pytest.fail("preview should not be rendered"),
-    )
+    render_calls = []
+
+    def fake_render(_self, layout):
+        render_calls.append(layout.id)
+        return ImageContentPart(
+            data=b"rendered-preview",
+            mime_type="image/png",
+        )
+
+    monkeypatch.setattr(PreviewSlideTool, "render", fake_render)
     caplog.set_level(logging.INFO, logger="templates.v2.generation")
 
     result = _generate_preview_candidate(
@@ -296,18 +301,26 @@ def test_generate_preview_candidate_returns_last_preview_tool_json(monkeypatch, 
     )
 
     assert result == SlideLayout.model_validate(_generated_layout())
+    assert render_calls == ["title_slide"]
     assert len(client.calls) == 1
     call = client.calls[0]
     assert call["response_format"].json_schema is SlideLayout
     assert "max_tokens" not in call
     messages = [record.getMessage() for record in caplog.records]
     assert any(
+        "slide layout: preview slide rendered" in message
+        for message in messages
+    )
+    assert any(
         "slide layout: returning preview slide JSON as final" in message
         for message in messages
     )
 
 
-def test_generate_slide_layout_returns_second_preview_tool_json(monkeypatch, caplog):
+def test_generate_slide_layout_allows_second_preview_then_returns_final_json(
+    monkeypatch,
+    caplog,
+):
     first_preview_tool_call = AssistantToolCall(
         id="preview-call-1",
         name="previewSlide",
@@ -322,7 +335,7 @@ def test_generate_slide_layout_returns_second_preview_tool_json(monkeypatch, cap
         responses=[
             _FakeResponse(None, tool_calls=[first_preview_tool_call]),
             _FakeResponse(None, tool_calls=[second_preview_tool_call]),
-            _FakeResponse(_generated_layout("should_not_be_requested")),
+            _FakeResponse(_generated_layout("final_candidate")),
         ]
     )
     render_calls = []
@@ -346,17 +359,30 @@ def test_generate_slide_layout_returns_second_preview_tool_json(monkeypatch, cap
         "https://example.com/slide-1.png",
     )
 
-    assert result == SlideLayout.model_validate(_generated_layout("second_candidate"))
-    assert render_calls == ["first_candidate"]
-    assert len(client.calls) == 2
+    assert result == SlideLayout.model_validate(_generated_layout("final_candidate"))
+    assert render_calls == ["first_candidate", "second_candidate"]
+    assert len(client.calls) == 3
     second_call = client.calls[1]
     assert isinstance(second_call["messages"][-2], ToolResponseMessage)
     assert second_call["messages"][-2].id == "preview-call-1"
+    second_feedback = second_call["messages"][-1]
+    assert isinstance(second_feedback, UserMessage)
+    assert second_feedback.content[0].data == b"rendered-preview"
+    assert "one more time" in second_feedback.content[1]
+    third_call = client.calls[2]
+    assert "tools" not in third_call
+    assert "tool_choice" not in third_call
+    assert isinstance(third_call["messages"][-2], ToolResponseMessage)
+    assert third_call["messages"][-2].id == "preview-call-2"
+    final_feedback = third_call["messages"][-1]
+    assert isinstance(final_feedback, UserMessage)
+    assert final_feedback.content[0].data == b"rendered-preview"
+    assert "maximum number of previewSlide calls" in final_feedback.content[1]
     messages = [record.getMessage() for record in caplog.records]
     assert any("slide 1: preview slide called" in message for message in messages)
     assert any("preview_call=2" in message for message in messages)
     assert any(
-        "slide 1: returning preview slide JSON as final" in message
+        "slide 1: slide layout JSON returned" in message
         for message in messages
     )
 
@@ -539,6 +565,7 @@ def test_slide_image_content_embeds_local_image_bytes(tmp_path, monkeypatch):
 
 
 def test_preview_slide_tool_renders_layout_components(tmp_path, monkeypatch):
+    app_data_dir = tmp_path / "app-data"
     preview_path = tmp_path / "preview.png"
     preview_path.write_bytes(b"rendered-slide")
     captured = {}
@@ -553,10 +580,14 @@ def test_preview_slide_tool_renders_layout_components(tmp_path, monkeypatch):
         "templates.v2.tools.EXPORT_TASK_SERVICE.render_json_to_image",
         fake_render_json_to_image,
     )
+    monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data_dir))
 
-    image = PreviewSlideTool().render(
+    image = PreviewSlideTool(slide_index=2).render(
         SlideLayout.model_validate(_generated_layout())
     )
+
+    saved_json_path = app_data_dir / "preview_slide" / "2" / "1.json"
+    saved_image_path = app_data_dir / "preview_slide" / "2" / "1.png"
 
     assert captured["data"][0]["id"] == "title_block"
     assert captured["data"][0]["elements"][0]["type"] == "text"
@@ -564,6 +595,8 @@ def test_preview_slide_tool_renders_layout_components(tmp_path, monkeypatch):
     assert captured["height"] == 720
     assert image.data == b"rendered-slide"
     assert image.mime_type == "image/png"
+    assert json.loads(saved_json_path.read_text()) == _generated_layout()
+    assert saved_image_path.read_bytes() == b"rendered-slide"
 
 
 def test_slide_layout_rejects_duplicate_component_ids():
