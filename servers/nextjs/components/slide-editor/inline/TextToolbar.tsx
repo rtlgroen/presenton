@@ -1,104 +1,539 @@
-import { Bold, Italic, Pencil } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  ChevronDown,
+  Italic,
+  Link,
+  Underline,
+} from "lucide-react";
 import type { TextSlideElement } from "../state";
 import { withHash, withoutHash } from "../editorUtils";
 import { elementFont, mergeFont } from "../lib/element-model";
 import { InlineToolbar } from "./InlineToolbar";
-import { inlineStyles } from "./inlineStyles";
+
+const FONT_FAMILIES = [
+  "Syne",
+  "Inter",
+  "Arial",
+  "Helvetica",
+  "Georgia",
+  "Times New Roman",
+  "Playfair Display",
+  "Montserrat",
+  "Poppins",
+  "Roboto",
+];
+
+const HORIZONTAL_ALIGNMENT_ICONS = {
+  left: AlignLeft,
+  center: AlignCenter,
+  right: AlignRight,
+};
 
 export function TextToolbar({
   element,
   index,
   scale,
   onChange,
-  onEdit,
 }: {
   element: TextSlideElement;
   index: number;
   scale: number;
   onChange: (index: number, element: TextSlideElement) => void;
-  onEdit?: (index: number) => void;
 }) {
   const font = elementFont(element);
+  const horizontalAlignment = element.alignment?.horizontal ?? "left";
+  const verticalAlignment = element.alignment?.vertical ?? "top";
+  const HorizontalAlignmentIcon =
+    HORIZONTAL_ALIGNMENT_ICONS[horizontalAlignment];
+  const fontFamilies = FONT_FAMILIES.includes(font.family)
+    ? FONT_FAMILIES
+    : [font.family, ...FONT_FAMILIES];
+  const [openPanel, setOpenPanel] = useState<"opacity" | null>(null);
+  const [hoveredControl, setHoveredControl] = useState<string | null>(null);
+
+  const updateAlignment = (
+    alignment: NonNullable<TextSlideElement["alignment"]>,
+  ) => {
+    onChange(index, {
+      ...element,
+      alignment: {
+        ...(element.alignment ?? {}),
+        ...alignment,
+      },
+    });
+  };
+
+  const updateOpacity = (nextOpacity: number) => {
+    onChange(index, {
+      ...element,
+      opacity: nextOpacity,
+    });
+  };
+
   return (
-    <InlineToolbar element={element} scale={scale}>
-      {onEdit ? (
-        <button
-          type="button"
-          title="Edit text"
-          aria-label="Edit text"
-          onClick={() => onEdit(index)}
-          style={inlineStyles.iconButton}
+    <InlineToolbar element={element} scale={scale} offset={52} unstyled>
+      <div style={textToolbarStyles.toolbar}>
+        <label style={textToolbarStyles.fontControl}>
+          <select
+            aria-label="Font family"
+            title="Font family"
+            value={font.family}
+            onChange={(event) =>
+              onChange(index, mergeFont(element, { family: event.target.value }))
+            }
+            style={textToolbarStyles.fontSelect}
+          >
+            {fontFamilies.map((family) => (
+              <option key={family} value={family}>
+                {family}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={18}
+            aria-hidden="true"
+            style={textToolbarStyles.selectIcon}
+          />
+        </label>
+        <Divider />
+        <label
+          aria-label="Text color"
+          title="Text color"
+          style={textToolbarStyles.colorControl}
+          onMouseEnter={() => setHoveredControl("color")}
+          onMouseLeave={() => setHoveredControl(null)}
         >
-          <Pencil size={15} aria-hidden="true" />
-        </button>
-      ) : null}
-      <button
-        type="button"
-        title="Bold"
-        aria-pressed={font.bold ?? false}
-        onClick={() =>
-          onChange(index, mergeFont(element, { bold: !(font.bold ?? false) }))
-        }
-        style={{
-          ...inlineStyles.iconButton,
-          ...(font.bold ? inlineStyles.iconButtonActive : {}),
-        }}
-      >
-        <Bold size={15} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        title="Italic"
-        aria-pressed={font.italic ?? false}
-        onClick={() =>
-          onChange(index, mergeFont(element, { italic: !(font.italic ?? false) }))
-        }
-        style={{
-          ...inlineStyles.iconButton,
-          fontStyle: "italic",
-          ...(font.italic ? inlineStyles.iconButtonActive : {}),
-        }}
-      >
-        <Italic size={15} aria-hidden="true" />
-      </button>
-      <input
-        aria-label="Font size"
-        title="Font size"
-        type="number"
-        min={6}
-        max={360}
-        value={font.size}
-        onChange={(event) =>
-          onChange(index, mergeFont(element, { size: Number(event.target.value) || font.size }))
-        }
-        style={inlineStyles.numberInput}
-      />
-      <input
-        aria-label="Text color"
-        title="Text color"
-        type="color"
-        value={withHash(font.color)}
-        onChange={(event) =>
-          onChange(index, mergeFont(element, { color: withoutHash(event.target.value) }))
-        }
-        style={inlineStyles.colorInput}
-      />
-      <input
-        aria-label="Text opacity"
-        title="Text opacity"
-        type="range"
-        min={0}
-        max={1}
-        step={0.05}
-        value={element.opacity ?? 1}
-        onChange={(event) =>
-          onChange(index, {
-            ...element,
-            opacity: Number(event.target.value),
-          })
-        }
-        style={inlineStyles.opacityInput}
-      />
+          <span
+            aria-hidden="true"
+            style={{
+              ...textToolbarStyles.colorDot,
+              background: withHash(font.color),
+            }}
+          />
+          <input
+            aria-label="Text color"
+            type="color"
+            value={withHash(font.color)}
+            onChange={(event) =>
+              onChange(
+                index,
+                mergeFont(element, { color: withoutHash(event.target.value) }),
+              )
+            }
+            style={textToolbarStyles.hiddenInput}
+          />
+        </label>
+        <Divider />
+        <div style={textToolbarStyles.modeGroup}>
+          <ToolbarButton
+            title="Bold"
+            controlId="bold"
+            hoveredControl={hoveredControl}
+            pressed={font.bold ?? false}
+            setHoveredControl={setHoveredControl}
+            onClick={() =>
+              onChange(
+                index,
+                mergeFont(element, { bold: !(font.bold ?? false) }),
+              )
+            }
+          >
+            <Bold size={18} strokeWidth={2.25} aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            title="Italic"
+            controlId="italic"
+            hoveredControl={hoveredControl}
+            pressed={font.italic ?? false}
+            setHoveredControl={setHoveredControl}
+            onClick={() =>
+              onChange(
+                index,
+                mergeFont(element, { italic: !(font.italic ?? false) }),
+              )
+            }
+          >
+            <Italic size={18} strokeWidth={2.25} aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            title="Underline"
+            controlId="underline"
+            hoveredControl={hoveredControl}
+            setHoveredControl={setHoveredControl}
+          >
+            <Underline size={18} strokeWidth={2.25} aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            title="Horizontal alignment"
+            controlId="horizontal-alignment"
+            hoveredControl={hoveredControl}
+            setHoveredControl={setHoveredControl}
+            onClick={() =>
+              updateAlignment({
+                horizontal:
+                  horizontalAlignment === "left"
+                    ? "center"
+                    : horizontalAlignment === "center"
+                      ? "right"
+                      : "left",
+              })
+            }
+          >
+            <HorizontalAlignmentIcon
+              size={18}
+              strokeWidth={2.2}
+              aria-hidden="true"
+            />
+          </ToolbarButton>
+          <ToolbarButton
+            title="Vertical alignment"
+            controlId="vertical-alignment"
+            hoveredControl={hoveredControl}
+            setHoveredControl={setHoveredControl}
+            onClick={() =>
+              updateAlignment({
+                vertical:
+                  verticalAlignment === "top"
+                    ? "middle"
+                    : verticalAlignment === "middle"
+                      ? "bottom"
+                      : "top",
+              })
+            }
+          >
+            <VerticalTextIcon />
+          </ToolbarButton>
+          <ToolbarButton
+            title="Text baseline"
+            controlId="text-baseline"
+            hoveredControl={hoveredControl}
+            setHoveredControl={setHoveredControl}
+          >
+            <BaselineTextIcon />
+          </ToolbarButton>
+        </div>
+        <Divider />
+        <div
+          style={textToolbarStyles.opacityControlWrap}
+          onMouseEnter={() => setOpenPanel("opacity")}
+          onMouseLeave={() => setOpenPanel(null)}
+          onFocus={() => setOpenPanel("opacity")}
+          onBlur={() => setOpenPanel(null)}
+        >
+          <ToolbarButton
+            title=""
+            controlId="opacity"
+            hoveredControl={hoveredControl}
+            pressed={openPanel === "opacity"}
+            setHoveredControl={setHoveredControl}
+            onClick={() =>
+              setOpenPanel((current) => (current === "opacity" ? null : "opacity"))
+            }
+          >
+            <CheckerSwatch />
+          </ToolbarButton>
+          {openPanel === "opacity" ? (
+            <>
+              <span aria-hidden="true" style={textToolbarStyles.opacityBridge} />
+              <div style={textToolbarStyles.opacityPanel}>
+                <input
+                  aria-label="Text opacity"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={element.opacity ?? 1}
+                  onChange={(event) => updateOpacity(Number(event.target.value))}
+                  style={textToolbarStyles.opacityInput}
+                />
+              </div>
+            </>
+          ) : null}
+        </div>
+        <Divider />
+        <ToolbarButton
+          title="Link"
+          controlId="link"
+          hoveredControl={hoveredControl}
+          setHoveredControl={setHoveredControl}
+        >
+          <Link size={18} strokeWidth={2.4} aria-hidden="true" />
+        </ToolbarButton>
+      </div>
     </InlineToolbar>
   );
 }
+
+function ToolbarButton({
+  children,
+  controlId,
+  hoveredControl,
+  onClick,
+  pressed,
+  setHoveredControl,
+  title,
+}: {
+  children: ReactNode;
+  controlId: string;
+  hoveredControl: string | null;
+  onClick?: () => void;
+  pressed?: boolean;
+  setHoveredControl: (control: string | null) => void;
+  title: string;
+}) {
+  const hovered = hoveredControl === controlId;
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      aria-pressed={pressed}
+      onClick={onClick}
+      onMouseEnter={() => setHoveredControl(controlId)}
+      onMouseLeave={() => setHoveredControl(null)}
+      style={{
+        ...textToolbarStyles.button,
+        ...(hovered ? textToolbarStyles.buttonHover : {}),
+        ...(pressed ? textToolbarStyles.buttonActive : {}),
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <span aria-hidden="true" style={textToolbarStyles.divider} />;
+}
+
+function VerticalTextIcon() {
+  return (
+    <span aria-hidden="true" style={textToolbarStyles.textIcon}>
+      <span style={textToolbarStyles.verticalTextBar} />
+      A
+      <span style={textToolbarStyles.verticalTextBar} />
+    </span>
+  );
+}
+
+function BaselineTextIcon() {
+  return (
+    <span aria-hidden="true" style={textToolbarStyles.baselineIcon}>
+      A
+      <span style={textToolbarStyles.baselineLine} />
+    </span>
+  );
+}
+
+function CheckerSwatch() {
+  return (
+    <span aria-hidden="true" style={textToolbarStyles.checkerSwatch}>
+      {Array.from({ length: 12 }).map((_, index) => (
+        <span
+          key={index}
+          style={{
+            ...textToolbarStyles.checkerPixel,
+            background:
+              index % 2 === Math.floor(index / 3) % 2
+                ? "#111827"
+                : "rgba(17, 24, 39, 0.08)",
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+const textToolbarStyles = {
+  toolbar: {
+    display: "inline-flex",
+    alignItems: "center",
+    boxSizing: "border-box",
+    height: 36,
+    width: 489.2,
+    maxWidth: "calc(100vw - 32px)",
+    padding: "0 10px",
+    border: 0,
+    borderRadius: 6,
+    background: "#FFFFFF",
+    boxShadow: "0 0 4px rgba(0, 0, 0, 0.15)",
+    gap: 12,
+  },
+  fontControl: {
+    position: "relative",
+    display: "inline-flex",
+    alignItems: "center",
+    width: 111.2,
+    height: 36,
+    flex: "0 0 auto",
+  },
+  fontSelect: {
+    width: "100%",
+    height: "100%",
+    appearance: "none",
+    border: 0,
+    outline: "none",
+    background: "transparent",
+    color: "#0B1220",
+    fontFamily:
+      "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+    fontSize: 20,
+    fontWeight: 400,
+    cursor: "pointer",
+    padding: "0 24px 0 0",
+  },
+  selectIcon: {
+    position: "absolute",
+    right: 0,
+    pointerEvents: "none",
+    color: "#0B1220",
+  },
+  divider: {
+    width: 1,
+    height: 24,
+    background: "#E5E7EB",
+    flex: "0 0 auto",
+  },
+  modeGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 10,
+    flex: "0 0 auto",
+  },
+  button: {
+    boxSizing: "border-box",
+    width: 22,
+    height: 22,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: 0,
+    borderRadius: 2,
+    background: "transparent",
+    color: "#05070A",
+    cursor: "pointer",
+    padding: 4,
+    flex: "0 0 auto",
+  },
+  buttonHover: {
+    background: "#F8F8FA",
+  },
+  buttonActive: {
+    color: "#7C51F8",
+    background: "#F4F1FF",
+  },
+  colorControl: {
+    position: "relative",
+    width: 22,
+    height: 28,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 6,
+    cursor: "pointer",
+    flex: "0 0 auto",
+  },
+  colorDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 999,
+    boxShadow: "inset 0 0 0 1px rgba(17, 24, 39, 0.12)",
+  },
+  hiddenInput: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0,
+    cursor: "pointer",
+  },
+  opacityControlWrap: {
+    position: "relative",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+  },
+  opacityBridge: {
+    position: "absolute",
+    top: 22,
+    right: -100,
+    width: 278,
+    height: 30,
+    background: "transparent",
+    pointerEvents: "auto",
+  },
+  checkerSwatch: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 6px)",
+    gridAutoRows: 6,
+    gap: 0,
+    width: 18,
+    height: 24,
+    overflow: "hidden",
+  },
+  checkerPixel: {
+    width: 6,
+    height: 6,
+  },
+  opacityPanel: {
+    position: "absolute",
+    top: 52,
+    right: -88,
+    width: 256,
+    height: 64,
+    boxSizing: "border-box",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 20px",
+    borderRadius: 6,
+    border: 0,
+    background: "#FFFFFF",
+    boxShadow: "0 0 4px rgba(0, 0, 0, 0.15)",
+  },
+  opacityInput: {
+    width: "100%",
+    accentColor: "#7C51F8",
+    cursor: "pointer",
+  },
+  textIcon: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    color: "currentColor",
+    fontSize: 18,
+    lineHeight: 1,
+    fontFamily: "Georgia, 'Times New Roman', serif",
+  },
+  verticalTextBar: {
+    display: "inline-block",
+    width: 1.5,
+    height: 22,
+    background: "currentColor",
+  },
+  baselineIcon: {
+    position: "relative",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 22,
+    height: 24,
+    color: "currentColor",
+    fontSize: 19,
+    lineHeight: 1,
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    textDecoration: "underline",
+    textUnderlineOffset: 3,
+  },
+  baselineLine: {
+    position: "absolute",
+    top: 2,
+    width: 18,
+    height: 1.5,
+    background: "currentColor",
+  },
+} satisfies Record<string, CSSProperties>;

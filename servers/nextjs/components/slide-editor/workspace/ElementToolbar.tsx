@@ -27,14 +27,13 @@ type ElementToolbarProps = {
 };
 
 const TOOLBAR_RENDERERS = {
-  text: ({ element, index, onChange, onEditText, path, scale }) =>
+  text: ({ element, index, onChange, path, scale }) =>
     element.type === "text" ? (
       <TextToolbar
         element={element}
         index={index}
         scale={scale}
         onChange={(index, element) => onChange(index, element, path)}
-        onEdit={onEditText ? (index) => onEditText(index, path) : undefined}
       />
     ) : null,
   bullets: ({ element, index, onChange, path, scale }) =>
