@@ -3,6 +3,7 @@ import type { ChartElement as ChartEl } from "../../lib/slide-schema";
 import { PX_PER_IN, withHash } from "../../editorUtils";
 import { primaryChartData } from "../../lib/chart-data";
 import { chartColor as getChartColor } from "../../lib/element-model";
+import { renderMarkdownTextContent } from "../../lib/markdown-text";
 import { rotationProps, shadowProps } from "./elementVisuals";
 import { geometry, type ElementCommonProps } from "./types";
 
@@ -31,9 +32,13 @@ export function ChartElement({
     scale,
     selected,
   );
-  const data = primaryChartData(element);
+  const data = primaryChartData(element).map((datum) => ({
+    ...datum,
+    label: markdownText(datum.label),
+  }));
   const max = Math.max(1, ...data.map((datum) => Math.abs(datum.value)));
-  const titleH = element.title ? 24 * (scale / PX_PER_IN) : 8;
+  const title = markdownText(element.title);
+  const titleH = title ? 24 * (scale / PX_PER_IN) : 8;
   const pad = 12 * (scale / PX_PER_IN);
   const chartColor = withHash(getChartColor(element));
   const axisColor = withHash(element.axisColor ?? "9AA7BD");
@@ -70,13 +75,13 @@ export function ChartElement({
             stroke={stroke ?? axisColor}
             strokeWidth={selected ? strokeWidth : 0.5}
           />
-          {element.title ? (
+          {title ? (
             <Text
               x={pad}
               y={8 * (scale / PX_PER_IN)}
               width={width - pad * 2}
               height={14 * (scale / PX_PER_IN)}
-              text={element.title}
+              text={title}
               fontFamily="Arial, Helvetica, sans-serif"
               fontSize={9 * (scale / PX_PER_IN)}
               fontStyle="bold"
@@ -130,6 +135,11 @@ export function ChartElement({
       ) : null}
     </Group>
   );
+}
+
+function markdownText(value: string | null | undefined) {
+  const text = value?.trim();
+  return text ? renderMarkdownTextContent([{ text }]) : "";
 }
 
 function BarChartParts({

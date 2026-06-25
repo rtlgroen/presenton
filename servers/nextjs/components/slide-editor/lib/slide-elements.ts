@@ -226,6 +226,23 @@ export const ELEMENT_REGISTRY = {
       ],
     }),
   },
+  infographic: {
+    label: "Infographic",
+    addable: false,
+    toolbar: null,
+    inspector: null,
+    renderers: { konva: "infographic", domOverlay: null },
+    export: { pptx: "infographic", pdf: "raster" },
+    createDefault: () => ({
+      ...base,
+      size: { width: 2.4, height: 1.2 },
+      type: "infographic",
+      infographicType: "gauge",
+      minValue: 0,
+      maxValue: 100,
+      value: 65,
+    }),
+  },
   table: {
     label: "Table",
     addable: true,

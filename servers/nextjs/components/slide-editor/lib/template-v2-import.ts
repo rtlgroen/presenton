@@ -1136,6 +1136,8 @@ function adaptElement(value: unknown): SlideElement | null {
       return adaptSvg(raw);
     case "chart":
       return adaptChart(raw);
+    case "infographic":
+      return adaptInfographic(raw);
     case "flex":
       return adaptFlex(raw);
     case "grid":
@@ -1351,6 +1353,28 @@ function adaptChart(raw: UnknownRecord): SlideElement {
     dataLabels,
     grid: readBoolean(raw, "grid"),
     source: truncateString(readString(raw.source) ?? "", 120) || null,
+  };
+}
+
+function adaptInfographic(raw: UnknownRecord): SlideElement {
+  const minValue = readNumber(raw, "minValue", "min_value") ?? 0;
+  const rawMaxValue = readNumber(raw, "maxValue", "max_value") ?? 100;
+  const maxValue =
+    rawMaxValue === minValue ? minValue + 1 : rawMaxValue;
+
+  return {
+    ...baseElement(raw),
+    type: "infographic",
+    infographicType:
+      readEnum(
+        raw,
+        ["progress_bar", "gauge"],
+        "infographicType",
+        "infographic_type",
+      ) ?? "gauge",
+    minValue,
+    maxValue,
+    value: readNumber(raw, "value") ?? minValue,
   };
 }
 
@@ -1762,7 +1786,8 @@ function widenSingleLineTextElement(element: TextElement): TextElement {
 
   const wrap = element.font?.wrap;
   const oneLineBox = (element.size.height ?? 0) <= 0.55;
-  if (wrap !== "none" && !oneLineBox) return element;
+  if (wrap != null && wrap !== "none") return element;
+  if (wrap == null && !oneLineBox) return element;
 
   const fontSize = element.font?.size ?? 18;
   const averageGlyphWidth = element.font?.bold ? 0.6 : 0.54;
@@ -2020,6 +2045,15 @@ function serializeTemplateV2Element(
         data_labels: element.dataLabels ?? element.showValues,
         grid: element.grid,
         source: element.source,
+      });
+    case "infographic":
+      return stripNullish({
+        ...base,
+        type: "infographic",
+        infographic_type: element.infographicType,
+        min_value: element.minValue,
+        max_value: element.maxValue,
+        value: element.value,
       });
     case "flex":
       return serializeTemplateV2ChildrenElement(

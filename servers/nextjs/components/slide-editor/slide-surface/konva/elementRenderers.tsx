@@ -6,6 +6,7 @@ import { ChartElement } from "./ChartElement";
 import { ContainerElement } from "./ContainerElement";
 import { EllipseElement } from "./EllipseElement";
 import { ImageElement } from "./ImageElement";
+import { InfographicElement } from "./InfographicElement";
 import { LineElement } from "./LineElement";
 import { RectElement } from "./RectElement";
 import { SvgElement } from "./SvgElement";
@@ -42,6 +43,10 @@ const KONVA_RENDERERS = {
   chart: ({ chartRenderMode, element, ...rest }) =>
     element.type === "chart" ? (
       <ChartElement element={element} renderMode={chartRenderMode} {...rest} />
+    ) : null,
+  infographic: ({ element, ...rest }) =>
+    element.type === "infographic" ? (
+      <InfographicElement element={element} {...rest} />
     ) : null,
   table: ({ element, onTableCellClick, tableRenderMode, ...rest }) =>
     element.type === "table" ? (

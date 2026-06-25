@@ -25,6 +25,7 @@ import {
   resolvedChartCategories,
   resolvedChartDatasets,
 } from "../../../lib/chart-data";
+import { renderMarkdownTextContent } from "../../../lib/markdown-text";
 import { DomElementLayer, elementBoxStyle } from "../shared";
 
 type SupportedChartJsType = "bar" | "line" | "pie" | "doughnut";
@@ -66,11 +67,19 @@ export function ChartDomElement({
 
 function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const labels = useMemo(() => resolvedChartCategories(element), [element]);
-  const resolvedDatasets = useMemo(
-    () => resolvedChartDatasets(element),
+  const labels = useMemo(
+    () => resolvedChartCategories(element).map(markdownText),
     [element],
   );
+  const resolvedDatasets = useMemo(
+    () =>
+      resolvedChartDatasets(element).map((dataset) => ({
+        ...dataset,
+        name: markdownText(dataset.name),
+      })),
+    [element],
+  );
+  const title = useMemo(() => markdownText(element.title), [element.title]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -92,7 +101,7 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
             ? "line"
             : "bar";
     const pieDataset = resolvedDatasets[0] ?? {
-      name: element.title ?? "Series",
+      name: title || "Series",
       values: [],
       color: element.color ?? "D4A24C",
     };
@@ -135,6 +144,19 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
           })
     ) as ChartDataset<SupportedChartJsType, number[]>[];
 
+    const extraPlugins: Plugin<SupportedChartJsType>[] = [];
+    if (showDataLabels && !isCircular) {
+      extraPlugins.push(valueLabelsPlugin(withHash(element.labelColor ?? "6A7894")));
+    }
+    if (isDonut) {
+      extraPlugins.push(
+        donutCenterLabelPlugin(
+          centerDonutValue(pieDataset.values),
+          withHash(element.labelColor ?? "172033"),
+        ),
+      );
+    }
+
     const chart = new Chart(canvas, {
       type: chartType,
       data: {
@@ -147,7 +169,7 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
         responsive: true,
         plugins: {
           legend: {
-            display: !isCircular && resolvedDatasets.length > 1,
+            display: isCircular ? labels.length > 1 : resolvedDatasets.length > 1,
             position: "right",
             labels: {
               boxWidth: 8,
@@ -156,7 +178,7 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
             },
           },
           title: {
-            display: Boolean(element.title),
+            display: Boolean(title),
             align: "start",
             color: withHash(element.labelColor ?? "6A7894"),
             font: {
@@ -165,12 +187,12 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
               weight: "bold",
             },
             padding: { bottom: 8 },
-            text: element.title ?? "",
+            text: title,
           },
           tooltip: { enabled: false },
         },
         layout: {
-          padding: isCircular ? 0 : 4,
+          padding: isCircular ? 12 : 4,
         },
         scales: isCircular
           ? undefined
@@ -211,13 +233,11 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
               },
             },
       },
-      plugins: showDataLabels
-        ? [valueLabelsPlugin(withHash(element.labelColor ?? "6A7894"))]
-        : [],
+      plugins: extraPlugins,
     });
 
     return () => chart.destroy();
-  }, [element, labels, resolvedDatasets]);
+  }, [element, labels, resolvedDatasets, title]);
 
   return (
     <div
@@ -236,6 +256,22 @@ function ChartCanvas({ element, scale }: { element: ChartEl; scale: number }) {
       />
     </div>
   );
+}
+
+function markdownText(value: string | null | undefined) {
+  const text = value?.trim();
+  return text ? renderMarkdownTextContent([{ text }]) : "";
+}
+
+function centerDonutValue(values: number[]) {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (values.length === 1) return formatChartNumber(values[0] ?? 0);
+  return formatChartNumber(total);
+}
+
+function formatChartNumber(value: number) {
+  if (!Number.isFinite(value)) return "";
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
 }
 
 function valueLabelsPlugin(color: string): Plugin<SupportedChartJsType> {
@@ -265,6 +301,32 @@ function valueLabelsPlugin(color: string): Plugin<SupportedChartJsType> {
         });
       });
 
+      ctx.restore();
+    },
+  };
+}
+
+function donutCenterLabelPlugin(
+  value: string,
+  color: string,
+): Plugin<SupportedChartJsType> {
+  return {
+    id: "slide-editor-chart-donut-center-label",
+    afterDatasetsDraw(chart) {
+      if (!value) return;
+
+      const { ctx, chartArea } = chart;
+      if (!chartArea) return;
+
+      const x = (chartArea.left + chartArea.right) / 2;
+      const y = (chartArea.top + chartArea.bottom) / 2;
+
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.font = "700 22px Arial, Helvetica, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(value, x, y);
       ctx.restore();
     },
   };

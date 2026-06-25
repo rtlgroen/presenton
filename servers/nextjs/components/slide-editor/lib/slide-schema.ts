@@ -145,6 +145,7 @@ export const MarkerSchema = z.enum(["bullet", "number", "none"]);
 export const FlexDirectionSchema = z.enum(["row", "column"]);
 export const ImageFitSchema = z.enum(["contain", "cover", "fill"]);
 export const ChartTypeSchema = z.enum(["bar", "line", "area", "pie", "donut"]);
+export const InfographicTypeSchema = z.enum(["progress_bar", "gauge"]);
 
 export const PositionSchema = z
   .object({
@@ -741,6 +742,24 @@ export const ChartElementSchema = z.preprocess(
     .strict(),
 );
 
+export const InfographicElementSchema = z.preprocess(
+  (value) =>
+    normalizeElementAliases(value, {
+      infographic_type: "infographicType",
+      max_value: "maxValue",
+      min_value: "minValue",
+    }),
+  z.object({
+    type: z.literal("infographic"),
+    ...elementBaseShape,
+    infographicType: InfographicTypeSchema,
+    maxValue: z.number(),
+    minValue: z.number(),
+    value: z.number(),
+  })
+    .strict(),
+);
+
 export const FlexElementSchema: z.ZodType<FlexElementOutput> = z
   .preprocess(
     (value) =>
@@ -892,6 +911,7 @@ type SlideElementOutput =
   | z.infer<typeof LineElementSchema>
   | z.infer<typeof SvgElementSchema>
   | z.infer<typeof ChartElementSchema>
+  | z.infer<typeof InfographicElementSchema>
   | FlexElementOutput
   | GridElementOutput
   | ListViewElementOutput
@@ -909,6 +929,7 @@ export const SlideElementSchema: z.ZodType<SlideElementOutput> = z.union([
   LineElementSchema,
   SvgElementSchema,
   ChartElementSchema,
+  InfographicElementSchema,
   FlexElementSchema,
   GridElementSchema,
   ListViewElementSchema,
@@ -1005,6 +1026,7 @@ export type Marker = z.infer<typeof MarkerSchema>;
 export type FlexDirection = z.infer<typeof FlexDirectionSchema>;
 export type ImageFit = z.infer<typeof ImageFitSchema>;
 export type ChartType = z.infer<typeof ChartTypeSchema>;
+export type InfographicType = z.infer<typeof InfographicTypeSchema>;
 export type Position = z.infer<typeof PositionSchema>;
 export type Size = z.infer<typeof SizeSchema>;
 export type Padding = z.infer<typeof PaddingSchema>;
@@ -1036,6 +1058,7 @@ export type EllipseElement = z.infer<typeof EllipseElementSchema>;
 export type LineElement = z.infer<typeof LineElementSchema>;
 export type SvgElement = z.infer<typeof SvgElementSchema>;
 export type ChartElement = z.infer<typeof ChartElementSchema>;
+export type InfographicElement = z.infer<typeof InfographicElementSchema>;
 export type FlexElement = z.infer<typeof FlexElementSchema>;
 export type GridElement = z.infer<typeof GridElementSchema>;
 export type ListViewElement = z.infer<typeof ListViewElementSchema>;
@@ -1083,6 +1106,7 @@ export const LayoutEllipseElementSchema = EllipseElementSchema;
 export const LayoutLineElementSchema = LineElementSchema;
 export const LayoutSvgElementSchema = SvgElementSchema;
 export const LayoutChartElementSchema = ChartElementSchema;
+export const LayoutInfographicElementSchema = InfographicElementSchema;
 export const LayoutFlexElementSchema = FlexElementSchema;
 export const LayoutGridElementSchema = GridElementSchema;
 export const LayoutListViewElementSchema = ListViewElementSchema;
@@ -1101,6 +1125,7 @@ export type LayoutMarker = Marker;
 export type LayoutFlexDirection = FlexDirection;
 export type LayoutImageFit = ImageFit;
 export type LayoutChartType = ChartType;
+export type LayoutInfographicType = InfographicType;
 export type LayoutPosition = Position;
 export type LayoutSize = Size;
 export type LayoutPadding = Padding;
@@ -1125,6 +1150,7 @@ export type LayoutEllipseElement = EllipseElement;
 export type LayoutLineElement = LineElement;
 export type LayoutSvgElement = SvgElement;
 export type LayoutChartElement = ChartElement;
+export type LayoutInfographicElement = InfographicElement;
 export type LayoutFlexElement = FlexElement;
 export type LayoutGridElement = GridElement;
 export type LayoutListViewElement = ListViewElement;
