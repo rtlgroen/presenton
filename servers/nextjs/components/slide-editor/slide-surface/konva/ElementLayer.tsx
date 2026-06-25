@@ -56,6 +56,70 @@ const SUPPRESS_SELECT_AFTER_LONG_PRESS_MS = 400;
 const INLINE_EDIT_DOUBLE_CLICK_MS = 450;
 const COMPONENT_OUTLINE_STROKE = "#D6DAE2";
 const COMPONENT_OUTLINE_DASH = [4, 4];
+const SELECTION_CORNER_ANCHORS = new Set([
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+  "rotater",
+]);
+const SELECTION_HORIZONTAL_SIDE_ANCHORS = new Set([
+  "top-center",
+  "bottom-center",
+]);
+const SELECTION_VERTICAL_SIDE_ANCHORS = new Set([
+  "middle-left",
+  "middle-right",
+]);
+const SELECTION_CORNER_HANDLE_SIZE = 18;
+const SELECTION_SIDE_HANDLE_THICKNESS = 9;
+const SELECTION_SIDE_HANDLE_LENGTH = 30;
+
+function styleSelectionAnchor(anchor: Konva.Rect) {
+  const anchorName = anchor.name().split(" ")[0];
+
+  anchor.setAttrs({
+    fill: "#ffffff",
+    stroke: "#D6DAE2",
+    strokeWidth: 1,
+    shadowColor: "rgba(15, 23, 42, 0.16)",
+    shadowBlur: 8,
+    shadowOffsetY: 2,
+    shadowOpacity: 1,
+  });
+
+  if (SELECTION_HORIZONTAL_SIDE_ANCHORS.has(anchorName)) {
+    anchor.setAttrs({
+      width: SELECTION_SIDE_HANDLE_LENGTH,
+      height: SELECTION_SIDE_HANDLE_THICKNESS,
+      offsetX: SELECTION_SIDE_HANDLE_LENGTH / 2,
+      offsetY: SELECTION_SIDE_HANDLE_THICKNESS / 2,
+      cornerRadius: SELECTION_SIDE_HANDLE_THICKNESS / 2,
+    });
+    return;
+  }
+
+  if (SELECTION_VERTICAL_SIDE_ANCHORS.has(anchorName)) {
+    anchor.setAttrs({
+      width: SELECTION_SIDE_HANDLE_THICKNESS,
+      height: SELECTION_SIDE_HANDLE_LENGTH,
+      offsetX: SELECTION_SIDE_HANDLE_THICKNESS / 2,
+      offsetY: SELECTION_SIDE_HANDLE_LENGTH / 2,
+      cornerRadius: SELECTION_SIDE_HANDLE_THICKNESS / 2,
+    });
+    return;
+  }
+
+  if (SELECTION_CORNER_ANCHORS.has(anchorName)) {
+    anchor.setAttrs({
+      width: SELECTION_CORNER_HANDLE_SIZE,
+      height: SELECTION_CORNER_HANDLE_SIZE,
+      offsetX: SELECTION_CORNER_HANDLE_SIZE / 2,
+      offsetY: SELECTION_CORNER_HANDLE_SIZE / 2,
+      cornerRadius: SELECTION_CORNER_HANDLE_SIZE / 2,
+    });
+  }
+}
 
 export function ElementLayer({
   editingBulletsIndex,
@@ -724,8 +788,8 @@ export function ElementLayer({
           rotateEnabled
           resizeEnabled
           enabledAnchors={canResizeSelection ? undefined : []}
-          anchorSize={18}
-          anchorCornerRadius={999}
+          anchorSize={SELECTION_CORNER_HANDLE_SIZE}
+          anchorStyleFunc={styleSelectionAnchor}
           borderStroke={SELECTION_STROKE}
           borderStrokeWidth={1.5}
           anchorFill="#ffffff"

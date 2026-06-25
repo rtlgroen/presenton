@@ -33,6 +33,18 @@ const HORIZONTAL_ALIGNMENT_ICONS = {
   right: AlignRight,
 };
 
+const MIN_FONT_SIZE = 4;
+const MAX_FONT_SIZE = 240;
+
+function clampFontSize(size: number) {
+  return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+}
+
+function formatToolbarFontSize(size: number) {
+  if (!Number.isFinite(size)) return "12";
+  return Number.isInteger(size) ? String(size) : size.toFixed(1);
+}
+
 export function TextToolbar({
   element,
   index,
@@ -54,6 +66,17 @@ export function TextToolbar({
     : [font.family, ...FONT_FAMILIES];
   const [openPanel, setOpenPanel] = useState<"opacity" | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
+  const commitFontSize = (nextSize: number) => {
+    if (!Number.isFinite(nextSize)) return;
+    onChange(index, mergeFont(element, { size: clampFontSize(nextSize) }));
+  };
+  const updateFontSize = (value: string) => {
+    commitFontSize(Number.parseFloat(value));
+  };
+  const stepFontSize = (delta: number) => {
+    const currentSize = Number.isFinite(font.size) ? font.size : 12;
+    commitFontSize(currentSize + delta);
+  };
 
   const updateAlignment = (
     alignment: NonNullable<TextSlideElement["alignment"]>,
@@ -99,6 +122,48 @@ export function TextToolbar({
             style={textToolbarStyles.selectIcon}
           />
         </label>
+        <Divider />
+        <div style={textToolbarStyles.fontSizeControl}>
+          <input
+            aria-label="Font size"
+            title="Font size"
+            type="text"
+            inputMode="decimal"
+            value={formatToolbarFontSize(font.size)}
+            onChange={(event) => updateFontSize(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                stepFontSize(1);
+              }
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                stepFontSize(-1);
+              }
+            }}
+            style={textToolbarStyles.fontSizeInput}
+          />
+          <span style={textToolbarStyles.fontSizeStepper}>
+            <button
+              type="button"
+              aria-label="Increase font size"
+              title="Increase font size"
+              onClick={() => stepFontSize(1)}
+              style={textToolbarStyles.fontSizeStepButton}
+            >
+              <span style={textToolbarStyles.fontSizeArrowUp} />
+            </button>
+            <button
+              type="button"
+              aria-label="Decrease font size"
+              title="Decrease font size"
+              onClick={() => stepFontSize(-1)}
+              style={textToolbarStyles.fontSizeStepButton}
+            >
+              <span style={textToolbarStyles.fontSizeArrowDown} />
+            </button>
+          </span>
+        </div>
         <Divider />
         <label
           aria-label="Text color"
@@ -354,7 +419,7 @@ const textToolbarStyles = {
     alignItems: "center",
     boxSizing: "border-box",
     height: 36,
-    width: 489.2,
+    width: 580,
     maxWidth: "calc(100vw - 32px)",
     padding: "0 10px",
     border: 0,
@@ -391,6 +456,69 @@ const textToolbarStyles = {
     right: 0,
     pointerEvents: "none",
     color: "#0B1220",
+  },
+  fontSizeControl: {
+    width: 70,
+    height: 36,
+    boxSizing: "border-box",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    flex: "0 0 auto",
+  },
+  fontSizeInput: {
+    width: 36,
+    height: 28,
+    boxSizing: "border-box",
+    border: 0,
+    outline: "none",
+    background: "transparent",
+    color: "#0B1220",
+    fontFamily:
+      "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+    fontSize: 14,
+    fontWeight: 400,
+    textAlign: "center",
+    padding: 0,
+    flex: "0 0 auto",
+  },
+  fontSizeStepper: {
+    display: "inline-flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    width: 12,
+    height: 24,
+    flex: "0 0 auto",
+  },
+  fontSizeStepButton: {
+    width: 12,
+    height: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: 0,
+    borderRadius: 2,
+    background: "transparent",
+    padding: 0,
+    cursor: "pointer",
+    color: "#05070A",
+  },
+  fontSizeArrowUp: {
+    width: 0,
+    height: 0,
+    borderLeft: "4px solid transparent",
+    borderRight: "4px solid transparent",
+    borderBottom: "6px solid currentColor",
+  },
+  fontSizeArrowDown: {
+    width: 0,
+    height: 0,
+    borderLeft: "4px solid transparent",
+    borderRight: "4px solid transparent",
+    borderTop: "6px solid currentColor",
   },
   divider: {
     width: 1,
