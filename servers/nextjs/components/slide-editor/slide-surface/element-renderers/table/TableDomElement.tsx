@@ -64,9 +64,15 @@ export function TableDomElement({
               fontSize: font.size * PT_TO_PX * (scale / PX_PER_IN),
             }}
           >
-            <tbody>
+            <tbody style={tableBodyStyle}>
               {rows.map((row, rowIndex) => (
-                <tr key={rowIndex}>
+                <tr
+                  key={rowIndex}
+                  style={{
+                    ...tableRowStyle,
+                    height: `${100 / rows.length}%`,
+                  }}
+                >
                   {Array.from({ length: cols }).map((_, colIndex) => {
                     const isHeader = rowIndex === 0;
                     const selectedCellPath =
@@ -169,6 +175,14 @@ const tableStyle: CSSProperties = {
   borderWidth: 1,
   borderStyle: "solid",
   overflow: "hidden",
+};
+
+const tableBodyStyle: CSSProperties = {
+  height: "100%",
+};
+
+const tableRowStyle: CSSProperties = {
+  height: "100%",
 };
 
 const cellStyle: CSSProperties = {

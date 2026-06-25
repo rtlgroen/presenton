@@ -7,7 +7,6 @@ import {
   BarChart3,
   Circle,
   Columns2,
-  FileText,
   Grid3X3,
   GripVertical,
   Image,
@@ -32,6 +31,7 @@ import type {
   SlideElement,
 } from "@/components/slide-editor/lib/slide-schema";
 import type { ElementPath } from "@/components/slide-editor/lib/element-path";
+import { createDefaultElementFromRegistry } from "@/components/slide-editor/registry";
 import { ChartEditorContent } from "@/components/slide-editor/workspace/ChartEditorContent";
 import Chat from "./Chat";
 import {
@@ -98,16 +98,8 @@ const chartTypeItems = [
 ] satisfies PaletteItem[];
 
 const tableTypeItems = [
-  { label: "Simple Table", icon: Table2 },
-  { label: "Data Grid", icon: Grid3X3 },
-];
-
-const tableComponentItems = [
-  { label: "Data Table", icon: Table2 },
-  { label: "Comparison", icon: Columns2 },
-  { label: "KPI Cards", icon: FileText },
-  { label: "Pricing", icon: BarChart3 },
-];
+  { id: "simple-table", label: "Simple Table", icon: Table2 },
+] satisfies PaletteItem[];
 
 const imageItems = [
   { id: "image", label: "Image", icon: Image },
@@ -327,6 +319,12 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 const createChartInsertElements = (kind?: string): SlideElement[] => {
   const chartType = chartTypeFromPaletteId(kind);
   return chartType ? [makeChartElement(chartType)] : [];
+};
+
+const createTableInsertElements = (kind?: string): SlideElement[] => {
+  return kind === "simple-table"
+    ? [createDefaultElementFromRegistry("table")]
+    : [];
 };
 
 const imageRadius = { tl: 0.08, tr: 0.08, bl: 0.08, br: 0.08 };
@@ -805,6 +803,10 @@ const PresentationActions = (props: PresentationActionsProps) => {
     insertEditorElements(createChartInsertElements(item.id), item.label);
   };
 
+  const handleTableItemSelect = (item: PaletteItem) => {
+    insertEditorElements(createTableInsertElements(item.id), item.label);
+  };
+
   const handleImageItemSelect = (item: PaletteItem) => {
     insertEditorElements(createImageInsertElements(item.id), item.label);
   };
@@ -950,10 +952,8 @@ const PresentationActions = (props: PresentationActionsProps) => {
         {activeAction === "tables" && (
           <InsertPanel
             title="Tables"
-            groups={[
-              { label: "Table Type", items: tableTypeItems },
-              { label: "Components", items: tableComponentItems },
-            ]}
+            groups={[{ label: "Table Type", items: tableTypeItems }]}
+            onItemSelect={handleTableItemSelect}
           />
         )}
         {activeAction === "images" && (
