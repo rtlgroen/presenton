@@ -58,7 +58,7 @@ Convert the provided raw slide elements to components.
 - `id` and `description` must be related to layout and must not be derived from slide content.
 - `id` should be about 2 to 5 words in snake_case format.
 - `description` should be around 15 to 30 words.
-- Element `name` must be derived from layout, not from content
+- `name` of element must be derived from layout, not from content.
 
 # Layout Rules:
 - Build the flexible component layout using `flex`, `grid`, `container`, etc.

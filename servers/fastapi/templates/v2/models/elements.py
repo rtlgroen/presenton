@@ -348,6 +348,8 @@ class Grid(BaseModel):
 
 class Group(BaseModel):
     type: Literal["group"]
+    position: Optional[Position] = None
+    size: Optional[Size] = None
     children: list[SlideElement]
 
     # Schema

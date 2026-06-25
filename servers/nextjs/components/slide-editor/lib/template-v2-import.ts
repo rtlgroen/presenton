@@ -351,11 +351,13 @@ function withTemplateV2ChildSize(
 ) {
   const record = asRecord(child);
   if (!record) return child;
+  const size: UnknownRecord = readRecord(record, "size") ?? {};
   return {
     ...record,
     size: {
-      width: sourceNumber(width),
-      height: sourceNumber(height),
+      ...size,
+      width: readNumber(size, "width") ?? sourceNumber(width),
+      height: readNumber(size, "height") ?? sourceNumber(height),
     },
   };
 }
@@ -592,7 +594,9 @@ function componentToGroupElement(
     position: { x: frame.x, y: frame.y },
     size: { width: frame.width, height: frame.height },
     children: componentFrame
-      ? renderedElements
+      ? renderedElements.map((element) =>
+          frameTopLevelFlowElementToComponent(element, componentFrame),
+        )
       : renderedElements.map((element) =>
           localizeRawElementToFrame(element, frame),
         ),
@@ -602,6 +606,26 @@ function componentToGroupElement(
     componentDescription: componentDescription || null,
     design_variables: readArray(raw, "design_variables"),
   });
+}
+
+function frameTopLevelFlowElementToComponent(
+  element: UnknownRecord,
+  frame: RawFrame,
+): UnknownRecord {
+  const type = readString(element.type);
+  if (
+    (type !== "grid" && type !== "flex") ||
+    readRecord(element, "position") ||
+    readRecord(element, "size")
+  ) {
+    return element;
+  }
+
+  return {
+    ...element,
+    position: { x: 0, y: 0 },
+    size: { width: frame.width, height: frame.height },
+  };
 }
 
 function rawElementsFrame(elements: UnknownRecord[]) {
