@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useReducer, useState } from "react";
 import {
   AlignCenter,
   AreaChart,
@@ -93,6 +93,90 @@ type TemplateBlock = {
   raw: unknown;
   index: number;
 };
+
+type BlocksPanelState = {
+  blocks: TemplateBlock[];
+  error: string | null;
+  loading: boolean;
+};
+
+type BlocksPanelAction =
+  | { type: "cached"; blocks: TemplateBlock[] }
+  | { type: "loading" }
+  | { type: "loaded"; blocks: TemplateBlock[] }
+  | { type: "failed"; message: string };
+
+const initialBlocksPanelState: BlocksPanelState = {
+  blocks: [],
+  error: null,
+  loading: false,
+};
+
+function blocksPanelReducer(
+  state: BlocksPanelState,
+  action: BlocksPanelAction,
+): BlocksPanelState {
+  switch (action.type) {
+    case "cached":
+    case "loaded":
+      return { blocks: action.blocks, error: null, loading: false };
+    case "loading":
+      return { ...state, error: null, loading: true };
+    case "failed":
+      return { blocks: [], error: action.message, loading: false };
+    default:
+      return state;
+  }
+}
+
+type PresentationActionsUiState = {
+  activeAction: ActionId;
+  chartEditor: ChartEditorState | null;
+};
+
+type PresentationActionsUiAction =
+  | { type: "selectAction"; activeAction: ActionId }
+  | { type: "openChartEditor"; chartEditor: ChartEditorState }
+  | { type: "closeChartEditor" }
+  | { type: "updateChartEditor"; chart: ChartElement }
+  | { type: "syncCurrentSlide"; currentSlide?: number };
+
+const initialPresentationActionsUiState: PresentationActionsUiState = {
+  activeAction: "ai",
+  chartEditor: null,
+};
+
+function presentationActionsUiReducer(
+  state: PresentationActionsUiState,
+  action: PresentationActionsUiAction,
+): PresentationActionsUiState {
+  switch (action.type) {
+    case "selectAction":
+      return { ...state, activeAction: action.activeAction };
+    case "openChartEditor":
+      return { activeAction: "charts", chartEditor: action.chartEditor };
+    case "closeChartEditor":
+      return { ...state, chartEditor: null };
+    case "updateChartEditor":
+      if (!state.chartEditor) return state;
+      return {
+        ...state,
+        chartEditor: { ...state.chartEditor, chart: action.chart },
+      };
+    case "syncCurrentSlide":
+      if (
+        !state.chartEditor ||
+        typeof action.currentSlide !== "number" ||
+        typeof state.chartEditor.slideIndex !== "number" ||
+        action.currentSlide === state.chartEditor.slideIndex
+      ) {
+        return state;
+      }
+      return { ...state, chartEditor: null };
+    default:
+      return state;
+  }
+}
 
 const insertActions: ActionItem[] = [
   { id: "texts", label: "Texts", icon: Type },
@@ -827,9 +911,10 @@ const BlocksPanel = ({
   onInsertBlock: (block: TemplateBlock) => void;
 }) => {
   const [blockPrompt, setBlockPrompt] = useState("");
-  const [blocks, setBlocks] = useState<TemplateBlock[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [{ blocks, error, loading }, dispatchBlockState] = useReducer(
+    blocksPanelReducer,
+    initialBlocksPanelState,
+  );
   const cacheKey = useMemo(
     () => templateBlocksCacheKey(presentationId, presentationData),
     [presentationData, presentationId],
@@ -848,29 +933,25 @@ const BlocksPanel = ({
     let cancelled = false;
     const cached = templateBlocksCache.get(cacheKey);
     if (cached) {
-      setBlocks(cached);
-      setLoading(false);
-      setError(null);
+      dispatchBlockState({ type: "cached", blocks: cached });
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    dispatchBlockState({ type: "loading" });
     void loadTemplateBlocksForPresentation(presentationData)
       .then((nextBlocks) => {
         if (cancelled) return;
         if (nextBlocks.length > 0) {
           templateBlocksCache.set(cacheKey, nextBlocks);
         }
-        setBlocks(nextBlocks);
+        dispatchBlockState({ type: "loaded", blocks: nextBlocks });
       })
       .catch(() => {
         if (cancelled) return;
-        setError("Could not load template components.");
-        setBlocks([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        dispatchBlockState({
+          type: "failed",
+          message: "Could not load template components.",
+        });
       });
 
     return () => {
@@ -1182,8 +1263,10 @@ function ActionsPanel({
 
 const PresentationActions = (props: PresentationActionsProps) => {
   const { presentationData, ...chatProps } = props;
-  const [activeAction, setActiveAction] = useState<ActionId>("ai");
-  const [chartEditor, setChartEditor] = useState<ChartEditorState | null>(null);
+  const [{ activeAction, chartEditor }, dispatchUiState] = useReducer(
+    presentationActionsUiReducer,
+    initialPresentationActionsUiState,
+  );
 
   useEffect(() => {
     const handleChartEditorOpen = (event: Event) => {
@@ -1191,7 +1274,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
       if (!detail) return;
 
       if (detail.open === false) {
-        setChartEditor(null);
+        dispatchUiState({ type: "closeChartEditor" });
         return;
       }
 
@@ -1204,13 +1287,15 @@ const PresentationActions = (props: PresentationActionsProps) => {
         return;
       }
 
-      setActiveAction("charts");
-      setChartEditor({
-        chart: detail.chart,
-        path: detail.path,
-        rootIndex: detail.rootIndex ?? 0,
-        slideId: detail.slideId ?? null,
-        slideIndex: detail.slideIndex ?? null,
+      dispatchUiState({
+        type: "openChartEditor",
+        chartEditor: {
+          chart: detail.chart,
+          path: detail.path,
+          rootIndex: detail.rootIndex ?? 0,
+          slideId: detail.slideId ?? null,
+          slideIndex: detail.slideIndex ?? null,
+        },
       });
     };
 
@@ -1227,15 +1312,9 @@ const PresentationActions = (props: PresentationActionsProps) => {
   }, [props.currentSlide]);
 
   useEffect(() => {
-    setChartEditor((current) => {
-      if (
-        !current ||
-        typeof props.currentSlide !== "number" ||
-        typeof current.slideIndex !== "number"
-      ) {
-        return current;
-      }
-      return props.currentSlide === current.slideIndex ? current : null;
+    dispatchUiState({
+      type: "syncCurrentSlide",
+      currentSlide: props.currentSlide,
     });
   }, [props.currentSlide]);
 
@@ -1261,7 +1340,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
       return;
     }
 
-    setChartEditor({ ...chartEditor, chart });
+    dispatchUiState({ type: "updateChartEditor", chart });
   };
 
   const closeChartEditor = () => {
@@ -1276,7 +1355,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
         new CustomEvent(TEMPLATE_V2_CHART_UPDATE_EVENT, { detail }),
       );
     }
-    setChartEditor(null);
+    dispatchUiState({ type: "closeChartEditor" });
   };
 
   const insertEditorElements = (elements: SlideElement[], label: string) => {
@@ -1338,11 +1417,15 @@ const PresentationActions = (props: PresentationActionsProps) => {
     insertEditorElements([element], block.title);
   };
 
+  const handleActionSelect = (activeAction: ActionId) => {
+    dispatchUiState({ type: "selectAction", activeAction });
+  };
+
   return (
     <div className="flex h-full w-full overflow-hidden  bg-white px-2 py-1.5">
       <ActionsSidebar
         activeAction={activeAction}
-        onActionSelect={setActiveAction}
+        onActionSelect={handleActionSelect}
       />
       <ActionsPanel
         activeAction={activeAction}

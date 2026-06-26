@@ -316,7 +316,10 @@ function useTemplateV2KonvaSlideController({
   const lastTextPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
     null,
   );
-  const lastSyncedSlideRef = useRef(JSON.stringify(activeSlide));
+  const lastSyncedSlideRef = useRef<string | null>(null);
+  if (lastSyncedSlideRef.current === null) {
+    lastSyncedSlideRef.current = JSON.stringify(activeSlide);
+  }
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const insertElements = useSetAtom(insertElementsAtom);
   const selectElement = useSetAtom(selectElementAtom);

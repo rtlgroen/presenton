@@ -2,7 +2,7 @@
 
 
 
-import React, { useEffect, useCallback, useState } from "react";
+import React, { useEffect, useCallback, useReducer, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Loader2, RefreshCw, Wrench, X } from "lucide-react";
 
@@ -27,6 +27,30 @@ import { useFontLoader as loadFontAssets } from "../hooks/useFontLoad";
 import Header from "@/app/(presentation-generator)/(dashboard)/dashboard/components/Header";
 
 type LibreOfficeGateState = "checking" | "ready" | "missing" | "installing" | "error";
+type LibreOfficeGateSnapshot = {
+    status: LibreOfficeGateState;
+    message: string;
+    progress?: number;
+};
+type LibreOfficeGateAction = {
+    type: "set";
+    payload: Partial<LibreOfficeGateSnapshot>;
+};
+
+const initialLibreOfficeGate: LibreOfficeGateSnapshot = {
+    status: "checking",
+    message: "Checking LibreOffice availability...",
+};
+
+function libreOfficeGateReducer(
+    state: LibreOfficeGateSnapshot,
+    action: LibreOfficeGateAction,
+): LibreOfficeGateSnapshot {
+    if (action.type === "set") {
+        return { ...state, ...action.payload };
+    }
+    return state;
+}
 
 const LibreOfficeGate = ({
     status,
@@ -147,31 +171,56 @@ const LibreOfficeGate = ({
 
 
 function useLibreOfficeGate(router: ReturnType<typeof useRouter>) {
-    const [libreStatus, setLibreStatus] = useState<LibreOfficeGateState>("checking");
-    const [libreMessage, setLibreMessage] = useState("Checking LibreOffice availability...");
-    const [libreProgress, setLibreProgress] = useState<number | undefined>();
+    const [libreGate, dispatchLibreGate] = useReducer(
+        libreOfficeGateReducer,
+        initialLibreOfficeGate,
+    );
 
     const checkLibreOffice = useCallback(async () => {
         const api = window.electron;
         if (!api?.checkLibreOffice) {
-            setLibreStatus("ready");
+            dispatchLibreGate({ type: "set", payload: { status: "ready" } });
             return;
         }
 
-        setLibreStatus("checking");
-        setLibreMessage("Checking LibreOffice availability...");
+        dispatchLibreGate({
+            type: "set",
+            payload: {
+                status: "checking",
+                message: "Checking LibreOffice availability...",
+                progress: undefined,
+            },
+        });
         try {
             const result = await api.checkLibreOffice();
             if (result.installed) {
-                setLibreStatus("ready");
-                setLibreMessage("LibreOffice is ready.");
+                dispatchLibreGate({
+                    type: "set",
+                    payload: {
+                        status: "ready",
+                        message: "LibreOffice is ready.",
+                        progress: undefined,
+                    },
+                });
             } else {
-                setLibreStatus("missing");
-                setLibreMessage("LibreOffice is not installed yet. Install it to use Template Studio.");
+                dispatchLibreGate({
+                    type: "set",
+                    payload: {
+                        status: "missing",
+                        message: "LibreOffice is not installed yet. Install it to use Template Studio.",
+                        progress: undefined,
+                    },
+                });
             }
         } catch (error) {
-            setLibreStatus("error");
-            setLibreMessage(error instanceof Error ? error.message : "Could not check LibreOffice.");
+            dispatchLibreGate({
+                type: "set",
+                payload: {
+                    status: "error",
+                    message: error instanceof Error ? error.message : "Could not check LibreOffice.",
+                    progress: undefined,
+                },
+            });
         }
     }, []);
 
@@ -187,29 +236,53 @@ function useLibreOfficeGate(router: ReturnType<typeof useRouter>) {
 
         const offProgress = api.onLibreOfficeProgress((payload) => {
             if (payload.phase === "downloading" || payload.phase === "installing") {
-                setLibreStatus("installing");
-                setLibreProgress(payload.percent);
-                if (payload.message) {
-                    setLibreMessage(payload.message.split("|").filter(Boolean).join(" - "));
-                }
+                dispatchLibreGate({
+                    type: "set",
+                    payload: {
+                        status: "installing",
+                        progress: payload.percent,
+                        ...(payload.message
+                            ? { message: payload.message.split("|").filter(Boolean).join(" - ") }
+                            : {}),
+                    },
+                });
             } else if (payload.phase === "done") {
-                setLibreProgress(100);
-                setLibreMessage("LibreOffice is ready.");
+                dispatchLibreGate({
+                    type: "set",
+                    payload: {
+                        progress: 100,
+                        message: "LibreOffice is ready.",
+                    },
+                });
                 void checkLibreOffice();
             } else if (payload.phase === "error") {
                 if (payload.message?.toLowerCase().includes("cancelled")) {
-                    setLibreStatus("missing");
-                    setLibreProgress(undefined);
-                    setLibreMessage("LibreOffice installation cancelled. You can install it later to use Template Studio.");
+                    dispatchLibreGate({
+                        type: "set",
+                        payload: {
+                            status: "missing",
+                            progress: undefined,
+                            message: "LibreOffice installation cancelled. You can install it later to use Template Studio.",
+                        },
+                    });
                     return;
                 }
-                setLibreStatus("error");
-                setLibreMessage(payload.message || "LibreOffice installation failed.");
+                dispatchLibreGate({
+                    type: "set",
+                    payload: {
+                        status: "error",
+                        progress: undefined,
+                        message: payload.message || "LibreOffice installation failed.",
+                    },
+                });
             }
         });
         const offLog = api.onLibreOfficeLog((payload) => {
             if (payload.level === "error" && payload.text) {
-                setLibreMessage(payload.text);
+                dispatchLibreGate({
+                    type: "set",
+                    payload: { message: payload.text },
+                });
             }
         });
 
@@ -222,14 +295,25 @@ function useLibreOfficeGate(router: ReturnType<typeof useRouter>) {
     const installLibreOffice = useCallback(async () => {
         const api = window.electron;
         if (!api?.installLibreOffice) {
-            setLibreStatus("error");
-            setLibreMessage("LibreOffice installer is unavailable in this build.");
+            dispatchLibreGate({
+                type: "set",
+                payload: {
+                    status: "error",
+                    message: "LibreOffice installer is unavailable in this build.",
+                    progress: undefined,
+                },
+            });
             return;
         }
 
-        setLibreStatus("installing");
-        setLibreProgress(undefined);
-        setLibreMessage("Preparing LibreOffice installer...");
+        dispatchLibreGate({
+            type: "set",
+            payload: {
+                status: "installing",
+                progress: undefined,
+                message: "Preparing LibreOffice installer...",
+            },
+        });
         try {
             const result = await api.installLibreOffice();
             if (result?.ok) {
@@ -237,28 +321,53 @@ function useLibreOfficeGate(router: ReturnType<typeof useRouter>) {
                 return;
             }
             if (result?.cancelled) {
-                setLibreStatus("missing");
-                setLibreProgress(undefined);
-                setLibreMessage("LibreOffice installation cancelled. You can install it later to use Template Studio.");
+                dispatchLibreGate({
+                    type: "set",
+                    payload: {
+                        status: "missing",
+                        progress: undefined,
+                        message: "LibreOffice installation cancelled. You can install it later to use Template Studio.",
+                    },
+                });
                 return;
             }
-            setLibreStatus("error");
-            setLibreMessage(result?.error || "LibreOffice installation failed.");
+            dispatchLibreGate({
+                type: "set",
+                payload: {
+                    status: "error",
+                    progress: undefined,
+                    message: result?.error || "LibreOffice installation failed.",
+                },
+            });
         } catch (error) {
-            setLibreStatus("error");
-            setLibreMessage(error instanceof Error ? error.message : "LibreOffice installation failed.");
+            dispatchLibreGate({
+                type: "set",
+                payload: {
+                    status: "error",
+                    progress: undefined,
+                    message: error instanceof Error ? error.message : "LibreOffice installation failed.",
+                },
+            });
         }
     }, [checkLibreOffice]);
 
     const cancelLibreOfficeInstall = useCallback(async () => {
         const api = window.electron;
-        setLibreMessage("Cancelling LibreOffice installation...");
+        dispatchLibreGate({
+            type: "set",
+            payload: { message: "Cancelling LibreOffice installation..." },
+        });
         try {
             await api?.cancelLibreOfficeInstall?.();
         } finally {
-            setLibreStatus("missing");
-            setLibreProgress(undefined);
-            setLibreMessage("LibreOffice installation cancelled. You can install it later to use Template Studio.");
+            dispatchLibreGate({
+                type: "set",
+                payload: {
+                    status: "missing",
+                    progress: undefined,
+                    message: "LibreOffice installation cancelled. You can install it later to use Template Studio.",
+                },
+            });
         }
     }, []);
 
@@ -275,9 +384,9 @@ function useLibreOfficeGate(router: ReturnType<typeof useRouter>) {
         checkLibreOffice,
         installLibreOffice,
         leaveTemplateStudio,
-        libreMessage,
-        libreProgress,
-        libreStatus,
+        libreMessage: libreGate.message,
+        libreProgress: libreGate.progress,
+        libreStatus: libreGate.status,
     };
 }
 

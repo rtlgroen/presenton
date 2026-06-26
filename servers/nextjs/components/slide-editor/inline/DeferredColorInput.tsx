@@ -54,9 +54,14 @@ export const DeferredColorInput = forwardRef<
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const committedColorRef = useRef(normalizeColorValue(value));
-  const draftColorRef = useRef(committedColorRef.current);
-  const [draftColor, setDraftColor] = useState(committedColorRef.current);
+  const initialColorRef = useRef<string | null>(null);
+  if (initialColorRef.current === null) {
+    initialColorRef.current = normalizeColorValue(value);
+  }
+  const initialColor = initialColorRef.current;
+  const committedColorRef = useRef(initialColor);
+  const draftColorRef = useRef(initialColor);
+  const [draftColor, setDraftColor] = useState(initialColor);
 
   useImperativeHandle(ref, () => inputRef.current as HTMLInputElement, []);
 
