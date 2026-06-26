@@ -270,49 +270,126 @@ export function TableToolbar({
           >
             <Trash2 size={20} strokeWidth={2.25} />
           </button>
-          {menuOpen ? (
-            <div style={menuStyle}>
-              <MenuItem
-                disabled={!canDeleteRow}
-                icon={<Rows3 size={20} strokeWidth={2.2} />}
-                label="Delete Row"
-                onClick={() => runMenuAction(deleteRow)}
-              />
-              <MenuItem
-                disabled={!canDeleteColumn}
-                icon={<Columns3 size={20} strokeWidth={2.2} />}
-                label="Delete Column"
-                onClick={() => runMenuAction(deleteColumn)}
-              />
-              <MenuItem
-                disabled={!canAddRow}
-                icon={<Plus size={20} strokeWidth={2.4} />}
-                label="Add Row"
-                onClick={() => runMenuAction(addRow)}
-              />
-              <MenuItem
-                disabled={!canAddColumn}
-                icon={<Plus size={20} strokeWidth={2.4} />}
-                label="Add Column"
-                onClick={() => runMenuAction(addColumn)}
-              />
-              <div style={menuDividerStyle} />
-              <MenuItem
-                disabled={!canMoveColumnRight}
-                icon={<ChevronRight size={20} strokeWidth={2.4} />}
-                label="Move Column Right"
-                onClick={() => runMenuAction(() => moveColumn("right"))}
-              />
-              <MenuItem
-                disabled={!canMoveColumnLeft}
-                icon={<ChevronLeft size={20} strokeWidth={2.4} />}
-                label="Move Column Left"
-                onClick={() => runMenuAction(() => moveColumn("left"))}
-              />
-            </div>
-          ) : null}
+          <TableToolbarMenu
+            canAddColumn={canAddColumn}
+            canAddRow={canAddRow}
+            canDeleteColumn={canDeleteColumn}
+            canDeleteRow={canDeleteRow}
+            canMoveColumnLeft={canMoveColumnLeft}
+            canMoveColumnRight={canMoveColumnRight}
+            menuOpen={menuOpen}
+            onAddColumn={() => runMenuAction(addColumn)}
+            onAddRow={() => runMenuAction(addRow)}
+            onDeleteColumn={() => runMenuAction(deleteColumn)}
+            onDeleteRow={() => runMenuAction(deleteRow)}
+            onMoveColumnLeft={() => runMenuAction(() => moveColumn("left"))}
+            onMoveColumnRight={() => runMenuAction(() => moveColumn("right"))}
+          />
         </div>
       </div>
+      <TableEdgeAddButtons
+        box={box}
+        canAddColumn={canAddColumn}
+        canAddRow={canAddRow}
+        onAddColumn={addColumn}
+        onAddRow={addRow}
+        scale={scale}
+      />
+    </>
+  );
+}
+
+function TableToolbarMenu({
+  canAddColumn,
+  canAddRow,
+  canDeleteColumn,
+  canDeleteRow,
+  canMoveColumnLeft,
+  canMoveColumnRight,
+  menuOpen,
+  onAddColumn,
+  onAddRow,
+  onDeleteColumn,
+  onDeleteRow,
+  onMoveColumnLeft,
+  onMoveColumnRight,
+}: {
+  canAddColumn: boolean;
+  canAddRow: boolean;
+  canDeleteColumn: boolean;
+  canDeleteRow: boolean;
+  canMoveColumnLeft: boolean;
+  canMoveColumnRight: boolean;
+  menuOpen: boolean;
+  onAddColumn: () => void;
+  onAddRow: () => void;
+  onDeleteColumn: () => void;
+  onDeleteRow: () => void;
+  onMoveColumnLeft: () => void;
+  onMoveColumnRight: () => void;
+}) {
+  if (!menuOpen) return null;
+
+  return (
+    <div style={menuStyle}>
+      <MenuItem
+        disabled={!canDeleteRow}
+        icon={<Rows3 size={20} strokeWidth={2.2} />}
+        label="Delete Row"
+        onClick={onDeleteRow}
+      />
+      <MenuItem
+        disabled={!canDeleteColumn}
+        icon={<Columns3 size={20} strokeWidth={2.2} />}
+        label="Delete Column"
+        onClick={onDeleteColumn}
+      />
+      <MenuItem
+        disabled={!canAddRow}
+        icon={<Plus size={20} strokeWidth={2.4} />}
+        label="Add Row"
+        onClick={onAddRow}
+      />
+      <MenuItem
+        disabled={!canAddColumn}
+        icon={<Plus size={20} strokeWidth={2.4} />}
+        label="Add Column"
+        onClick={onAddColumn}
+      />
+      <div style={menuDividerStyle} />
+      <MenuItem
+        disabled={!canMoveColumnRight}
+        icon={<ChevronRight size={20} strokeWidth={2.4} />}
+        label="Move Column Right"
+        onClick={onMoveColumnRight}
+      />
+      <MenuItem
+        disabled={!canMoveColumnLeft}
+        icon={<ChevronLeft size={20} strokeWidth={2.4} />}
+        label="Move Column Left"
+        onClick={onMoveColumnLeft}
+      />
+    </div>
+  );
+}
+
+function TableEdgeAddButtons({
+  box,
+  canAddColumn,
+  canAddRow,
+  onAddColumn,
+  onAddRow,
+  scale,
+}: {
+  box: ReturnType<typeof elementBox>;
+  canAddColumn: boolean;
+  canAddRow: boolean;
+  onAddColumn: () => void;
+  onAddRow: () => void;
+  scale: number;
+}) {
+  return (
+    <>
       <button
         type="button"
         aria-label="Add column"
@@ -327,7 +404,7 @@ export function TableToolbar({
           cursor: canAddColumn ? "pointer" : "not-allowed",
         }}
         onMouseDown={(event) => event.stopPropagation()}
-        onClick={addColumn}
+        onClick={onAddColumn}
       >
         +
       </button>
@@ -345,7 +422,7 @@ export function TableToolbar({
           cursor: canAddRow ? "pointer" : "not-allowed",
         }}
         onMouseDown={(event) => event.stopPropagation()}
-        onClick={addRow}
+        onClick={onAddRow}
       >
         +
       </button>

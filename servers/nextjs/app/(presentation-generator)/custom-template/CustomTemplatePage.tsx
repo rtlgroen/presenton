@@ -146,59 +146,10 @@ const LibreOfficeGate = ({
 };
 
 
-
-
-type CustomTemplatePageProps = {
-    useTemplateV2Generation?: boolean;
-};
-
-const CustomTemplatePage = ({
-    useTemplateV2Generation = false,
-}: CustomTemplatePageProps) => {
-    const router = useRouter();
-
-    const [schemaEditorSlideIndex, setSchemaEditorSlideIndex] = useState<number | null>(null);
-    const [schemaPreviewData, setSchemaPreviewData] = useState<Record<number, Record<string, any>>>({});
+function useLibreOfficeGate(router: ReturnType<typeof useRouter>) {
     const [libreStatus, setLibreStatus] = useState<LibreOfficeGateState>("checking");
     const [libreMessage, setLibreMessage] = useState("Checking LibreOffice availability...");
     const [libreProgress, setLibreProgress] = useState<number | undefined>();
-
-    const { selectedFile, handleFileSelect, removeFile } = useFileUpload();
-
-
-    const {
-        state,
-        uploadedFonts,
-        slides,
-        setSlides,
-        completedSlides,
-        checkFonts,
-        uploadFont,
-        removeFont,
-        fontUploadAndPreview,
-        initTemplateCreation,
-        retrySlide,
-    } = useTemplateCreation({ useTemplateV2Generation });
-
-    // Layout saving hook
-    const {
-        isSavingLayout,
-        isModalOpen,
-        openSaveModal,
-        closeSaveModal,
-        saveLayout,
-    } = useLayoutSaving(slides);
-
-
-    useEffect(() => {
-        const existingScript = document.querySelector('script[src*="tailwindcss.com"]');
-        if (!existingScript) {
-            const script = document.createElement("script");
-            script.src = TAILWIND_CDN_URL;
-            script.async = true;
-            document.head.appendChild(script);
-        }
-    }, []);
 
     const checkLibreOffice = useCallback(async () => {
         const api = window.electron;
@@ -318,6 +269,77 @@ const CustomTemplatePage = ({
         }
         router.push("/templates");
     }, [router]);
+
+    return {
+        cancelLibreOfficeInstall,
+        checkLibreOffice,
+        installLibreOffice,
+        leaveTemplateStudio,
+        libreMessage,
+        libreProgress,
+        libreStatus,
+    };
+}
+
+
+
+type CustomTemplatePageProps = {
+    useTemplateV2Generation?: boolean;
+};
+
+const CustomTemplatePage = ({
+    useTemplateV2Generation = false,
+}: CustomTemplatePageProps) => {
+    const router = useRouter();
+
+    const [schemaEditorSlideIndex, setSchemaEditorSlideIndex] = useState<number | null>(null);
+    const [schemaPreviewData, setSchemaPreviewData] = useState<Record<number, Record<string, any>>>({});
+    const {
+        cancelLibreOfficeInstall,
+        checkLibreOffice,
+        installLibreOffice,
+        leaveTemplateStudio,
+        libreMessage,
+        libreProgress,
+        libreStatus,
+    } = useLibreOfficeGate(router);
+
+    const { selectedFile, handleFileSelect, removeFile } = useFileUpload();
+
+
+    const {
+        state,
+        uploadedFonts,
+        slides,
+        setSlides,
+        completedSlides,
+        checkFonts,
+        uploadFont,
+        removeFont,
+        fontUploadAndPreview,
+        initTemplateCreation,
+        retrySlide,
+    } = useTemplateCreation({ useTemplateV2Generation });
+
+    // Layout saving hook
+    const {
+        isSavingLayout,
+        isModalOpen,
+        openSaveModal,
+        closeSaveModal,
+        saveLayout,
+    } = useLayoutSaving(slides);
+
+
+    useEffect(() => {
+        const existingScript = document.querySelector('script[src*="tailwindcss.com"]');
+        if (!existingScript) {
+            const script = document.createElement("script");
+            script.src = TAILWIND_CDN_URL;
+            script.async = true;
+            document.head.appendChild(script);
+        }
+    }, []);
 
     /**
      * Step 1: Check fonts in uploaded PPTX

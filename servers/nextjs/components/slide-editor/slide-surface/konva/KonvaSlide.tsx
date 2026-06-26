@@ -33,6 +33,7 @@ export function KonvaSlide({
   onChangeAtPath,
   onChangeMany,
   stageRef,
+  surfaceId,
   bulletsRenderMode,
   chartRenderMode,
   tableRenderMode,
@@ -74,6 +75,7 @@ export function KonvaSlide({
     updates: Array<{ index: number; element: SlideElement }>,
   ) => void;
   stageRef?: (stage: Konva.Stage | null) => void;
+  surfaceId?: string;
   bulletsRenderMode?: "canvas" | "proxy";
   chartRenderMode?: "canvas" | "proxy";
   tableRenderMode?: "canvas" | "proxy";
@@ -211,6 +213,7 @@ export function KonvaSlide({
         selectedIsComponentContainer={selectedIsComponentContainer}
         selectedPath={resolvedSelectedPath}
         slide={slide}
+        surfaceId={surfaceId}
         tableRenderMode={tableRenderMode}
         textRenderMode={textRenderMode}
         transformerRef={transformerRef}

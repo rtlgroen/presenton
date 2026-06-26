@@ -27,6 +27,10 @@ import {
 } from "../../../lib/chart-data";
 import { renderMarkdownTextContent } from "../../../lib/markdown-text";
 import { DomElementLayer, elementBoxStyle } from "../shared";
+import type {
+  SurfaceInteractionPreview,
+  SurfaceInteractionTarget,
+} from "../../konva/types";
 
 type SupportedChartJsType = "bar" | "line" | "pie" | "doughnut";
 
@@ -48,11 +52,15 @@ Chart.register(
 );
 
 export function ChartDomElement({
+  activeSurfaceInteraction,
   items,
   scale,
+  surfaceId,
 }: {
+  activeSurfaceInteraction?: SurfaceInteractionTarget;
   items: ResolvedLayoutItem[];
   scale: number;
+  surfaceId?: string;
 }) {
   return (
     <DomElementLayer>
@@ -61,7 +69,10 @@ export function ChartDomElement({
           <ChartCanvas
             key={item.path}
             element={item.element}
+            path={item.sourcePath}
+            preview={previewForItem(item, activeSurfaceInteraction)}
             scale={scale}
+            surfaceId={surfaceId}
           />
         ) : null,
       )}
@@ -71,10 +82,16 @@ export function ChartDomElement({
 
 function ChartCanvas({
   element,
+  path,
+  preview,
   scale,
+  surfaceId,
 }: {
   element: ChartEl;
+  path: string;
+  preview?: SurfaceInteractionPreview;
   scale: number;
+  surfaceId?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labels = useMemo(
@@ -249,10 +266,23 @@ function ChartCanvas({
     return () => chart.destroy();
   }, [element, labels, resolvedDatasets, title]);
 
-  const style = elementBoxStyle(element, scale);
+  const style = preview
+    ? {
+        ...elementBoxStyle(element, scale),
+        height: preview.height * scale,
+        left: preview.x * scale,
+        top: preview.y * scale,
+        transform: preview.rotation
+          ? `rotate(${preview.rotation}deg)`
+          : undefined,
+        width: preview.width * scale,
+      }
+    : elementBoxStyle(element, scale);
 
   return (
     <div
+      data-slide-chart-path={path}
+      data-slide-surface-id={surfaceId}
       style={{
         ...style,
         overflow: "hidden",
@@ -268,6 +298,14 @@ function ChartCanvas({
       />
     </div>
   );
+}
+
+function previewForItem(
+  item: ResolvedLayoutItem,
+  target?: SurfaceInteractionTarget,
+) {
+  if (!target?.preview) return undefined;
+  return target.path === item.sourcePath ? target.preview : undefined;
 }
 
 function markdownText(value: string | null | undefined) {

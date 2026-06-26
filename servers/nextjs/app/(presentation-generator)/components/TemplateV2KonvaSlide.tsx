@@ -73,6 +73,9 @@ export const TEMPLATE_V2_CHART_EDITOR_EVENT =
   "presenton:template-v2-chart-editor";
 export const TEMPLATE_V2_CHART_UPDATE_EVENT =
   "presenton:template-v2-chart-update";
+const TEMPLATE_V2_EDITOR_HOTKEY_OPTIONS = {
+  conflictBehavior: "allow" as const,
+};
 
 export type TemplateV2InsertElementsDetail = {
   elements: SlideElement[];
@@ -182,22 +185,7 @@ function TemplateV2KonvaSlideBody({
   presentationSlide: any;
   renderIndex?: number;
 }) {
-  const dispatch = useDispatch();
   const surfaceId = useId();
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const pendingImageUploadPathRef = useRef<ElementPath | null>(null);
-  const lastImagePointerRef = useRef<{ path: ElementPath; ts: number } | null>(
-    null,
-  );
-  const lastChartPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
-    null,
-  );
-  const suppressImageDoubleClickRef = useRef(false);
-  const lastTextPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
-    null,
-  );
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const initialDeck = useMemo(
     () =>
       DeckSchema.parse({
@@ -216,6 +204,120 @@ function TemplateV2KonvaSlideBody({
   const canRedo = useAtomValue(canRedoAtom);
   const undo = useSetAtom(undoAtom);
   const redo = useSetAtom(redoAtom);
+  const activeSlide = deck.slides[0];
+  const {
+    handleImageUploadChange,
+    handleRootClickCapture,
+    handleRootDoubleClickCapture,
+    handleRootPointerDownCapture,
+    imageUploadInputRef,
+    isSurfaceActive,
+    isUploadingImage,
+    openChartEditor,
+    openImageUpload,
+    rootRef,
+  } = useTemplateV2KonvaSlideController({
+    activeSlide,
+    isEditMode,
+    layout,
+    presentationSlide,
+    renderIndex,
+    surfaceId,
+  });
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative h-full w-full overflow-hidden bg-white"
+      style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}
+      onDoubleClickCapture={
+        isEditMode ? handleRootDoubleClickCapture : undefined
+      }
+      onClickCapture={isEditMode ? handleRootClickCapture : undefined}
+      onPointerDownCapture={
+        isEditMode ? handleRootPointerDownCapture : undefined
+      }
+    >
+      {isEditMode ? (
+        <TemplateV2EditorHotkeys
+          canRedo={canRedo}
+          canUndo={canUndo}
+          isSurfaceActive={isSurfaceActive}
+          onRedo={redo}
+          onUndo={undo}
+        />
+      ) : null}
+      {isEditMode ? (
+        <input
+          ref={imageUploadInputRef}
+          accept="image/*"
+          className="hidden"
+          type="file"
+          onChange={handleImageUploadChange}
+        />
+      ) : null}
+      {isEditMode ? (
+        <>
+          <WorkspaceToolbars
+            scale={STAGE_SCALE}
+            onEditChart={(index, path) =>
+              openChartEditor({ rootIndex: index, path: path ?? rootPath(index) })
+            }
+            onEditImage={openImageUpload}
+          />
+          <WorkspaceInlineEditors scale={STAGE_SCALE} />
+        </>
+      ) : null}
+      <SlideSurface
+        height={STAGE_HEIGHT}
+        interactive={isEditMode}
+        onEditImage={openImageUpload}
+        slide={activeSlide}
+        width={STAGE_WIDTH}
+      />
+      {isUploadingImage ? (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/35">
+          <div className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-[#191919] shadow-md">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Uploading image...
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function useTemplateV2KonvaSlideController({
+  activeSlide,
+  isEditMode,
+  layout,
+  presentationSlide,
+  renderIndex,
+  surfaceId,
+}: {
+  activeSlide: KonvaSlideData;
+  isEditMode: boolean;
+  layout: TemplateV2Layout;
+  presentationSlide: any;
+  renderIndex?: number;
+  surfaceId: string;
+}) {
+  const dispatch = useDispatch();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingImageUploadPathRef = useRef<ElementPath | null>(null);
+  const lastImagePointerRef = useRef<{ path: ElementPath; ts: number } | null>(
+    null,
+  );
+  const lastChartPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
+    null,
+  );
+  const suppressImageDoubleClickRef = useRef(false);
+  const lastTextPointerRef = useRef<{ path: ElementPath; ts: number } | null>(
+    null,
+  );
+  const lastSyncedSlideRef = useRef(JSON.stringify(activeSlide));
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const insertElements = useSetAtom(insertElementsAtom);
   const selectElement = useSetAtom(selectElementAtom);
   const updateElementAtPath = useSetAtom(updateElementAtPathAtom);
@@ -223,8 +325,6 @@ function TemplateV2KonvaSlideBody({
   const setEditingTextPath = useSetAtom(editingTextPathAtom);
   const setEditingChartIndex = useSetAtom(editingChartIndexAtom);
   const setEditingChartPath = useSetAtom(editingChartPathAtom);
-  const activeSlide = deck.slides[0];
-  const lastSyncedSlideRef = useRef(JSON.stringify(activeSlide));
   const isSurfaceActive = useCallback(
     () =>
       typeof document !== "undefined" &&
@@ -233,7 +333,9 @@ function TemplateV2KonvaSlideBody({
   );
   const surfaceSlideIndex = useMemo(() => {
     const index =
-      typeof renderIndex === "number" ? renderIndex : Number(presentationSlide.index);
+      typeof renderIndex === "number"
+        ? renderIndex
+        : Number(presentationSlide.index);
     return Number.isFinite(index) ? index : null;
   }, [presentationSlide.index, renderIndex]);
 
@@ -831,66 +933,18 @@ function TemplateV2KonvaSlideBody({
     };
   }, [activateSurface, clearSurface, isEditMode]);
 
-  return (
-    <div
-      ref={rootRef}
-      className="relative h-full w-full overflow-hidden bg-white"
-      style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}
-      onDoubleClickCapture={
-        isEditMode ? handleRootDoubleClickCapture : undefined
-      }
-      onClickCapture={isEditMode ? handleRootClickCapture : undefined}
-      onPointerDownCapture={
-        isEditMode ? handleRootPointerDownCapture : undefined
-      }
-    >
-      {isEditMode ? (
-        <TemplateV2EditorHotkeys
-          canRedo={canRedo}
-          canUndo={canUndo}
-          isSurfaceActive={isSurfaceActive}
-          onRedo={redo}
-          onUndo={undo}
-        />
-      ) : null}
-      {isEditMode ? (
-        <input
-          ref={imageUploadInputRef}
-          accept="image/*"
-          className="hidden"
-          type="file"
-          onChange={handleImageUploadChange}
-        />
-      ) : null}
-      {isEditMode ? (
-        <>
-          <WorkspaceToolbars
-            scale={STAGE_SCALE}
-            onEditChart={(index, path) =>
-              openChartEditor({ rootIndex: index, path: path ?? rootPath(index) })
-            }
-            onEditImage={openImageUpload}
-          />
-          <WorkspaceInlineEditors scale={STAGE_SCALE} />
-        </>
-      ) : null}
-      <SlideSurface
-        height={STAGE_HEIGHT}
-        interactive={isEditMode}
-        onEditImage={openImageUpload}
-        slide={activeSlide}
-        width={STAGE_WIDTH}
-      />
-      {isUploadingImage ? (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/35">
-          <div className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-medium text-[#191919] shadow-md">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Uploading image...
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+  return {
+    handleImageUploadChange,
+    handleRootClickCapture,
+    handleRootDoubleClickCapture,
+    handleRootPointerDownCapture,
+    imageUploadInputRef,
+    isSurfaceActive,
+    isUploadingImage,
+    openChartEditor,
+    openImageUpload,
+    rootRef,
+  };
 }
 
 function TemplateV2EditorHotkeys({
@@ -906,8 +960,6 @@ function TemplateV2EditorHotkeys({
   onRedo: () => void;
   onUndo: () => void;
 }) {
-  const options = { conflictBehavior: "allow" as const };
-
   useHotkey(
     "Mod+Z",
     (event) => {
@@ -916,7 +968,7 @@ function TemplateV2EditorHotkeys({
       event.stopPropagation();
       onUndo();
     },
-    options,
+    TEMPLATE_V2_EDITOR_HOTKEY_OPTIONS,
   );
 
   useHotkey(
@@ -927,7 +979,7 @@ function TemplateV2EditorHotkeys({
       event.stopPropagation();
       onRedo();
     },
-    options,
+    TEMPLATE_V2_EDITOR_HOTKEY_OPTIONS,
   );
 
   useHotkey(
@@ -938,7 +990,7 @@ function TemplateV2EditorHotkeys({
       event.stopPropagation();
       onRedo();
     },
-    options,
+    TEMPLATE_V2_EDITOR_HOTKEY_OPTIONS,
   );
 
   return null;

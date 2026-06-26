@@ -37,6 +37,7 @@ import { KonvaElement } from "./KonvaElement";
 import {
   SELECTION_STROKE,
   type ElementEvents,
+  type SurfaceInteractionPreview,
   type SurfaceInteractionTarget,
 } from "./types";
 
@@ -48,6 +49,54 @@ type ComponentPress = {
   indexes: number[];
   point: PressPoint;
   timer: ReturnType<typeof setTimeout>;
+};
+type ElementLayerProps = {
+  editingBulletsIndex?: number | null;
+  editingChartIndex?: number | null;
+  editingSvgIndex?: number | null;
+  editingTableIndex?: number | null;
+  editingTextIndex?: number | null;
+  activeSurfaceInteraction?: SurfaceInteractionTarget;
+  interactive: boolean;
+  nodeRefs: RefObject<Array<Konva.Node | null>>;
+  pathNodeRefs: MutableRefObject<Record<ElementPath, Konva.Node | null>>;
+  normalizedSelectionBox: Bounds | null;
+  bulletsRenderMode?: "canvas" | "proxy";
+  chartRenderMode?: "canvas" | "proxy";
+  onChange?: (index: number, element: SlideElement) => void;
+  onChangeAtPath?: (path: ElementPath, element: SlideElement) => void;
+  onChangeMany?: (
+    updates: Array<{ index: number; element: SlideElement }>,
+  ) => void;
+  onDelete?: () => void;
+  onEditBullets?: (index: number, path?: ElementPath) => void;
+  onEditChart?: (index: number, path?: ElementPath) => void;
+  onEditComponentRun?: (indexes: number[]) => void;
+  onEditImage?: (index: number, path?: ElementPath) => void;
+  onEditSvg?: (index: number, path?: ElementPath) => void;
+  onEditTable?: (index: number, path?: ElementPath) => void;
+  onEditText?: (index: number, path?: ElementPath) => void;
+  onSelect?: (index: number, additive?: boolean, path?: ElementPath) => void;
+  onSelectMany?: (indexes: number[]) => void;
+  onSelectTableCell?: (
+    index: number,
+    rowIndex: number,
+    colIndex: number,
+    path?: ElementPath,
+  ) => void;
+  onSurfaceInteractionChange?: (target: SurfaceInteractionTarget) => void;
+  scale: number;
+  selectedBounds: Bounds | null;
+  selectedIndexes: number[];
+  selectedIsComponentContainer: boolean;
+  selectedPath?: ElementPath | null;
+  slide: Slide;
+  surfaceId?: string;
+  tableRenderMode?: "canvas" | "proxy";
+  textRenderMode?: "canvas" | "proxy";
+  transformerRef: RefObject<Konva.Transformer | null>;
+  width: number;
+  height: number;
 };
 
 const COMPONENT_LONG_PRESS_MS = 550;
@@ -74,6 +123,23 @@ const SELECTION_VERTICAL_SIDE_ANCHORS = new Set([
 const SELECTION_CORNER_HANDLE_SIZE = 18;
 const SELECTION_SIDE_HANDLE_THICKNESS = 9;
 const SELECTION_SIDE_HANDLE_LENGTH = 30;
+
+function hashKey(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function slideElementKey(element: SlideElement) {
+  const explicitKey =
+    element.componentInstanceId ??
+    element.name ??
+    element.componentSlot ??
+    element.componentId;
+  return explicitKey ?? `${element.type}-${hashKey(JSON.stringify(element))}`;
+}
 
 function styleSelectionAnchor(anchor: Konva.Rect) {
   const anchorName = anchor.name().split(" ")[0];
@@ -121,7 +187,11 @@ function styleSelectionAnchor(anchor: Konva.Rect) {
   }
 }
 
-export function ElementLayer({
+export function ElementLayer(props: ElementLayerProps) {
+  return useElementLayerContent(props);
+}
+
+function useElementLayerContent({
   editingBulletsIndex,
   editingChartIndex,
   editingSvgIndex,
@@ -155,58 +225,13 @@ export function ElementLayer({
   selectedIsComponentContainer,
   selectedPath,
   slide,
+  surfaceId,
   tableRenderMode = "canvas",
   textRenderMode = "canvas",
   transformerRef,
   width,
   height,
-}: {
-  editingBulletsIndex?: number | null;
-  editingChartIndex?: number | null;
-  editingSvgIndex?: number | null;
-  editingTableIndex?: number | null;
-  editingTextIndex?: number | null;
-  activeSurfaceInteraction?: SurfaceInteractionTarget;
-  interactive: boolean;
-  nodeRefs: RefObject<Array<Konva.Node | null>>;
-  pathNodeRefs: MutableRefObject<Record<ElementPath, Konva.Node | null>>;
-  normalizedSelectionBox: Bounds | null;
-  bulletsRenderMode?: "canvas" | "proxy";
-  chartRenderMode?: "canvas" | "proxy";
-  onChange?: (index: number, element: SlideElement) => void;
-  onChangeAtPath?: (path: ElementPath, element: SlideElement) => void;
-  onChangeMany?: (
-    updates: Array<{ index: number; element: SlideElement }>,
-  ) => void;
-  onDelete?: () => void;
-  onEditBullets?: (index: number, path?: ElementPath) => void;
-  onEditChart?: (index: number, path?: ElementPath) => void;
-  onEditComponentRun?: (indexes: number[]) => void;
-  onEditImage?: (index: number, path?: ElementPath) => void;
-  onEditSvg?: (index: number, path?: ElementPath) => void;
-  onEditTable?: (index: number, path?: ElementPath) => void;
-  onEditText?: (index: number, path?: ElementPath) => void;
-  onSelect?: (index: number, additive?: boolean, path?: ElementPath) => void;
-  onSelectMany?: (indexes: number[]) => void;
-  onSelectTableCell?: (
-    index: number,
-    rowIndex: number,
-    colIndex: number,
-    path?: ElementPath,
-  ) => void;
-  onSurfaceInteractionChange?: (target: SurfaceInteractionTarget) => void;
-  scale: number;
-  selectedBounds: Bounds | null;
-  selectedIndexes: number[];
-  selectedIsComponentContainer: boolean;
-  selectedPath?: ElementPath | null;
-  slide: Slide;
-  tableRenderMode?: "canvas" | "proxy";
-  textRenderMode?: "canvas" | "proxy";
-  transformerRef: RefObject<Konva.Transformer | null>;
-  width: number;
-  height: number;
-}) {
+}: ElementLayerProps) {
   const { endGroupDrag, moveGroupDrag, startGroupDrag } = useGroupDrag({
     nodeRefs,
     onChangeMany,
@@ -232,6 +257,11 @@ export function ElementLayer({
 
   const [hoveredOverflow, setHoveredOverflow] = useState<number | null>(null);
   const componentPressRef = useRef<ComponentPress | null>(null);
+  const chartOverlayFrameRef = useRef<number | null>(null);
+  const chartOverlayPreviewRef = useRef<{
+    path: ElementPath;
+    preview: SurfaceInteractionPreview;
+  } | null>(null);
   const surfaceInteractionTargetRef = useRef<SurfaceInteractionTarget>(null);
   const lastClickRef = useRef<{ path: ElementPath; ts: number } | null>(null);
   const suppressSelectRef = useRef<Set<number> | null>(null);
@@ -266,15 +296,72 @@ export function ElementLayer({
       if (suppressSelectTimerRef.current) {
         clearTimeout(suppressSelectTimerRef.current);
       }
+      if (chartOverlayFrameRef.current != null) {
+        cancelAnimationFrame(chartOverlayFrameRef.current);
+      }
     },
     [onSurfaceInteractionChange],
   );
+
+  const chartOverlayForPath = (path: ElementPath) => {
+    if (typeof document === "undefined" || !surfaceId) return null;
+    const overlays = document.querySelectorAll<HTMLElement>(
+      "[data-slide-chart-path][data-slide-surface-id]",
+    );
+    return (
+      Array.from(overlays).find(
+        (node) =>
+          node.dataset.slideSurfaceId === surfaceId &&
+          node.dataset.slideChartPath === path,
+      ) ?? null
+    );
+  };
+
+  const applyChartOverlayPreview = (
+    path: ElementPath,
+    preview: SurfaceInteractionPreview,
+  ) => {
+    if (!surfaceId || typeof window === "undefined") return;
+    chartOverlayPreviewRef.current = { path, preview };
+    if (chartOverlayFrameRef.current != null) return;
+    chartOverlayFrameRef.current = window.requestAnimationFrame(() => {
+      chartOverlayFrameRef.current = null;
+      const current = chartOverlayPreviewRef.current;
+      if (!current) return;
+      const node = chartOverlayForPath(current.path);
+      if (!node) return;
+      node.style.left = `${current.preview.x * scale}px`;
+      node.style.top = `${current.preview.y * scale}px`;
+      node.style.width = `${current.preview.width * scale}px`;
+      node.style.height = `${current.preview.height * scale}px`;
+      node.style.transform = current.preview.rotation
+        ? `rotate(${current.preview.rotation}deg)`
+        : "";
+    });
+  };
+
+  const clearChartOverlayPreview = () => {
+    chartOverlayPreviewRef.current = null;
+    if (chartOverlayFrameRef.current != null) {
+      cancelAnimationFrame(chartOverlayFrameRef.current);
+      chartOverlayFrameRef.current = null;
+    }
+  };
 
   const setSurfaceInteractionTarget = (target: SurfaceInteractionTarget) => {
     const current = surfaceInteractionTargetRef.current;
     const keyForTarget = (item: SurfaceInteractionTarget) => {
       if (!item) return "";
-      return `${item.path}:${item.rootIndexes.join(",")}`;
+      const preview = item.preview
+        ? [
+            item.preview.x,
+            item.preview.y,
+            item.preview.width,
+            item.preview.height,
+            item.preview.rotation ?? 0,
+          ].join(",")
+        : "";
+      return `${item.path}:${item.rootIndexes.join(",")}:${preview}`;
     };
     const currentKey = current
       ? keyForTarget(current)
@@ -291,6 +378,42 @@ export function ElementLayer({
         ? selectedIndexes
         : [index];
     return { path, rootIndexes };
+  };
+
+  const previewFromNode = (
+    el: SlideElement,
+    node: Konva.Node,
+  ): SurfaceInteractionPreview => {
+    const scaleX = "scaleX" in node ? node.scaleX() : 1;
+    const scaleY = "scaleY" in node ? node.scaleY() : 1;
+    const widthValue = "width" in node ? node.width() : elementBox(el).w * scale;
+    const heightValue =
+      "height" in node ? node.height() : elementBox(el).h * scale;
+    const previewWidth = Math.max(0.1, (widthValue * scaleX) / scale);
+    const previewHeight = Math.max(0.1, (heightValue * scaleY) / scale);
+    const rawX = node.x() / scale;
+    const rawY = node.y() / scale;
+    return {
+      x: el.type === "ellipse" ? rawX - previewWidth / 2 : rawX,
+      y: el.type === "ellipse" ? rawY - previewHeight / 2 : rawY,
+      width: previewWidth,
+      height: previewHeight,
+      rotation: node.rotation(),
+    };
+  };
+
+  const interactionTargetWithPreview = (
+    index: number,
+    path: ElementPath,
+    el: SlideElement,
+    node: Konva.Node,
+  ) => {
+    const preview = previewFromNode(el, node);
+    if (el.type === "chart") applyChartOverlayPreview(path, preview);
+    return {
+      ...interactionTargetFor(index, path),
+      preview,
+    };
   };
 
   const suppressNextSelect = (indexes: number[]) => {
@@ -443,14 +566,17 @@ export function ElementLayer({
     },
     onTouchEnd: clearComponentPress,
     onTouchCancel: clearComponentPress,
-    onDragStart: () => {
+    onDragStart: (event: Konva.KonvaEventObject<DragEvent>) => {
       clearComponentPress();
-      const target = interactionTargetFor(index, path);
+      const target = interactionTargetWithPreview(index, path, el, event.target);
       setSurfaceInteractionTarget(target);
       startGroupDrag(index);
     },
     onDragMove: (event: Konva.KonvaEventObject<DragEvent>) => {
       moveGroupDrag(index, event);
+      setSurfaceInteractionTarget(
+        interactionTargetWithPreview(index, path, el, event.target),
+      );
     },
     onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => {
       if (endGroupDrag(index, event)) {
@@ -469,10 +595,20 @@ export function ElementLayer({
       if (path === rootPath(index)) onChange?.(index, next);
       else onChangeAtPath?.(path, next);
       setSurfaceInteractionTarget(null);
+      if (el.type === "chart") {
+        window.requestAnimationFrame(clearChartOverlayPreview);
+      }
     },
-    onTransformStart: () => {
+    onTransformStart: (event: Konva.KonvaEventObject<Event>) => {
       clearComponentPress();
-      setSurfaceInteractionTarget(interactionTargetFor(index, path));
+      setSurfaceInteractionTarget(
+        interactionTargetWithPreview(index, path, el, event.target),
+      );
+    },
+    onTransform: (event: Konva.KonvaEventObject<Event>) => {
+      setSurfaceInteractionTarget(
+        interactionTargetWithPreview(index, path, el, event.target),
+      );
     },
     onTransformEnd: (event: Konva.KonvaEventObject<Event>) => {
       const node = event.target;
@@ -508,6 +644,9 @@ export function ElementLayer({
       if (path === rootPath(index)) onChange?.(index, next);
       else onChangeAtPath?.(path, next);
       setSurfaceInteractionTarget(null);
+      if (el.type === "chart") {
+        window.requestAnimationFrame(clearChartOverlayPreview);
+      }
     },
   });
 
@@ -599,18 +738,19 @@ export function ElementLayer({
     <>
       {slide.elements.map((el, index) => {
         const path = rootPath(index);
+        const elementKey = slideElementKey(el);
         const forceCanvasForElement = shouldForceCanvasForPath(path);
         const elementBulletsRenderMode = renderModeForPath(
           bulletsRenderMode,
           path,
         );
-        const elementChartRenderMode = renderModeForPath(chartRenderMode, path);
+        const elementChartRenderMode = chartRenderMode;
         const elementTableRenderMode = renderModeForPath(tableRenderMode, path);
         const elementTextRenderMode = renderModeForPath(textRenderMode, path);
 
         return isLayoutElement(el) ? (
           <LayoutRootElement
-            key={index}
+            key={elementKey}
             element={el}
             bulletsRenderMode={elementBulletsRenderMode}
             chartRenderMode={elementChartRenderMode}
@@ -635,7 +775,7 @@ export function ElementLayer({
           />
         ) : (
           <KonvaElement
-            key={index}
+            key={elementKey}
             element={el}
             bulletsRenderMode={elementBulletsRenderMode}
             chartRenderMode={elementChartRenderMode}
@@ -678,7 +818,7 @@ export function ElementLayer({
             const badgeY = box.y * scale - 10;
             return (
               <Group
-                key={`overflow-${index}`}
+                key={`overflow-${slideElementKey(el)}`}
                 x={badgeX}
                 y={badgeY}
                 onMouseEnter={(event) => {
@@ -953,9 +1093,7 @@ function LayoutRootElement({
               : bulletsRenderMode
           }
           chartRenderMode={
-            forceCanvasRenderForPath(item.sourcePath)
-              ? "canvas"
-              : chartRenderMode
+            chartRenderMode
           }
           index={index}
           scale={scale}

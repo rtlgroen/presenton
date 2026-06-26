@@ -39,9 +39,18 @@ export type TableInteractionProps = {
   onTableCellClick?: (rowIndex: number, colIndex: number) => void;
 };
 
+export type SurfaceInteractionPreview = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+};
+
 export type SurfaceInteractionTarget = {
   path: ElementPath;
   rootIndexes: number[];
+  preview?: SurfaceInteractionPreview;
 } | null;
 
 export function geometry(

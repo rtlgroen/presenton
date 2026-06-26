@@ -7,6 +7,28 @@ import { CompiledLayout } from "@/app/hooks/compileLayout";
 import { TemplateV2LayoutPreview } from "../custom-template/components/EachSlide/TemplateV2LayoutPreview";
 import type { TemplateV2Layout } from "../custom-template/types";
 
+const LOADING_PREVIEW_KEYS = ["loading-preview-a", "loading-preview-b"];
+
+function hashKey(value: string) {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash).toString(36);
+}
+
+function templateV2PreviewKey(templateId: string, layout: TemplateV2Layout) {
+    const explicitId =
+        typeof layout.id === "string" && layout.id.trim()
+            ? layout.id.trim()
+            : "";
+    const description =
+        typeof layout.description === "string" && layout.description.trim()
+            ? layout.description.trim()
+            : "";
+    return `${templateId}-preview-${explicitId || description || hashKey(JSON.stringify(layout))}`;
+}
+
 
 
 
@@ -33,12 +55,10 @@ export const LayoutsBadge = memo(function LayoutsBadge({ count }: { count: numbe
 
 export const ScaledSlidePreview = memo(function ScaledSlidePreview({
     children,
-    id,
     index,
     isOutline = false,
 }: {
     children: React.ReactNode;
-    id: string;
     index: number;
     isOutline?: boolean;
 }) {
@@ -48,7 +68,6 @@ export const ScaledSlidePreview = memo(function ScaledSlidePreview({
     const SLIDE_NATIVE_HEIGHT = 720;
     return (
         <div
-            key={`${id}-preview-${index}`}
             className="relative"
             style={{ height: `${SLIDE_HEIGHT}px`, overflow: "hidden" }}
         >
@@ -82,7 +101,7 @@ export const InbuiltTemplatePreview = memo(function InbuiltTemplatePreview({
             {previewLayouts.map((layout, index) => {
                 const LayoutComponent = layout.component;
                 return (
-                    <ScaledSlidePreview key={`${templateId}-preview-${index}`} id={templateId} index={index} isOutline={isOutline}>
+                    <ScaledSlidePreview key={`${templateId}-preview-${layout.layoutId}`} index={index} isOutline={isOutline}>
                         <LayoutComponent data={layout.sampleData} />
                     </ScaledSlidePreview>
                 );
@@ -105,9 +124,9 @@ export const CustomTemplatePreview = memo(function CustomTemplatePreview({
     return (
         <div className="relative z-10 flex flex-col gap-3">
             {loading ? (
-                [...Array(2)].map((_, index) => (
+                LOADING_PREVIEW_KEYS.map((loadingKey) => (
                     <div
-                        key={`${templateId}-loading-${index}`}
+                        key={`${templateId}-${loadingKey}`}
                         className="relative w-full aspect-video flex items-center justify-center"
                     >
                         <Loader2 className="h-4 w-4 animate-spin text-slate-300" />
@@ -117,7 +136,7 @@ export const CustomTemplatePreview = memo(function CustomTemplatePreview({
                 previewLayouts.slice(0, 2).map((layout, index) => {
                     const LayoutComponent = layout.component;
                     return (
-                        <ScaledSlidePreview key={`${templateId}-preview-${index}`} id={templateId} index={index} isOutline={isOutline}>
+                        <ScaledSlidePreview key={`${templateId}-preview-${layout.layoutId}`} index={index} isOutline={isOutline}>
                             <LayoutComponent data={layout.sampleData} />
                         </ScaledSlidePreview>
                     );
@@ -141,9 +160,9 @@ export const TemplateV2CustomTemplatePreview = memo(function TemplateV2CustomTem
     return (
         <div className="relative z-10 flex flex-col gap-3">
             {loading ? (
-                [...Array(2)].map((_, index) => (
+                LOADING_PREVIEW_KEYS.map((loadingKey) => (
                     <div
-                        key={`${templateId}-loading-${index}`}
+                        key={`${templateId}-${loadingKey}`}
                         className="relative w-full aspect-video flex items-center justify-center"
                     >
                         <Loader2 className="h-4 w-4 animate-spin text-slate-300" />
@@ -151,7 +170,7 @@ export const TemplateV2CustomTemplatePreview = memo(function TemplateV2CustomTem
                 ))
             ) : (
                 previewLayouts.slice(0, 2).map((layout, index) => (
-                    <ScaledSlidePreview key={`${templateId}-preview-${index}`} id={templateId} index={index} isOutline={isOutline}>
+                    <ScaledSlidePreview key={templateV2PreviewKey(templateId, layout)} index={index} isOutline={isOutline}>
                         <TemplateV2LayoutPreview layout={layout} />
                     </ScaledSlidePreview>
                 ))

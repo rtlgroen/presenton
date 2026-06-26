@@ -11,6 +11,7 @@ import {
   type DomOverlayRendererKey,
 } from "../../registry";
 import type { TableCellSelection } from "../../state";
+import type { SurfaceInteractionTarget } from "../konva/types";
 import { BulletsDomElement } from "./bullets";
 import { ChartDomElement } from "./chart";
 import { SvgDomElement } from "./svg";
@@ -18,6 +19,7 @@ import { TableDomElement } from "./table";
 import { TextDomElement } from "./text";
 
 type DomOverlayRenderersProps = {
+  activeSurfaceInteraction?: SurfaceInteractionTarget;
   editingBulletsIndex?: number | null;
   editingBulletsPath?: ElementPath | null;
   editingTableIndex?: number | null;
@@ -30,12 +32,18 @@ type DomOverlayRenderersProps = {
   scale: number;
   selectedTableCell?: TableCellSelection | null;
   slide: Slide;
+  surfaceId?: string;
 };
 
 const DOM_OVERLAY_RENDERERS = {
   svg: ({ items = [], scale }) => <SvgDomElement items={items} scale={scale} />,
-  chart: ({ items = [], scale }) => (
-    <ChartDomElement items={items} scale={scale} />
+  chart: ({ activeSurfaceInteraction, items = [], scale, surfaceId }) => (
+    <ChartDomElement
+      activeSurfaceInteraction={activeSurfaceInteraction}
+      items={items}
+      scale={scale}
+      surfaceId={surfaceId}
+    />
   ),
   "text-list": ({ editingBulletsIndex, editingBulletsPath, items = [], scale }) => (
     <BulletsDomElement
@@ -91,6 +99,7 @@ export function DomOverlayRenderers(props: DomOverlayRenderersProps) {
           itemsByRenderer.get(renderer) ?? [],
           props.hiddenPaths,
           props.hiddenRootIndexes,
+          props.activeSurfaceInteraction,
         );
         return (
           <DomOverlayRenderer
@@ -118,6 +127,7 @@ function filterHiddenItems(
   items: ResolvedLayoutItem[],
   hiddenPaths?: ReadonlySet<ElementPath>,
   hiddenRootIndexes?: ReadonlySet<number>,
+  activeSurfaceInteraction?: SurfaceInteractionTarget,
 ) {
   if (!hiddenPaths?.size && !hiddenRootIndexes?.size) return items;
 
@@ -126,6 +136,15 @@ function filterHiddenItems(
     const hidden =
       hiddenPaths?.has(item.sourcePath) ||
       hiddenRootIndexes?.has(item.rootIndex);
+    if (
+      hidden &&
+      item.element.type === "chart" &&
+      activeSurfaceInteraction?.preview &&
+      activeSurfaceInteraction.path === item.sourcePath
+    ) {
+      changed = true;
+      return true;
+    }
     if (hidden) changed = true;
     return !hidden;
   });

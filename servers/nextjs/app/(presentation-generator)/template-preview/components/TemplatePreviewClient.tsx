@@ -19,6 +19,286 @@ type GroupLayoutPreviewProps = {
   useKonvaTemplateV2Preview?: boolean;
 };
 
+function hashKey(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function TemplatePreviewLoadingState() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-3 text-gray-600">Compiling templates...</span>
+      </div>
+    </div>
+  );
+}
+
+function TemplatePreviewErrorState({
+  error,
+  onBack,
+}: {
+  error: string | null | undefined;
+  onBack: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <div className="flex flex-col items-center justify-center py-24">
+        <h2 className="text-2xl font-bold text-red-600 mb-4">
+          Error loading template
+        </h2>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <Button onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Templates
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TemplatePreviewNotFoundState({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <div className="flex flex-col items-center justify-center py-24">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          Template not found
+        </h2>
+        <Button onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Templates
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TemplatePreviewHeader({
+  canDelete,
+  isTemplateV2,
+  layoutCount,
+  onDelete,
+  pathname,
+  templateDescription,
+  templateName,
+}: {
+  canDelete: boolean;
+  isTemplateV2: boolean;
+  layoutCount: number;
+  onDelete: () => void;
+  pathname: string;
+  templateDescription: string;
+  templateName: string;
+}) {
+  return (
+    <header className=" z-30">
+      <div className=" mx-auto px-6 pb-[30px]">
+        <div className="flex items-center justify-between mb-4 max-w-[1440px] mx-auto">
+          {canDelete && (
+            <div className="flex items-center justify-end ml-auto mr-0 gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  trackEvent(
+                    MixpanelEvent.TemplatePreview_Delete_Templates_Button_Clicked,
+                    { pathname },
+                  );
+                  trackEvent(MixpanelEvent.TemplatePreview_Delete_Templates_API_Call);
+                  onDelete();
+                }}
+                className="flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Template
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <h1 className="text-[64px] font-bold text-gray-900">
+              {templateName}
+            </h1>
+            {canDelete && (
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-sm">
+                {isTemplateV2 ? "Templates V2" : "Custom"}
+              </span>
+            )}
+          </div>
+          <p className="text-gray-600 text-xl">
+            {layoutCount} layout{layoutCount !== 1 ? "s" : ""} •{" "}
+            {templateDescription}
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function StaticTemplateLayouts({
+  templateParams,
+  templates,
+}: {
+  templateParams: string;
+  templates: any[];
+}) {
+  return (
+    <div
+      className="space-y-3   w-[1305px] p-2.5 bg-[#FFFFFF1A] rounded-[20px]  border border-[#EDECEC]  mx-auto"
+      style={{
+        boxShadow: "0 0 20px 0 rgba(122, 90, 248, 0.16) inset",
+      }}
+    >
+      {templates.map((template: any, index: number) => {
+        const LayoutComponent = template.component;
+
+        return (
+          <div
+            key={`${templateParams}-${template.layoutId}`}
+            id={template.layoutId}
+            className="overflow-hidden   rounded-tl-[10px] border border-[#EDEEEF] rounded-tr-[10px]"
+          >
+            <div className=" px-4 py-6 bg-white border-b border-[#EDEEEF] ">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="px-3 py-1 bg-[#7A5AF8] text-white  font-syne  rounded-full text-sm font-medium">
+                    {index + 1 < 10 ? `0${index + 1}` : index + 1}
+                  </span>
+                  <h3 className="text-xl font-semibold text-gray-900 mt-3">
+                    {template.layoutName}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1 ">
+                    {template.layoutDescription}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="  flex justify-center overflow-x-auto">
+              <div
+                className="flex-shrink-0"
+                style={{ width: "1280px", height: "720px" }}
+              >
+                <LayoutComponent data={template.sampleData} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TemplateV2LayoutList({
+  layouts,
+  templateV2Id,
+  useKonvaTemplateV2Preview,
+}: {
+  layouts: any[];
+  templateV2Id: string;
+  useKonvaTemplateV2Preview: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center w-full gap-10 aspect-video mx-auto">
+      {layouts.map((layout, index) => {
+        const layoutKey =
+          layout.id || layout.description || hashKey(JSON.stringify(layout));
+        return (
+          <Card
+            key={`${templateV2Id}-${layoutKey}`}
+            id={layout.id || `slide-${index + 1}`}
+            className="overflow-hidden shadow-md"
+          >
+            <div className="bg-white px-6 py-4 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {layout.id || `Slide ${index + 1}`}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+                    {layout.description}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-end justify-end ">
+                <span className="px-3 py-1 text-gray-600 rounded text-sm font-mono">
+                  {templateV2Id}:{layout.id || index + 1}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-6 flex justify-center overflow-x-auto">
+              <TemplateV2LayoutPreview
+                layout={layout}
+                useKonvaRenderer={useKonvaTemplateV2Preview}
+              />
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function CustomTemplateLayoutList({
+  layouts,
+  templateParams,
+}: {
+  layouts: CustomTemplateLayout[];
+  templateParams: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center w-full gap-10 aspect-video mx-auto">
+      {layouts.map((layout: CustomTemplateLayout) => {
+        const LayoutComponent = layout.component;
+        return (
+          <Card
+            key={`${templateParams}-${layout.layoutId}`}
+            id={layout.layoutId}
+            className="overflow-hidden shadow-md"
+          >
+            <div className="bg-white px-6 py-4 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {layout.rawLayoutName}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+                    {layout.layoutDescription}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-end justify-end ">
+                <span className="px-3 py-1  text-gray-600 rounded text-sm font-mono">
+                  {templateParams}:{layout.layoutId}
+                </span>
+              </div>
+            </div>
+
+            <div className=" p-6 flex justify-center overflow-x-auto">
+              <div
+                className="flex-shrink-0"
+                style={{ width: "1280px", height: "720px" }}
+              >
+                <LayoutComponent data={layout.sampleData} />
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 const GroupLayoutPreview = ({
   useKonvaTemplateV2Preview = false,
 }: GroupLayoutPreviewProps) => {
@@ -99,30 +379,15 @@ const GroupLayoutPreview = ({
   };
 
   if ((isCustom && customLoading) || (isTemplateV2 && templateV2Loading)) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <span className="ml-3 text-gray-600">Compiling templates...</span>
-        </div>
-      </div>
-    );
+    return <TemplatePreviewLoadingState />;
   }
 
   if ((isCustom && customError) || (isTemplateV2 && templateV2Error)) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="flex flex-col items-center justify-center py-24">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Error loading template</h2>
-          <p className="text-gray-600 mb-4">{customError || templateV2Error}</p>
-          <Button onClick={() => router.push("/templates")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Templates
-          </Button>
-        </div>
-      </div>
+      <TemplatePreviewErrorState
+        error={customError || templateV2Error}
+        onBack={() => router.push("/templates")}
+      />
     );
   }
 
@@ -132,18 +397,7 @@ const GroupLayoutPreview = ({
     (isTemplateV2 && !templateV2)
   ) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="flex flex-col items-center justify-center py-24">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Template not found
-          </h2>
-          <Button onClick={() => router.push("/templates")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Templates
-          </Button>
-        </div>
-      </div>
+      <TemplatePreviewNotFoundState onBack={() => router.push("/templates")} />
     );
   }
 
@@ -162,184 +416,37 @@ const GroupLayoutPreview = ({
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+      <TemplatePreviewHeader
+        canDelete={isCustom || isTemplateV2}
+        isTemplateV2={isTemplateV2}
+        layoutCount={layoutCount}
+        onDelete={isTemplateV2 ? handleDeleteTemplateV2 : handleDeleteCustomTemplate}
+        pathname={pathname}
+        templateDescription={templateDescription}
+        templateName={templateName}
+      />
 
-      <header className=" z-30">
-        <div className=" mx-auto px-6 pb-[30px]">
-          <div className="flex items-center justify-between mb-4 max-w-[1440px] mx-auto">
-
-
-            {(isCustom || isTemplateV2) && (
-              <div className="flex items-center justify-end ml-auto mr-0 gap-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    trackEvent(MixpanelEvent.TemplatePreview_Delete_Templates_Button_Clicked, { pathname });
-                    trackEvent(MixpanelEvent.TemplatePreview_Delete_Templates_API_Call);
-                    if (isTemplateV2) {
-                      handleDeleteTemplateV2();
-                    } else {
-                      handleDeleteCustomTemplate();
-                    }
-                  }}
-                  className="flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete Template
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <h1 className="text-[64px] font-bold text-gray-900">{templateName}</h1>
-              {(isCustom || isTemplateV2) && (
-                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-sm">
-                  {isTemplateV2 ? "Templates V2" : "Custom"}
-                </span>
-              )}
-            </div>
-            <p className="text-gray-600 text-xl">
-              {layoutCount} layout{layoutCount !== 1 ? "s" : ""} •{" "}
-              {templateDescription}
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto h-full mb-4" >
+      <div className="mx-auto h-full mb-4">
         {!isCustom && !isTemplateV2 && (
-          <div className="space-y-3   w-[1305px] p-2.5 bg-[#FFFFFF1A] rounded-[20px]  border border-[#EDECEC]  mx-auto"
-            style={{
-              boxShadow: "0 0 20px 0 rgba(122, 90, 248, 0.16) inset",
-
-            }}
-          >
-            {staticTemplates.map((template: any, index: number) => {
-              const LayoutComponent = template.component;
-
-              return (
-                <div
-                  key={`${templateParams}-${template.layoutId}-${index}`}
-                  id={template.layoutId}
-                  className="overflow-hidden   rounded-tl-[10px] border border-[#EDEEEF] rounded-tr-[10px]"
-                >
-                  <div className=" px-4 py-6 bg-white border-b border-[#EDEEEF] ">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="px-3 py-1 bg-[#7A5AF8] text-white  font-syne  rounded-full text-sm font-medium">
-                          {index + 1 < 10 ? `0${index + 1}` : index + 1}
-                        </span>
-                        <h3 className="text-xl font-semibold text-gray-900 mt-3">
-                          {template.layoutName}
-                        </h3>
-                        <p className="text-sm text-gray-500 mt-1 ">
-                          {template.layoutDescription}
-                        </p>
-                      </div>
-                      {/* <div className="flex items-center gap-3">
-                        <span className="px-3 py-1  text-gray-600 rounded text-sm font-mono">
-                          {template.layoutId}
-                        </span>
-                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                          #{index + 1}
-                        </span>
-                      </div> */}
-                    </div>
-                  </div>
-
-                  <div className="  flex justify-center overflow-x-auto">
-                    <div
-                      className="flex-shrink-0"
-                      style={{ width: "1280px", height: "720px" }}
-                    >
-                      <LayoutComponent data={template.sampleData} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <StaticTemplateLayouts
+            templateParams={templateParams}
+            templates={staticTemplates}
+          />
         )}
 
         {isTemplateV2 && (
-          <div className="flex flex-col items-center justify-center w-full gap-10 aspect-video mx-auto">
-            {templateV2Layouts.map((layout, index) => (
-              <Card
-                key={`${templateV2Id}-${layout.id || index}`}
-                id={layout.id || `slide-${index + 1}`}
-                className="overflow-hidden shadow-md"
-              >
-                <div className="bg-white px-6 py-4 border-b">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">
-                        {layout.id || `Slide ${index + 1}`}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-                        {layout.description}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-end justify-end ">
-                    <span className="px-3 py-1 text-gray-600 rounded text-sm font-mono">
-                      {templateV2Id}:{layout.id || index + 1}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-6 flex justify-center overflow-x-auto">
-                  <TemplateV2LayoutPreview
-                    layout={layout}
-                    useKonvaRenderer={useKonvaTemplateV2Preview}
-                  />
-                </div>
-              </Card>
-            ))}
-          </div>
+          <TemplateV2LayoutList
+            layouts={templateV2Layouts}
+            templateV2Id={templateV2Id}
+            useKonvaTemplateV2Preview={useKonvaTemplateV2Preview}
+          />
         )}
 
-        {isCustom && (
-          <div className="flex flex-col items-center justify-center w-full gap-10 aspect-video mx-auto">
-            {customTemplate && customTemplate.layouts.map((layout: CustomTemplateLayout, index: number) => {
-              const LayoutComponent = layout.component;
-              return (
-                <Card
-                  key={`${templateParams}-${layout.layoutId}-${index}`}
-                  id={layout.layoutId}
-                  className="overflow-hidden shadow-md"
-                >
-                  <div className="bg-white px-6 py-4 border-b">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900">
-                          {layout.rawLayoutName}
-                        </h3>
-                        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-                          {layout.layoutDescription}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-end ">
-                      <span className="px-3 py-1  text-gray-600 rounded text-sm font-mono">
-                        {templateParams}:{layout.layoutId}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className=" p-6 flex justify-center overflow-x-auto">
-                    <div
-                      className="flex-shrink-0"
-                      style={{ width: "1280px", height: "720px" }}
-                    >
-                      <LayoutComponent data={layout.sampleData} />
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+        {isCustom && customTemplate && (
+          <CustomTemplateLayoutList
+            layouts={customTemplate.layouts}
+            templateParams={templateParams}
+          />
         )}
       </div>
     </div>

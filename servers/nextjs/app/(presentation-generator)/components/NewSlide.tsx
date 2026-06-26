@@ -28,6 +28,12 @@ interface LayoutItemProps {
 
 const PREVIEW_WIDTH = 1280;
 const PREVIEW_HEIGHT = 720;
+const EMPTY_SLIDE_LAYOUT = {
+  layoutId: BLANK_SLIDE_LAYOUT_ID,
+  layoutName: "Empty Slide",
+  sampleData: {},
+  isEmptySlide: true,
+};
 
 function createTemplateV2LayoutItem(layout: TemplateV2Layout, layoutIndex: number) {
   const layoutId =
@@ -224,15 +230,9 @@ const NewSlideV1 = ({
     };
   }, [isCustomTemplate, isTemplateV2, presentationLayout, templateID]);
 
-  const emptySlideLayout = {
-    layoutId: BLANK_SLIDE_LAYOUT_ID,
-    layoutName: "Empty Slide",
-    sampleData: {},
-    isEmptySlide: true,
-  };
   const showEmptySlideLayout = isTemplateV2;
   const selectableLayouts = showEmptySlideLayout
-    ? [emptySlideLayout, ...layouts]
+    ? [EMPTY_SLIDE_LAYOUT, ...layouts]
     : layouts;
   const layoutCountText = showEmptySlideLayout
     ? `${selectableLayouts.length} Option${selectableLayouts.length === 1 ? "" : "s"}`

@@ -142,6 +142,10 @@ function markdownText(value: string | null | undefined) {
   return text ? renderMarkdownTextContent([{ text }]) : "";
 }
 
+function chartDatumKey(datum: ChartDatum) {
+  return `${datum.label}:${datum.value}:${datum.color ?? ""}`;
+}
+
 function BarChartParts({
   data,
   max,
@@ -180,7 +184,7 @@ function BarChartParts({
         const x = plot.x + index * (barW + gap);
         const y = plot.y + plot.h - barH;
         return (
-          <Group key={`${datum.label}-${index}`}>
+          <Group key={chartDatumKey(datum)}>
             <Rect
               x={x}
               y={y}
@@ -264,7 +268,7 @@ function LineChartParts({
           (data.length === 1 ? 0 : (index / (data.length - 1)) * plot.w);
         const cy = plot.y + plotH - (datum.value / max) * plotH * 0.82;
         return (
-          <Group key={`${datum.label}-${index}`}>
+          <Group key={chartDatumKey(datum)}>
             <Ellipse
               x={cx}
               y={cy}
@@ -343,9 +347,9 @@ function DonutChartParts({
 
   return (
     <>
-      {slices.map(({ datum, angle, rotation, index }) => (
+      {slices.map(({ datum, angle, rotation }) => (
         <Arc
-          key={`${datum.label}-${index}`}
+          key={chartDatumKey(datum)}
           x={cx}
           y={cy}
           innerRadius={donut ? radius * 0.55 : 0}
@@ -370,7 +374,7 @@ function DonutChartParts({
       ) : null}
       {data.map((datum, index) => (
         <Group
-          key={`${datum.label}-legend-${index}`}
+          key={`legend-${chartDatumKey(datum)}`}
           x={cx + radius + 18 * (scale / PX_PER_IN)}
           y={plot.y + index * 18 * (scale / PX_PER_IN)}
         >

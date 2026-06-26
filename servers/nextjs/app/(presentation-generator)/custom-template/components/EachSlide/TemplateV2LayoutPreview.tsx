@@ -22,6 +22,35 @@ type Box = {
   height?: number;
 };
 
+function hashKey(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function layoutElementKey(element: TemplateV2Element) {
+  const record = element as Record<string, unknown>;
+  const explicitKey =
+    readString(record.name) ??
+    readString(record.componentInstanceId) ??
+    readString(record.component_instance_id) ??
+    readString(record.componentId) ??
+    readString(record.component_id) ??
+    readString(record.componentSlot) ??
+    readString(record.component_slot);
+  return explicitKey ?? `${readString(record.type) ?? "element"}-${hashKey(JSON.stringify(element))}`;
+}
+
+function tableCellKey(cell: unknown) {
+  return hashKey(JSON.stringify(cell));
+}
+
+function tableRowKey(row: unknown) {
+  return hashKey(JSON.stringify(row));
+}
+
 interface TemplateV2LayoutPreviewProps {
   layout: TemplateV2Layout;
   slideDisplayRef?: React.RefObject<HTMLDivElement | null>;
@@ -64,8 +93,8 @@ export const TemplateV2LayoutPreview: React.FC<TemplateV2LayoutPreviewProps> = (
       ref={slideDisplayRef}
       className="relative mx-auto h-[720px] w-[1280px] overflow-hidden bg-white"
     >
-      {elements.map((element, index) =>
-        renderElement(element, `layout-element-${index}`, "absolute")
+      {elements.map((element) =>
+        renderElement(element, `layout-element-${layoutElementKey(element)}`, "absolute")
       )}
     </div>
   );
@@ -221,9 +250,9 @@ function renderText(element: TemplateV2Element, key: string, mode: RenderMode) {
       }}
     >
       <span style={{ width: "100%" }}>
-        {runs.map((run, index) => (
+        {runs.map((run) => (
           <span
-            key={`${key}-run-${index}`}
+            key={`${key}-run-${hashKey(JSON.stringify(run))}`}
             style={fontStyle({ ...(element.font ?? {}), ...(run.font ?? {}) })}
           >
             {run.text ?? ""}
@@ -319,8 +348,8 @@ function renderTable(element: TemplateV2Element, key: string, mode: RenderMode) 
         {columns.length > 0 && (
           <thead>
             <tr>
-              {columns.map((cell, index) => (
-                <th key={`${key}-head-${index}`} style={tableCellStyle(cell, true)}>
+              {columns.map((cell) => (
+                <th key={`${key}-head-${tableCellKey(cell)}`} style={tableCellStyle(cell, true)}>
                   {readCellText(cell)}
                 </th>
               ))}
@@ -328,11 +357,11 @@ function renderTable(element: TemplateV2Element, key: string, mode: RenderMode) 
           </thead>
         )}
         <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={`${key}-row-${rowIndex}`}>
-              {(Array.isArray(row) ? row : []).map((cell, cellIndex) => (
+          {rows.map((row) => (
+            <tr key={`${key}-row-${tableRowKey(row)}`}>
+              {(Array.isArray(row) ? row : []).map((cell) => (
                 <td
-                  key={`${key}-row-${rowIndex}-cell-${cellIndex}`}
+                  key={`${key}-cell-${tableCellKey(cell)}`}
                   style={tableCellStyle(cell, false)}
                 >
                   {readCellText(cell)}
@@ -417,8 +446,8 @@ function renderFlex(element: TemplateV2Element, key: string, mode: RenderMode) {
         overflow: "hidden",
       }}
     >
-      {children.map((child, index) =>
-        renderElement(child, `${key}-child-${index}`, "flow")
+      {children.map((child) =>
+        renderElement(child, `${key}-child-${layoutElementKey(child)}`, "flow")
       )}
     </div>
   );
@@ -447,8 +476,8 @@ function renderGrid(element: TemplateV2Element, key: string, mode: RenderMode) {
         rowGap: px(readNumber(element.row_gap) ?? readNumber(element.gap) ?? 0),
       }}
     >
-      {children.map((child, index) =>
-        renderElement(child, `${key}-child-${index}`, "flow")
+      {children.map((child) =>
+        renderElement(child, `${key}-child-${layoutElementKey(child)}`, "flow")
       )}
     </div>
   );
@@ -467,8 +496,8 @@ function renderGroup(element: TemplateV2Element, key: string, mode: RenderMode) 
         overflow: "visible",
       }}
     >
-      {children.map((child, index) =>
-        renderElement(child, `${key}-child-${index}`, "absolute")
+      {children.map((child) =>
+        renderElement(child, `${key}-child-${layoutElementKey(child)}`, "absolute")
       )}
     </div>
   );

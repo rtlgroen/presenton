@@ -960,6 +960,226 @@ const BlocksPanel = ({
   );
 };
 
+function AiSparklesIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="19"
+      height="18"
+      viewBox="0 0 19 18"
+      fill="none"
+    >
+      <path
+        d="M14.9386 7.38709C12.9195 7.19256 11.3219 5.59566 11.1276 3.57829L10.7997 0.171875L10.4718 3.57829C10.2775 5.596 8.67987 7.1929 6.66079 7.38709L3.25684 7.71473L6.66079 8.04237C8.67987 8.23691 10.2775 9.8338 10.4718 11.8512L10.7997 15.2576L11.1276 11.8512C11.3219 9.83346 12.9195 8.23656 14.9386 8.04237L18.3426 7.71473L14.9386 7.38709Z"
+        fill="#7A5AF8"
+      />
+      <path
+        d="M7.08427 13.146C5.95358 13.0371 5.0589 12.1428 4.95008 11.0131L4.76648 9.10547L4.58288 11.0131C4.47406 12.143 3.57938 13.0372 2.44869 13.146L0.54248 13.3295L2.44869 13.5129C3.57938 13.6219 4.47406 14.5161 4.58288 15.6459L4.76648 17.5535L4.95008 15.6459C5.0589 14.516 5.95358 13.6217 7.08427 13.5129L8.99048 13.3295L7.08427 13.146Z"
+        fill="#7A5AF8"
+      />
+    </svg>
+  );
+}
+
+function BlocksIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+    >
+      <path
+        d="M2.3335 8.16602H5.8335"
+        stroke="#7A5AF8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2.3335 1.16602H8.16683"
+        stroke="#7A5AF8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M11.0835 10.5H2.91683C2.59466 10.5 2.3335 10.7612 2.3335 11.0833V12.25C2.3335 12.5722 2.59466 12.8333 2.91683 12.8333H11.0835C11.4057 12.8333 11.6668 12.5722 11.6668 12.25V11.0833C11.6668 10.7612 11.4057 10.5 11.0835 10.5Z"
+        stroke="#7A5AF8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M11.0835 3.5H2.91683C2.59466 3.5 2.3335 3.76117 2.3335 4.08333V5.25C2.3335 5.57217 2.59466 5.83333 2.91683 5.83333H11.0835C11.4057 5.83333 11.6668 5.57217 11.6668 5.25V4.08333C11.6668 3.76117 11.4057 3.5 11.0835 3.5Z"
+        stroke="#7A5AF8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PrimaryActionButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="mt-10 first:mt-0" onClick={onClick}>
+      <p
+        className={`p-1.5 flex items-center justify-center rounded-[10px] border border-transparent ${
+          active ? "border-[#EDEEEF] bg-white" : ""
+        }`}
+        style={{
+          boxShadow: active ? "0 6.6px 13.2px 0 rgba(124, 81, 248, 0.14)" : "",
+        }}
+      >
+        {icon}
+      </p>
+      <p className="text-[#7A5AF8] text-xs mt-1">{label}</p>
+    </button>
+  );
+}
+
+function ActionsSidebar({
+  activeAction,
+  onActionSelect,
+}: {
+  activeAction: ActionId;
+  onActionSelect: (action: ActionId) => void;
+}) {
+  return (
+    <aside className="flex h-full w-[70px] shrink-0 flex-col items-center border-r border-[#F4F4F5]  py-5">
+      <div
+        className="flex w-full space-y-10 flex-col items-center rounded-[10px]  py-7"
+        style={{
+          background: "rgba(244, 243, 255, 0.60)",
+        }}
+      >
+        <PrimaryActionButton
+          active={activeAction === "ai"}
+          icon={<AiSparklesIcon />}
+          label="AI"
+          onClick={() => onActionSelect("ai")}
+        />
+        <PrimaryActionButton
+          active={activeAction === "blocks"}
+          icon={<BlocksIcon />}
+          label="Blocks"
+          onClick={() => onActionSelect("blocks")}
+        />
+      </div>
+
+      <div className="my-6 px-1 h-px w-[30px] bg-[#EDEEEF]" />
+
+      <nav className="flex w-full space-y-10 flex-1 flex-col items-center gap-3">
+        {insertActions.map((item) => (
+          <NavButton
+            key={item.id}
+            item={item}
+            active={activeAction === item.id}
+            onClick={() => onActionSelect(item.id)}
+          />
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function ActionsPanel({
+  activeAction,
+  chartEditor,
+  chatProps,
+  onBlockSelect,
+  onChartChange,
+  onChartClose,
+  onChartItemSelect,
+  onElementItemSelect,
+  onImageItemSelect,
+  onTableItemSelect,
+  onTextItemSelect,
+  presentationData,
+  presentationId,
+}: {
+  activeAction: ActionId;
+  chartEditor: ChartEditorState | null;
+  chatProps: Omit<PresentationActionsProps, "presentationData">;
+  onBlockSelect: (block: TemplateBlock) => void;
+  onChartChange: (chart: ChartElement) => void;
+  onChartClose: () => void;
+  onChartItemSelect: (item: PaletteItem) => void;
+  onElementItemSelect: (item: PaletteItem) => void;
+  onImageItemSelect: (item: PaletteItem) => void;
+  onTableItemSelect: (item: PaletteItem) => void;
+  onTextItemSelect: (item: PaletteItem) => void;
+  presentationData?: unknown;
+  presentationId: string;
+}) {
+  return (
+    <div className="min-w-0 flex-1 bg-white">
+      <div className={cn("h-full", activeAction === "ai" ? "block" : "hidden")}>
+        <Chat {...chatProps} />
+      </div>
+
+      {activeAction === "blocks" && (
+        <BlocksPanel
+          presentationId={presentationId}
+          presentationData={presentationData}
+          onInsertBlock={onBlockSelect}
+        />
+      )}
+      {activeAction === "texts" && (
+        <InsertPanel
+          title="Texts"
+          groups={[{ label: "Add", items: textItems }]}
+          onItemSelect={onTextItemSelect}
+        />
+      )}
+      {activeAction === "charts" &&
+        (chartEditor ? (
+          <ChartEditorContent
+            chart={chartEditor.chart}
+            chartPath={chartEditor.path}
+            onChange={onChartChange}
+            onClose={onChartClose}
+          />
+        ) : (
+          <InsertPanel
+            title="Charts"
+            groups={[{ label: "Chart Type", items: chartTypeItems }]}
+            onItemSelect={onChartItemSelect}
+          />
+        ))}
+      {activeAction === "tables" && (
+        <InsertPanel
+          title="Tables"
+          groups={[{ label: "Table Type", items: tableTypeItems }]}
+          onItemSelect={onTableItemSelect}
+        />
+      )}
+      {activeAction === "images" && (
+        <InsertPanel
+          title="Images"
+          groups={[{ label: "Add", items: imageItems }]}
+          onItemSelect={onImageItemSelect}
+        />
+      )}
+      {activeAction === "elements" && (
+        <InsertPanel
+          title="Elements"
+          groups={[{ label: "Add", items: elementItems }]}
+          onItemSelect={onElementItemSelect}
+        />
+      )}
+    </div>
+  );
+}
+
 const PresentationActions = (props: PresentationActionsProps) => {
   const { presentationData, ...chatProps } = props;
   const [activeAction, setActiveAction] = useState<ActionId>("ai");
@@ -1120,166 +1340,25 @@ const PresentationActions = (props: PresentationActionsProps) => {
 
   return (
     <div className="flex h-full w-full overflow-hidden  bg-white px-2 py-1.5">
-      <aside className="flex h-full w-[70px] shrink-0 flex-col items-center border-r border-[#F4F4F5]  py-5">
-        <div
-          className="flex w-full space-y-10 flex-col items-center rounded-[10px]  py-7"
-          style={{
-            background: "rgba(244, 243, 255, 0.60)",
-          }}
-        >
-          <button className="" onClick={() => setActiveAction("ai")}>
-            <p
-              className={`p-1.5 flex items-center justify-center rounded-[10px] border border-transparent ${
-                activeAction === "ai" ? "border-[#EDEEEF] bg-white" : ""
-              }`}
-              style={{
-                boxShadow:
-                  activeAction === "ai"
-                    ? "0 6.6px 13.2px 0 rgba(124, 81, 248, 0.14)"
-                    : "",
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="19"
-                height="18"
-                viewBox="0 0 19 18"
-                fill="none"
-              >
-                <path
-                  d="M14.9386 7.38709C12.9195 7.19256 11.3219 5.59566 11.1276 3.57829L10.7997 0.171875L10.4718 3.57829C10.2775 5.596 8.67987 7.1929 6.66079 7.38709L3.25684 7.71473L6.66079 8.04237C8.67987 8.23691 10.2775 9.8338 10.4718 11.8512L10.7997 15.2576L11.1276 11.8512C11.3219 9.83346 12.9195 8.23656 14.9386 8.04237L18.3426 7.71473L14.9386 7.38709Z"
-                  fill="#7A5AF8"
-                />
-                <path
-                  d="M7.08427 13.146C5.95358 13.0371 5.0589 12.1428 4.95008 11.0131L4.76648 9.10547L4.58288 11.0131C4.47406 12.143 3.57938 13.0372 2.44869 13.146L0.54248 13.3295L2.44869 13.5129C3.57938 13.6219 4.47406 14.5161 4.58288 15.6459L4.76648 17.5535L4.95008 15.6459C5.0589 14.516 5.95358 13.6217 7.08427 13.5129L8.99048 13.3295L7.08427 13.146Z"
-                  fill="#7A5AF8"
-                />
-              </svg>
-            </p>
-            <p className="text-[#7A5AF8] text-xs mt-1">AI</p>
-          </button>
-          <button className="mt-10" onClick={() => setActiveAction("blocks")}>
-            <p
-              className={`p-1.5 flex justify-center items-center rounded-[10px] border border-transparent ${
-                activeAction === "blocks" ? "border-[#EDEEEF] bg-white" : ""
-              }`}
-              style={{
-                boxShadow:
-                  activeAction === "blocks"
-                    ? "0 6.6px 13.2px 0 rgba(124, 81, 248, 0.14)"
-                    : "",
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-              >
-                <path
-                  d="M2.3335 8.16602H5.8335"
-                  stroke="#7A5AF8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M2.3335 1.16602H8.16683"
-                  stroke="#7A5AF8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M11.0835 10.5H2.91683C2.59466 10.5 2.3335 10.7612 2.3335 11.0833V12.25C2.3335 12.5722 2.59466 12.8333 2.91683 12.8333H11.0835C11.4057 12.8333 11.6668 12.5722 11.6668 12.25V11.0833C11.6668 10.7612 11.4057 10.5 11.0835 10.5Z"
-                  stroke="#7A5AF8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M11.0835 3.5H2.91683C2.59466 3.5 2.3335 3.76117 2.3335 4.08333V5.25C2.3335 5.57217 2.59466 5.83333 2.91683 5.83333H11.0835C11.4057 5.83333 11.6668 5.57217 11.6668 5.25V4.08333C11.6668 3.76117 11.4057 3.5 11.0835 3.5Z"
-                  stroke="#7A5AF8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </p>
-            <p className="text-[#7A5AF8] text-xs mt-1">Blocks</p>
-          </button>
-        </div>
-
-        <div className="my-6 px-1 h-px w-[30px] bg-[#EDEEEF]" />
-
-        <nav className="flex w-full space-y-10 flex-1 flex-col items-center gap-3">
-          {insertActions.map((item) => (
-            <NavButton
-              key={item.id}
-              item={item}
-              active={activeAction === item.id}
-              onClick={() => setActiveAction(item.id)}
-            />
-          ))}
-        </nav>
-      </aside>
-
-      <div className="min-w-0 flex-1 bg-white">
-        <div
-          className={cn("h-full", activeAction === "ai" ? "block" : "hidden")}
-        >
-          <Chat {...chatProps} />
-        </div>
-
-        {activeAction === "blocks" && (
-          <BlocksPanel
-            presentationId={props.presentationId}
-            presentationData={presentationData}
-            onInsertBlock={handleBlockSelect}
-          />
-        )}
-        {activeAction === "texts" && (
-          <InsertPanel
-            title="Texts"
-            groups={[{ label: "Add", items: textItems }]}
-            onItemSelect={handleTextItemSelect}
-          />
-        )}
-        {activeAction === "charts" && (
-          chartEditor ? (
-            <ChartEditorContent
-              chart={chartEditor.chart}
-              chartPath={chartEditor.path}
-              onChange={updateChartEditor}
-              onClose={closeChartEditor}
-            />
-          ) : (
-            <InsertPanel
-              title="Charts"
-              groups={[{ label: "Chart Type", items: chartTypeItems }]}
-              onItemSelect={handleChartItemSelect}
-            />
-          )
-        )}
-        {activeAction === "tables" && (
-          <InsertPanel
-            title="Tables"
-            groups={[{ label: "Table Type", items: tableTypeItems }]}
-            onItemSelect={handleTableItemSelect}
-          />
-        )}
-        {activeAction === "images" && (
-          <InsertPanel
-            title="Images"
-            groups={[{ label: "Add", items: imageItems }]}
-            onItemSelect={handleImageItemSelect}
-          />
-        )}
-        {activeAction === "elements" && (
-          <InsertPanel
-            title="Elements"
-            groups={[{ label: "Add", items: elementItems }]}
-            onItemSelect={handleElementItemSelect}
-          />
-        )}
-      </div>
+      <ActionsSidebar
+        activeAction={activeAction}
+        onActionSelect={setActiveAction}
+      />
+      <ActionsPanel
+        activeAction={activeAction}
+        chartEditor={chartEditor}
+        chatProps={chatProps}
+        onBlockSelect={handleBlockSelect}
+        onChartChange={updateChartEditor}
+        onChartClose={closeChartEditor}
+        onChartItemSelect={handleChartItemSelect}
+        onElementItemSelect={handleElementItemSelect}
+        onImageItemSelect={handleImageItemSelect}
+        onTableItemSelect={handleTableItemSelect}
+        onTextItemSelect={handleTextItemSelect}
+        presentationData={presentationData}
+        presentationId={props.presentationId}
+      />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import type Konva from "konva";
 import { useAtomValue } from "jotai";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { SLIDE_W, type Slide, type SlideElement } from "../lib/slide-schema";
 import { isRootPath, type ElementPath } from "../lib/element-path";
 import {
@@ -90,6 +90,7 @@ export function SlideSurface({
   width: number;
 }) {
   const scale = width / SLIDE_W;
+  const surfaceId = useId();
   const [surfaceInteractionTarget, setSurfaceInteractionTarget] =
     useState<SurfaceInteractionTarget>(null);
   const atomEditingTextIndex = useAtomValue(editingTextIndexAtom);
@@ -170,6 +171,7 @@ export function SlideSurface({
         selectedPath={selectedPath}
         selectedItems={selectedItems}
         slide={slide}
+        surfaceId={surfaceId}
         stageRef={stageRef}
         bulletsRenderMode="proxy"
         chartRenderMode="proxy"
@@ -178,6 +180,7 @@ export function SlideSurface({
         width={width}
       />
       <DomOverlayRenderers
+        activeSurfaceInteraction={surfaceInteractionTarget}
         editingBulletsIndex={resolvedEditingBulletsIndex}
         editingBulletsPath={resolvedEditingBulletsPath}
         editingTableIndex={resolvedEditingTableIndex}
@@ -189,6 +192,7 @@ export function SlideSurface({
         scale={scale}
         selectedTableCell={resolvedSelectedTableCell}
         slide={slide}
+        surfaceId={surfaceId}
       />
     </>
   );
