@@ -174,9 +174,8 @@ const SlideContent = ({
         <div
           data-layout={slide.layout}
           data-group={slide.layout_group}
-          className={`w-full group font-syne ${
-            isTemplateV2Slide ? "relative md:pt-[72px]" : ""
-          }`}
+          className={`w-full group font-syne ${isTemplateV2Slide ? "relative " : ""
+            }`}
         >
           {/* <V1ContentRender slide={slide} isEditMode={true} theme={null} /> */}
           {isChatEditing && (
@@ -242,11 +241,10 @@ const SlideContent = ({
 
           {!isStreaming && (
             <div
-              className={`absolute right-3 top-3 z-30 hidden md:flex flex-row items-center gap-2 rounded-[28px] border border-gray-200/80 bg-white/95 px-2.5 py-2 ${
-                isEditPopoverOpen || isSpeakerPopoverOpen
+              className={`absolute right-3 top-3 z-30 hidden md:flex flex-row items-center gap-2 rounded-[28px] border border-gray-200/80 bg-white/95 px-2.5 py-2 ${isEditPopoverOpen || isSpeakerPopoverOpen
                   ? "opacity-100 pointer-events-auto"
                   : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
-              }`}
+                }`}
               style={{
                 boxShadow: "0 2px 13.2px 0 rgba(0, 0, 0, 0.10)",
               }}
@@ -306,11 +304,10 @@ const SlideContent = ({
                       <button
                         disabled={isUpdating}
                         type="submit"
-                        className={`ml-auto flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9034EA] to-[#5146E5] px-4 py-2 text-sm font-medium text-white transition-opacity ${
-                          isUpdating
+                        className={`ml-auto flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9034EA] to-[#5146E5] px-4 py-2 text-sm font-medium text-white transition-opacity ${isUpdating
                             ? "cursor-not-allowed opacity-70"
                             : "hover:opacity-90"
-                        }`}
+                          }`}
                       >
                         {isUpdating ? "Updating..." : "Update"}
                         <SendHorizontal className="h-4 w-4" />
@@ -332,11 +329,10 @@ const SlideContent = ({
                         background:
                           "linear-gradient(270deg, #D5CAFC 2.4%, #E3D2EB 27.88%, #F4DCD3 69.23%, #FDE4C2 100%)",
                       }}
-                      className={`flex px-4 py-2.5 items-center justify-center rounded-full border font-syne ${
-                        slide?.speaker_note
+                      className={`flex px-4 py-2.5 items-center justify-center rounded-full border font-syne ${slide?.speaker_note
                           ? "border-violet-200 bg-violet-50 text-violet-700"
                           : "border-gray-200 bg-white text-gray-600"
-                      }`}
+                        }`}
                     >
                       <ToolTip content="Edit speaker notes">
                         <svg

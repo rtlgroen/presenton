@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthDisabled } from "@/utils/auth";
 
 /**
- * API-only: session required for all /api/* except auth, telemetry, and
- * /api/template (server-to-server template layout for FastAPI fallback).
+ * API-only: session required for all /api/* except auth, telemetry, public
+ * image transforms, and /api/template (FastAPI server-to-server fallback).
  * Page routes are protected in server layouts (unknown URLs still 404; login uses relative redirects).
  */
 function getFastApiBaseUrl(): string {
@@ -55,6 +55,8 @@ function isApiAuthExempt(pathname: string): boolean {
   return (
     pathname.startsWith("/api/v1/auth/") ||
     pathname === "/api/telemetry-status" ||
+    /** Public image transform used as a browser/Konva image source. */
+    pathname === "/api/update-svg" ||
     /** FastAPI `get_layout_by_name` fallback (no browser cookie in Docker). */
     pathname === "/api/template" ||
     pathname === "/api/template/custom" ||

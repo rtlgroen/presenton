@@ -42,9 +42,11 @@ import {
   loadKonvaImage,
   svgToDataUri,
 } from "@/components/slide-editor/slide-surface/konva/exportAssets";
+import { buildSvgUpdateUrl } from "@/lib/svg-color";
 import { updateSlideUi } from "@/store/slices/presentationGeneration";
 import { resolveBackendAssetSource } from "@/utils/api";
 import { ImagesApi } from "../services/api/images";
+import IconsEditor from "./IconsEditor";
 import {
   TEMPLATE_V2_CHART_EDITOR_EVENT,
   TEMPLATE_V2_CHART_UPDATE_EVENT,
@@ -167,6 +169,8 @@ function TemplateV2KonvaSlideComponent({
   );
   const [selection, setSelection] = useState<Selection>(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEdit>(null);
+  const [iconEditorSelection, setIconEditorSelection] =
+    useState<ElementSelection | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [{ canUndo, canRedo }, setHistoryAvailability] = useState({
     canUndo: false,
@@ -217,6 +221,9 @@ function TemplateV2KonvaSlideComponent({
   const inlineEditBox = inlineEdit
     ? absoluteBoxForSelection(uiDraft, inlineEdit.selection)
     : null;
+  const iconEditorElement = iconEditorSelection
+    ? getElementAtSelection(uiDraft, iconEditorSelection)
+    : null;
   const surfaceSlideIndex = useMemo(() => {
     const index = typeof renderIndex === "number" ? renderIndex : slideIndex;
     return Number.isFinite(index) ? index : null;
@@ -228,6 +235,7 @@ function TemplateV2KonvaSlideComponent({
     setUiDraft(next);
     setSelection(null);
     setInlineEdit(null);
+    setIconEditorSelection(null);
     undoStackRef.current = [];
     redoStackRef.current = [];
     setHistoryAvailability({ canUndo: false, canRedo: false });
@@ -354,6 +362,7 @@ function TemplateV2KonvaSlideComponent({
     commitUi(deleteSelectionFromUi(currentUiRef.current, selection));
     setSelection(null);
     setInlineEdit(null);
+    setIconEditorSelection(null);
   }, [commitUi, selection]);
 
   const openInlineEditor = useCallback(
@@ -464,6 +473,51 @@ function TemplateV2KonvaSlideComponent({
     [activateSurface],
   );
 
+  const openIconEditor = useCallback(
+    (elementSelection: ElementSelection) => {
+      const element = getElementAtSelection(
+        currentUiRef.current,
+        elementSelection,
+      );
+      if (!element || !isRawIconElement(element)) {
+        return;
+      }
+      activateSurface();
+      setSelection(elementSelection);
+      setInlineEdit(null);
+      setIconEditorSelection(elementSelection);
+    },
+    [activateSurface],
+  );
+
+  const openImageElementEditor = useCallback(
+    (elementSelection: ElementSelection) => {
+      const element = getElementAtSelection(
+        currentUiRef.current,
+        elementSelection,
+      );
+      if (!element || readString(element.type) !== "image") return;
+      if (isRawIconElement(element)) {
+        openIconEditor(elementSelection);
+        return;
+      }
+      openImageUpload(elementSelection);
+    },
+    [openIconEditor, openImageUpload],
+  );
+
+  const handleIconChange = useCallback(
+    (newIconUrl: string, query?: string) => {
+      if (!iconEditorSelection || !newIconUrl) return;
+      updateElement(iconEditorSelection, (element) => ({
+        ...element,
+        data: newIconUrl,
+        ...(query ? { icon_query: query } : {}),
+      }));
+    },
+    [iconEditorSelection, updateElement],
+  );
+
   const openChartEditor = useCallback(
     (elementSelection: ElementSelection) => {
       const element = getElementAtSelection(currentUiRef.current, elementSelection);
@@ -537,7 +591,7 @@ function TemplateV2KonvaSlideComponent({
       const element = getElementAtSelection(currentUiRef.current, elementSelection);
       const type = readString(element?.type);
       if (type === "image") {
-        openImageUpload(elementSelection);
+        openImageElementEditor(elementSelection);
         return;
       }
       if (type === "chart") {
@@ -546,7 +600,7 @@ function TemplateV2KonvaSlideComponent({
       }
       openInlineEditor(elementSelection);
     },
-    [openChartEditor, openImageUpload, openInlineEditor],
+    [openChartEditor, openImageElementEditor, openInlineEditor],
   );
 
   useEffect(() => {
@@ -766,7 +820,8 @@ function TemplateV2KonvaSlideComponent({
         selection?.kind === "element" &&
         selectedElement &&
         selectedBox &&
-        toolbarElement ? (
+        toolbarElement &&
+        !isRawIconElement(selectedElement) ? (
         <ElementToolbar
           element={toolbarElement}
           index={selection.componentIndex}
@@ -775,7 +830,7 @@ function TemplateV2KonvaSlideComponent({
           selectedTableCell={null}
           onChange={(_index, element) => applyToolbarElementChange(element)}
           onEditChart={() => openChartEditor(selection)}
-          onEditImage={() => openImageUpload(selection)}
+          onEditImage={() => openImageElementEditor(selection)}
           onEditText={() => openInlineEditor(selection)}
         />
       ) : null}
@@ -791,6 +846,18 @@ function TemplateV2KonvaSlideComponent({
             setInlineEdit((current) => (current ? { ...current, draft } : current))
           }
           onClose={(commit) => closeInlineEditor(commit)}
+        />
+      ) : null}
+      {isEditMode &&
+        iconEditorSelection &&
+        iconEditorElement &&
+        isRawIconElement(iconEditorElement) ? (
+        <IconsEditor
+          key={keyForSelection(iconEditorSelection)}
+          icon_prompt={[rawIconQuery(iconEditorElement)]}
+          currentIconUrl={readString(iconEditorElement.data) ?? ""}
+          onClose={() => setIconEditorSelection(null)}
+          onIconChange={handleIconChange}
         />
       ) : null}
       {isUploadingImage ? (
@@ -1368,21 +1435,29 @@ function RawImageElement({
   height: number;
 }) {
   const src = readString(element.data);
+  const color = readString(element.color);
+  const isIcon = isRawIconElement(element);
+  const renderSrc = useMemo(() => {
+    if (!src || !color || !isIcon || typeof window === "undefined") return src;
+    const baseUrl = window.location.href;
+    if (!isStaticSvgIconSource(src, baseUrl)) return src;
+    return buildSvgUpdateUrl(src, baseUrl, { color }) ?? src;
+  }, [color, isIcon, src]);
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    if (!src) {
+    if (!renderSrc) {
       setLoaded(null);
       return;
     }
     let cancelled = false;
-    void loadKonvaImage(src).then((image) => {
+    void loadKonvaImage(renderSrc).then((image) => {
       if (!cancelled) setLoaded(image);
     });
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [renderSrc]);
 
   if (!loaded) {
     return (
@@ -3943,6 +4018,34 @@ function readNumber(value: unknown): number | null {
 
 function readBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function rawIconQuery(element: RawElement): string {
+  for (const key of ["icon_query", "query", "__icon_query__"]) {
+    const query = readString(element[key])?.trim();
+    if (query) return query;
+  }
+
+  const name = (readString(element.name) ?? "").replace(/[_-]+/g, " ").trim();
+  return name || "icon";
+}
+
+function isRawIconElement(element: RawElement): boolean {
+  return (
+    readString(element.type) === "image" && readBoolean(element.is_icon) === true
+  );
+}
+
+function isStaticSvgIconSource(source: string, baseUrl: string): boolean {
+  try {
+    const pathname = new URL(source, baseUrl).pathname;
+    return (
+      pathname.startsWith("/static/icons/") &&
+      pathname.toLowerCase().endsWith(".svg")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function withHash(value: string | null | undefined) {
