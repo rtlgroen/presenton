@@ -19,8 +19,6 @@ import { Loader2 } from "lucide-react";
 import { notify } from "@/components/ui/sonner";
 import {
   adaptTemplateV2LayoutToSlide,
-  normalizeTemplateV2Slide,
-  serializeTemplateV2ContentFromSlide,
   serializeTemplateV2LayoutFromSlide,
   type TemplateV2Layout,
 } from "@/components/slide-editor/lib/template-v2-import";
@@ -28,7 +26,6 @@ import {
   DeckSchema,
   SLIDE_H,
   SLIDE_W,
-  SlideSchema,
   type Deck,
   type Slide as KonvaSlideData,
   type SlideElement,
@@ -62,8 +59,6 @@ import { updateSlide } from "@/store/slices/presentationGeneration";
 import { resolveBackendAssetSource } from "@/utils/api";
 import { ImagesApi } from "../services/api/images";
 
-export const TEMPLATE_V2_KONVA_SLIDE_CONTENT_KEY =
-  "__template_v2_konva_slide__";
 export const TEMPLATE_V2_INSERT_ELEMENTS_EVENT =
   "presenton:template-v2-insert-elements";
 export const TEMPLATE_V2_SURFACE_SELECTED_EVENT =
@@ -143,8 +138,12 @@ export function TemplateV2KonvaSlide({
   renderIndex,
 }: TemplateV2KonvaSlideProps) {
   const initialSlide = useMemo(
-    () => buildKonvaSlide(layout, slide),
-    [layout, slide],
+    () =>
+      buildKonvaSlide(
+        layout,
+        typeof renderIndex === "number" ? renderIndex : slide.index ?? 0,
+      ),
+    [layout, renderIndex, slide.index],
   );
 
   if (!initialSlide) {
@@ -375,11 +374,6 @@ function useTemplateV2KonvaSlideController({
     const serialized = JSON.stringify(activeSlide);
     if (serialized === lastSyncedSlideRef.current) return;
     lastSyncedSlideRef.current = serialized;
-    const nextContent = serializeTemplateV2ContentFromSlide(
-      activeSlide,
-      presentationSlide.content,
-      TEMPLATE_V2_KONVA_SLIDE_CONTENT_KEY,
-    );
     const nextUi = serializeTemplateV2LayoutFromSlide(layout, activeSlide);
 
     dispatch(
@@ -387,7 +381,6 @@ function useTemplateV2KonvaSlideController({
         index: presentationSlide.index,
         slide: {
           ...presentationSlide,
-          content: nextContent,
           ui: nextUi,
         },
       }),
@@ -1015,39 +1008,12 @@ function isInlineEditIgnoredTarget(target: EventTarget | null) {
 
 function buildKonvaSlide(
   layout: TemplateV2Layout,
-  slide: any,
+  slideIndex = 0,
 ): KonvaSlideData | null {
-  const storedSlide = readStoredKonvaSlide(slide.content);
-  if (storedSlide) {
-    return storedSlide;
-  }
-
   try {
-    return adaptTemplateV2LayoutToSlide(
-      readSlideUiLayout(slide) ?? layout,
-      slide.index ?? 0,
-    );
+    return adaptTemplateV2LayoutToSlide(layout, slideIndex);
   } catch (error) {
     console.error("Could not adapt template v2 slide for Konva:", error);
     return null;
   }
-}
-
-function readSlideUiLayout(slide: any): TemplateV2Layout | null {
-  const ui = slide?.ui;
-  return ui && typeof ui === "object" && !Array.isArray(ui)
-    ? (ui as TemplateV2Layout)
-    : null;
-}
-
-function readStoredKonvaSlide(content: unknown): KonvaSlideData | null {
-  if (!content || typeof content !== "object" || Array.isArray(content)) {
-    return null;
-  }
-
-  const candidate = (content as Record<string, unknown>)[
-    TEMPLATE_V2_KONVA_SLIDE_CONTENT_KEY
-  ];
-  const parsed = SlideSchema.safeParse(candidate);
-  return parsed.success ? normalizeTemplateV2Slide(parsed.data) : null;
 }
