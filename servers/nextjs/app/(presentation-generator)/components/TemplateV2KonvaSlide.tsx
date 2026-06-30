@@ -74,6 +74,13 @@ export type TemplateV2ChartElement = ChartElement;
 
 const STAGE_WIDTH = 1280;
 const STAGE_HEIGHT = 720;
+const ROOT_ELEMENTS_COMPONENT_INDEX = -1;
+const STAGE_BOX: Box = {
+  x: 0,
+  y: 0,
+  width: STAGE_WIDTH,
+  height: STAGE_HEIGHT,
+};
 const EDITOR_SCALE = STAGE_WIDTH / SLIDE_W;
 const EDITOR_SCALE_Y = STAGE_HEIGHT / SLIDE_H;
 const SOURCE_PX_TO_PT = (72 * SLIDE_W) / STAGE_WIDTH;
@@ -189,6 +196,10 @@ function TemplateV2KonvaSlideComponent({
     () => readArray(uiDraft.components).filter(isRecord) as RawComponent[],
     [uiDraft.components],
   );
+  const rootElements = useMemo(
+    () => readArray(uiDraft.elements).filter(isRecord) as RawElement[],
+    [uiDraft.elements],
+  );
   const setSelectionNodeRef = useCallback(
     (key: string, node: Konva.Node | null) => {
       if (node) nodeRefs.current.set(key, node);
@@ -202,6 +213,7 @@ function TemplateV2KonvaSlideComponent({
     selection?.kind === "element"
       ? getElementAtSelection(uiDraft, selection)
       : null;
+  const selectedElementIsLine = readString(selectedElement?.type) === "line";
   const selectedComponent =
     selection?.kind === "component"
       ? asRecord(readArray(uiDraft.components)[selection.componentIndex])
@@ -777,13 +789,28 @@ function TemplateV2KonvaSlideComponent({
       >
         <Layer>
           <Rect width={STAGE_WIDTH} height={STAGE_HEIGHT} fill={backgroundColor(uiDraft)} />
+          {rootElements.map((element, elementIndex) => (
+            <MemoizedRawElementNode
+              key={`root:${rawElementKey(element, elementIndex)}`}
+              element={element}
+              componentIndex={ROOT_ELEMENTS_COMPONENT_INDEX}
+              elementPath={[elementIndex]}
+              isEditMode={isEditMode}
+              editingKey={editingKey}
+              setNodeRef={setSelectionNodeRef}
+              onSelect={select}
+              onOpenEditor={handleElementDoubleClick}
+              onElementChange={updateElement}
+              parentBox={STAGE_BOX}
+              layoutManaged={false}
+            />
+          ))}
           {components.map((component, componentIndex) => (
             <MemoizedRawComponentNode
               key={componentKey(component, componentIndex)}
               component={component}
               componentIndex={componentIndex}
               isEditMode={isEditMode}
-              selectedKey={selectedKey}
               editingKey={editingKey}
               setNodeRef={setSelectionNodeRef}
               onSelect={select}
@@ -792,7 +819,19 @@ function TemplateV2KonvaSlideComponent({
               onElementChange={updateElement}
             />
           ))}
-          {isEditMode ? <Transformer ref={transformerRef} rotateEnabled /> : null}
+          {isEditMode ? (
+            <Transformer
+              ref={transformerRef}
+              anchorSize={selectedElementIsLine ? 12 : undefined}
+              borderEnabled={!selectedElementIsLine}
+              enabledAnchors={
+                selectedElementIsLine
+                  ? ["middle-left", "middle-right"]
+                  : undefined
+              }
+              rotateEnabled={!selectedElementIsLine}
+            />
+          ) : null}
         </Layer>
       </Stage>
       {isEditMode &&
@@ -873,7 +912,6 @@ function RawComponentNode({
   component,
   componentIndex,
   isEditMode,
-  selectedKey,
   editingKey,
   setNodeRef,
   onSelect,
@@ -884,7 +922,6 @@ function RawComponentNode({
   component: RawComponent;
   componentIndex: number;
   isEditMode: boolean;
-  selectedKey: string | null;
   editingKey: string | null;
   setNodeRef: (key: string, node: Konva.Node | null) => void;
   onSelect: (selection: Selection) => void;
@@ -903,7 +940,6 @@ function RawComponentNode({
   const stageBox = { x: 0, y: 0, width: STAGE_WIDTH, height: STAGE_HEIGHT };
   const selection: ComponentSelection = { kind: "component", componentIndex };
   const key = keyForSelection(selection);
-  const selected = selectedKey === key;
   const elements = readArray(component.elements).filter(isRecord) as RawElement[];
 
   return (
@@ -917,10 +953,10 @@ function RawComponentNode({
       width={box.width}
       height={box.height}
       rotation={readNumber(component.rotation) ?? 0}
-      clipX={0}
-      clipY={0}
-      clipWidth={box.width}
-      clipHeight={box.height}
+      clipX={isEditMode ? undefined : 0}
+      clipY={isEditMode ? undefined : 0}
+      clipWidth={isEditMode ? undefined : box.width}
+      clipHeight={isEditMode ? undefined : box.height}
       draggable={isEditMode}
       dragBoundFunc={(pos) => clampAbsoluteBox(pos, box, stageBox)}
       onMouseDown={(event) => {
@@ -977,9 +1013,6 @@ function RawComponentNode({
         );
       }}
     >
-      {isEditMode ? (
-        <RawInteractionTarget width={box.width} height={box.height} />
-      ) : null}
       {elements.map((element, elementIndex) => (
         <MemoizedRawElementNode
           key={rawElementKey(element, elementIndex)}
@@ -987,7 +1020,6 @@ function RawComponentNode({
           componentIndex={componentIndex}
           elementPath={[elementIndex]}
           isEditMode={isEditMode}
-          selectedKey={selectedKey}
           editingKey={editingKey}
           setNodeRef={setNodeRef}
           onSelect={onSelect}
@@ -997,16 +1029,6 @@ function RawComponentNode({
           layoutManaged={false}
         />
       ))}
-      {selected ? (
-        <Rect
-          width={box.width}
-          height={box.height}
-          stroke="#7C51F8"
-          strokeWidth={1.5}
-          dash={[6, 4]}
-          listening={false}
-        />
-      ) : null}
     </Group>
   );
 }
@@ -1026,16 +1048,6 @@ const MemoizedRawComponentNode = memo(
     ) {
       return false;
     }
-    if (
-      previous.selectedKey !== next.selectedKey &&
-      (selectionTouchesComponent(
-        previous.selectedKey,
-        previous.componentIndex,
-      ) ||
-        selectionTouchesComponent(next.selectedKey, next.componentIndex))
-    ) {
-      return false;
-    }
     return !(
       previous.editingKey !== next.editingKey &&
       (selectionTouchesComponent(
@@ -1052,7 +1064,6 @@ function RawElementNode({
   componentIndex,
   elementPath,
   isEditMode,
-  selectedKey,
   editingKey,
   setNodeRef,
   onSelect,
@@ -1066,7 +1077,6 @@ function RawElementNode({
   componentIndex: number;
   elementPath: number[];
   isEditMode: boolean;
-  selectedKey: string | null;
   editingKey: string | null;
   setNodeRef: (key: string, node: Konva.Node | null) => void;
   onSelect: (selection: Selection) => void;
@@ -1087,7 +1097,6 @@ function RawElementNode({
     elementPath,
   };
   const key = keyForSelection(selection);
-  const selected = selectedKey === key;
   const editing = editingKey === key;
   const childInfo = childArrayInfo(element);
   const children = childInfo?.items ?? [];
@@ -1168,14 +1177,12 @@ function RawElementNode({
         }));
       }}
     >
-      {isEditMode ? (
-        <RawInteractionTarget width={box.width} height={box.height} />
-      ) : null}
       {editing ? null : (
         <MemoizedRawElementVisual
           element={element}
           width={box.width}
           height={box.height}
+          interactive={isEditMode}
         />
       )}
       {laidOutChildren.map(({ child, index, box: childBox, layoutManaged }) => (
@@ -1185,7 +1192,6 @@ function RawElementNode({
           componentIndex={componentIndex}
           elementPath={[...elementPath, index]}
           isEditMode={isEditMode}
-          selectedKey={selectedKey}
           editingKey={editingKey}
           setNodeRef={setNodeRef}
           onSelect={onSelect}
@@ -1201,15 +1207,6 @@ function RawElementNode({
           layoutManaged={layoutManaged}
         />
       ))}
-      {selected ? (
-        <Rect
-          width={box.width}
-          height={box.height}
-          stroke="#7C51F8"
-          strokeWidth={1.5}
-          listening={false}
-        />
-      ) : null}
     </Group>
   );
 }
@@ -1230,21 +1227,6 @@ const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
   ) {
     return false;
   }
-  if (
-    previous.selectedKey !== next.selectedKey &&
-    (selectionTouchesElement(
-      previous.selectedKey,
-      previous.componentIndex,
-      previous.elementPath,
-    ) ||
-      selectionTouchesElement(
-        next.selectedKey,
-        next.componentIndex,
-        next.elementPath,
-      ))
-  ) {
-    return false;
-  }
   return !(
     previous.editingKey !== next.editingKey &&
     (selectionTouchesElement(
@@ -1260,38 +1242,16 @@ const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
   );
 });
 
-function RawInteractionTarget({
-  width,
-  height,
-}: {
-  width: number;
-  height: number;
-}) {
-  return (
-    <Rect
-      width={width}
-      height={height}
-      fill="#000000"
-      perfectDrawEnabled={false}
-      sceneFunc={() => undefined}
-      hitFunc={(context, shape) => {
-        context.beginPath();
-        context.rect(0, 0, width, height);
-        context.closePath();
-        context.fillShape(shape);
-      }}
-    />
-  );
-}
-
 function RawElementVisual({
   element,
   width,
   height,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
+  interactive: boolean;
 }) {
   const type = readString(element.type);
   if (isBoxVisualType(type)) {
@@ -1313,7 +1273,7 @@ function RawElementVisual({
         strokeWidth={strokeWidth(element.stroke)}
         cornerRadius={borderRadius(element)}
         {...shadowProps(element)}
-        listening={false}
+        listening={interactive}
       />
     );
   }
@@ -1334,23 +1294,25 @@ function RawElementVisual({
         )}
         strokeWidth={strokeWidth(element.stroke)}
         {...shadowProps(element)}
-        listening={false}
+        listening={interactive}
       />
     );
   }
   if (type === "line") {
+    const stroke = colorWithOpacity(
+      strokeColor(element.stroke),
+      strokeOpacity(element.stroke),
+    );
+    const lineWidth = strokeWidth(element.stroke);
+    if (!stroke || lineWidth <= 0) return null;
     return (
       <Line
-        points={linePoints(width, height, strokeWidth(element.stroke) || 2)}
-        stroke={
-          colorWithOpacity(
-            strokeColor(element.stroke) ?? "#111827",
-            strokeOpacity(element.stroke),
-          ) ?? "#111827"
-        }
-        strokeWidth={strokeWidth(element.stroke) || 2}
+        points={linePoints(width, height, lineWidth)}
+        stroke={stroke}
+        strokeWidth={lineWidth}
+        hitStrokeWidth={Math.max(20, lineWidth)}
         {...shadowProps(element)}
-        listening={false}
+        listening={interactive}
       />
     );
   }
@@ -1360,6 +1322,7 @@ function RawElementVisual({
         element={element}
         width={width}
         height={height}
+        interactive={interactive}
       />
     );
   }
@@ -1370,23 +1333,24 @@ function RawElementVisual({
         width={width}
         height={height}
         text={rawTextListContent(element)}
+        interactive={interactive}
       />
     );
   }
   if (type === "image") {
-    return <RawImageElement element={element} width={width} height={height} />;
+    return <RawImageElement element={element} width={width} height={height} interactive={interactive} />;
   }
   if (type === "svg") {
-    return <RawSvgElement element={element} width={width} height={height} />;
+    return <RawSvgElement element={element} width={width} height={height} interactive={interactive} />;
   }
   if (type === "table") {
-    return <RawTableElement element={element} width={width} height={height} />;
+    return <RawTableElement element={element} width={width} height={height} interactive={interactive} />;
   }
   if (type === "chart") {
-    return <RawChartElement element={element} width={width} height={height} />;
+    return <RawChartElement element={element} width={width} height={height} interactive={interactive} />;
   }
   if (type === "infographic") {
-    return <RawInfographicElement element={element} width={width} height={height} />;
+    return <RawInfographicElement element={element} width={width} height={height} interactive={interactive} />;
   }
   return null;
 }
@@ -1396,7 +1360,8 @@ const MemoizedRawElementVisual = memo(
   (previous, next) =>
     previous.element === next.element &&
     previous.width === next.width &&
-    previous.height === next.height,
+    previous.height === next.height &&
+    previous.interactive === next.interactive,
 );
 
 function RawRichTextElement({
@@ -1404,11 +1369,13 @@ function RawRichTextElement({
   width,
   height,
   text,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
   text?: string;
+  interactive: boolean;
 }) {
   const font = rawFont(element);
   const content = text ?? rawTextContent(element);
@@ -1431,7 +1398,7 @@ function RawRichTextElement({
       letterSpacing={font.letterSpacing}
       wrap={font.wrap === "none" ? "none" : "word"}
       {...shadowProps(element)}
-      listening={false}
+      listening={interactive}
     />
   );
 }
@@ -1440,10 +1407,12 @@ function RawImageElement({
   element,
   width,
   height,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
+  interactive: boolean;
 }) {
   const src = readString(element.data);
   const color = readString(element.color);
@@ -1478,7 +1447,7 @@ function RawImageElement({
         fill="#EEF1F5"
         stroke="#CBD2D9"
         strokeWidth={1}
-        listening={false}
+        listening={interactive}
       />
     );
   }
@@ -1519,7 +1488,7 @@ function RawImageElement({
       clipFunc={(context) =>
         drawRoundedImageClip(context, width, height, cornerRadii)
       }
-      listening={false}
+      listening={interactive}
     >
       <KonvaImage
         image={loaded}
@@ -1529,7 +1498,7 @@ function RawImageElement({
         height={drawH}
         scaleX={flipH ? -1 : 1}
         scaleY={flipV ? -1 : 1}
-        listening={false}
+        listening={interactive}
       />
     </Group>
   );
@@ -1581,10 +1550,12 @@ function RawSvgElement({
   element,
   width,
   height,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
+  interactive: boolean;
 }) {
   const svg = readString(element.svg);
   const data = readString(element.data);
@@ -1597,6 +1568,7 @@ function RawSvgElement({
       }}
       width={width}
       height={height}
+      interactive={interactive}
     />
   );
 }
@@ -1605,10 +1577,12 @@ function RawTableElement({
   element,
   width,
   height,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
+  interactive: boolean;
 }) {
   const rows = rawTableRows(element);
   const rowCount = Math.max(1, rows.length);
@@ -1618,7 +1592,7 @@ function RawTableElement({
   const font = rawFont(element);
 
   return (
-    <Group listening={false}>
+    <Group listening={interactive}>
       {rows.map((row, rowIndex) =>
         Array.from({ length: colCount }, (_, colIndex) => {
           const cell = asRecord(row[colIndex]) ?? {};
@@ -1660,10 +1634,12 @@ function RawChartElement({
   element,
   width,
   height,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
+  interactive: boolean;
 }) {
   const categories = readArray(element.categories).map(String);
   const series = readArray(element.series).filter(isRecord);
@@ -1686,7 +1662,7 @@ function RawChartElement({
       return [x, y];
     });
     return (
-      <Group listening={false}>
+      <Group listening={interactive}>
         <Line points={[pad, pad, pad, pad + plotH, pad + plotW, pad + plotH]} stroke="#98A2B3" strokeWidth={1} />
         <Line points={points} stroke={color} strokeWidth={3} tension={0.25} />
         <Text x={pad} y={4} width={plotW} text={readString(element.title) ?? ""} fill="#344054" fontSize={14} />
@@ -1700,7 +1676,7 @@ function RawChartElement({
     const innerRadius = chartType === "donut" ? outerRadius * 0.55 : 0;
     let rotation = -90;
     return (
-      <Group listening={false}>
+      <Group listening={interactive}>
         {values.map((value, index) => {
           const angle = (Math.abs(value) / total) * 360;
           const segmentRotation = rotation;
@@ -1734,7 +1710,7 @@ function RawChartElement({
   const barGap = 8;
   const barW = values.length > 0 ? Math.max(4, (plotW - barGap * (values.length - 1)) / values.length) : 0;
   return (
-    <Group listening={false}>
+    <Group listening={interactive}>
       <Line points={[pad, pad, pad, pad + plotH, pad + plotW, pad + plotH]} stroke="#98A2B3" strokeWidth={1} />
       {values.map((value, index) => {
         const barH = (value / max) * plotH;
@@ -1766,10 +1742,12 @@ function RawInfographicElement({
   element,
   width,
   height,
+  interactive,
 }: {
   element: RawElement;
   width: number;
   height: number;
+  interactive: boolean;
 }) {
   const infographicType =
     readString(element.infographic_type) ??
@@ -1787,7 +1765,7 @@ function RawInfographicElement({
   if (infographicType === "progress_bar") {
     const radius = Math.min(height / 2, 8);
     return (
-      <Group listening={false} {...shadowProps(element)}>
+      <Group listening={interactive} {...shadowProps(element)}>
         <Rect width={width} height={height} cornerRadius={radius} fill={baseColor} />
         <Rect
           width={width * progress}
@@ -1810,7 +1788,7 @@ function RawInfographicElement({
   const start = pointOnCircle(centerX, centerY, middleRadius, 180);
   const end = pointOnCircle(centerX, centerY, middleRadius, 180 + valueAngle);
   return (
-    <Group listening={false} {...shadowProps(element)}>
+    <Group listening={interactive} {...shadowProps(element)}>
       <Arc
         x={centerX}
         y={centerY}
@@ -1969,6 +1947,16 @@ function updateElementInUi(
   selection: ElementSelection,
   updater: (element: RawElement) => RawElement,
 ) {
+  if (selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+    const currentElements = readArray(sourceUi.elements);
+    const elements = updateElementArray(
+      currentElements,
+      selection.elementPath,
+      updater,
+    );
+    return elements === currentElements ? sourceUi : { ...sourceUi, elements };
+  }
+
   const components = [...readArray(sourceUi.components)];
   const component = asRecord(components[selection.componentIndex]);
   if (!component) return sourceUi;
@@ -2010,6 +1998,18 @@ function updateElementArray(
 
 function deleteSelectionFromUi(sourceUi: RawUi, selection: Selection) {
   if (!selection) return sourceUi;
+  if (
+    selection.kind === "element" &&
+    selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX
+  ) {
+    const currentElements = readArray(sourceUi.elements);
+    const elements = deleteElementFromArray(
+      currentElements,
+      selection.elementPath,
+    );
+    return elements === currentElements ? sourceUi : { ...sourceUi, elements };
+  }
+
   const components = [...readArray(sourceUi.components)];
   if (selection?.kind === "component") {
     components.splice(selection.componentIndex, 1);
@@ -2625,6 +2625,10 @@ function estimateTextHeight(
 }
 
 function getElementAtSelection(ui: RawUi, selection: ElementSelection) {
+  if (selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+    return getElementFromArray(readArray(ui.elements), selection.elementPath);
+  }
+
   const component = asRecord(readArray(ui.components)[selection.componentIndex]);
   if (!component) return null;
   return getElementFromArray(readArray(component.elements), selection.elementPath);
@@ -2641,6 +2645,13 @@ function getElementFromArray(elements: unknown[], path: number[]): RawElement | 
 
 function absoluteBoxForSelection(ui: RawUi, selection: Selection): Box | null {
   if (!selection) return null;
+  if (
+    selection.kind === "element" &&
+    selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX
+  ) {
+    return absoluteElementBox(rootElementsComponent(ui), selection.elementPath);
+  }
+
   const component = asRecord(readArray(ui.components)[selection.componentIndex]);
   if (!component) return null;
   const componentOrigin = readPoint(component.position);
@@ -2659,9 +2670,21 @@ function renderedLocalBoxForElementSelection(
   ui: RawUi,
   selection: ElementSelection,
 ): Box | null {
+  if (selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+    return localElementBox(rootElementsComponent(ui), selection.elementPath);
+  }
+
   const component = asRecord(readArray(ui.components)[selection.componentIndex]);
   if (!component) return null;
   return localElementBox(component, selection.elementPath);
+}
+
+function rootElementsComponent(ui: RawUi): RawComponent {
+  return {
+    position: { x: 0, y: 0 },
+    size: { width: STAGE_WIDTH, height: STAGE_HEIGHT },
+    elements: readArray(ui.elements),
+  };
 }
 
 function absoluteElementBox(component: RawComponent, path: number[]) {
@@ -2792,7 +2815,7 @@ function rawElementFromInsertedElement(
 }
 
 function sourceElementConversion(element: UnknownRecord): InsertedElementConversion {
-  const size = readSize(element.size);
+  const size = sourceElementSize(element);
   const usesEditorUnits = size.width <= 20 && size.height <= 12;
   return {
     usesEditorUnits,
@@ -2807,12 +2830,20 @@ function sourceElementBox(
   conversion = sourceElementConversion(element),
 ): Box {
   const position = readPoint(element.position);
-  const size = readSize(element.size);
+  const size = sourceElementSize(element);
   return {
     x: position.x * conversion.scaleX,
     y: position.y * conversion.scaleY,
     width: Math.max(1, size.width * conversion.scaleX),
     height: Math.max(1, size.height * conversion.scaleY),
+  };
+}
+
+function sourceElementSize(element: UnknownRecord): Size {
+  const size = asRecord(element.size);
+  return {
+    width: Math.max(0.01, readNumber(size?.width) ?? 1),
+    height: Math.max(0.01, readNumber(size?.height) ?? 1),
   };
 }
 
@@ -2964,11 +2995,11 @@ function scaleInsertedDistance(value: unknown, scale: number) {
 function hasTemplateV2Metadata(element: UnknownRecord) {
   return Boolean(
     element.component_id ||
-      element.component_instance_id ||
-      element.component_slot ||
-      element.component_description ||
-      (Array.isArray(element.design_variables) &&
-        element.design_variables.length > 0),
+    element.component_instance_id ||
+    element.component_slot ||
+    element.component_description ||
+    (Array.isArray(element.design_variables) &&
+      element.design_variables.length > 0),
   );
 }
 

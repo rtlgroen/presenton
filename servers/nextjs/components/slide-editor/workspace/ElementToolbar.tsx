@@ -6,6 +6,7 @@ import {
   ChartToolbar,
   DesignVariablesToolbar,
   ImageToolbar,
+  LineToolbar,
   ShapeToolbar,
   SvgToolbar,
   TableToolbar,
@@ -58,6 +59,15 @@ const TOOLBAR_RENDERERS = {
   shape: ({ element, index, onChange, path, scale }) =>
     element.type === "rectangle" || element.type === "ellipse" ? (
       <ShapeToolbar
+        element={element}
+        index={index}
+        scale={scale}
+        onChange={(index, element) => onChange(index, element, path)}
+      />
+    ) : null,
+  line: ({ element, index, onChange, path, scale }) =>
+    element.type === "line" ? (
+      <LineToolbar
         element={element}
         index={index}
         scale={scale}

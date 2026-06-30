@@ -1,10 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   Crop,
   FlipHorizontal2,
   FlipVertical2,
+  Info,
   Image as ImageIcon,
+  Scan,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -58,9 +61,41 @@ export function ImageToolbar({
   const focusX = clampPercent(element.focus_x);
   const focusY = clampPercent(element.focus_y);
   const box = elementBox(element);
+  const [cropDraft, setCropDraft] = useState({ x: focusX, y: focusY });
+  const [isCropDragging, setIsCropDragging] = useState(false);
+  const [radiusDraft, setRadiusDraft] = useState(radius);
+  const [opacityDraft, setOpacityDraft] = useState(element.opacity ?? 1);
+
+  useEffect(() => {
+    setRadiusDraft(radius);
+  }, [radius]);
+
+  useEffect(() => {
+    setOpacityDraft(element.opacity ?? 1);
+  }, [element.opacity]);
+
+  useEffect(() => {
+    if (openPanel === "crop") {
+      setCropDraft({ x: focusX, y: focusY });
+    }
+  }, [focusX, focusY, openPanel]);
 
   const update = (changes: Partial<ImageSlideElement>) => {
     onChange(index, { ...element, ...changes });
+  };
+
+  const commitCrop = (next = cropDraft) => {
+    update({ fit: "cover", focus_x: next.x, focus_y: next.y });
+  };
+
+  const updateCropDraftFromPointer = (target: HTMLDivElement, clientX: number, clientY: number) => {
+    const rect = target.getBoundingClientRect();
+    const next = {
+      x: clampPercent(((clientX - rect.left) / rect.width) * 100),
+      y: clampPercent(((clientY - rect.top) / rect.height) * 100),
+    };
+    setCropDraft(next);
+    return next;
   };
 
   const togglePanel = (panel: Exclude<ImagePanel, null>) => {
@@ -72,175 +107,349 @@ export function ImageToolbar({
   };
 
   return (
-    <div
-      className="absolute z-[8]"
-      style={{
-        left: Math.max(8, box.x * scale),
-        top: Math.max(8, box.y * scale - 64),
-      }}
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <div className="relative z-[9] flex h-[36px] items-center rounded-[6px] bg-white px-2.5 text-[#191919] shadow-[0_0_4px_rgba(0,0,0,0.16)]">
-        <button
-          type="button"
-          title={`Image type: ${FIT_LABELS[fit]}`}
-          aria-label={`Image type: ${FIT_LABELS[fit]}`}
-          aria-expanded={openPanel === "fit"}
-          onClick={() => togglePanel("fit")}
-          className={cn(
-            "flex h-9 min-w-[85px] items-center justify-between gap-2 rounded-md border-0 bg-transparent px-2 text-sm font-medium ",
-
-          )}
-        >
-          <span>{FIT_LABELS[fit]}</span>
-          <ChevronDown
-            size={18}
-            strokeWidth={2.2}
-            aria-hidden="true"
+    <>
+      <div
+        style={{
+          left: Math.max(8, box.x * scale),
+          top: Math.max(8, box.y * scale - 64),
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        className="fixed z-[7] flex h-[39px] items-center rounded-[6px] bg-white px-2.5 text-[#191919] shadow-[0_0_4px_rgba(0,0,0,0.15)]">
+        <div className="relative">
+          <button
+            type="button"
+            title={`Image type: ${FIT_LABELS[fit]}`}
+            aria-label={`Image type: ${FIT_LABELS[fit]}`}
+            aria-expanded={openPanel === "fit"}
+            onClick={() => togglePanel("fit")}
             className={cn(
-              "transition-transform",
-              // openPanel === "fit" && "rotate-180",
+              "flex min-w-[85px] items-center justify-between gap-2 rounded-md border-0 bg-transparent text-sm font-medium",
             )}
-          />
-        </button>
+          >
+            <span>{FIT_LABELS[fit]}</span>
+            <ChevronDown
+              size={18}
+              aria-hidden="true"
+              className={cn("transition-transform")}
+            />
+          </button>
+          {openPanel === "fit" ? (
+            <Panel className="flex min-w-[110px] flex-col gap-1 rounded-[12px] py-2.5">
+              {FIT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={fit === option.value}
+                  onClick={() => {
+                    update({ fit: option.value });
+                    setOpenPanel(null);
+                  }}
+                  className={cn(
+                    "flex w-full items-center rounded-[12px] px-4 py-2.5 text-left text-xs text-[#000000] hover:bg-[#F4F3FF]",
+                    fit === option.value && "bg-[#F4F1FF] text-[#7A5AF8]",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </Panel>
+          ) : null}
+        </div>
 
         <Divider />
 
-        <ToolbarButton
-          title="Upload image"
+        <button
+          type="button"
+          title="Replace image"
+          aria-label="Replace image"
           onClick={() => {
             setOpenPanel(null);
             onUpload(index);
           }}
+          className="p-1 rounded-[12px] border-0 bg-transparent text-[#05070A] hover:bg-[#F4F3FF]"
         >
-          <ImageIcon size={14} aria-hidden="true" />
-        </ToolbarButton>
+          <ImageIcon size={18} aria-hidden="true" />
+        </button>
 
         <Divider />
 
-        <ToolbarButton
-          title="Border radius"
-          pressed={openPanel === "radius"}
-          onClick={() => togglePanel("radius")}
-        >
-          <BorderRadiusIcon />
-        </ToolbarButton>
+        <div className="relative">
+          <button
+            type="button"
+            title="Image border radius"
+            aria-label="Image border radius"
+            aria-pressed={openPanel === "radius"}
+            onClick={() => togglePanel("radius")}
+            className={cn(
+              "p-1 rounded-[12px] border-0 bg-transparent text-[#05070A] hover:bg-[#F4F3FF]",
+              openPanel === "radius" && "bg-[#F4F1FF] text-[#7C3AED]",
+            )}
+          >
+            <Scan size={18} aria-hidden="true" />
+          </button>
+          {openPanel === "radius" ? (
+            <Panel className="flex min-w-[115px] items-center p-2.5">
+              <input
+                aria-label="Image border radius"
+                type="range"
+                min={0}
+                max={maxRadius}
+                step={Math.max(0.01, maxRadius / 100)}
+                value={radiusDraft}
+                onChange={(event) => setRadiusDraft(Number(event.target.value))}
+                onKeyUp={(event) =>
+                  update({
+                    border_radius: uniformBorderRadius(
+                      Number((event.target as HTMLInputElement).value),
+                    ),
+                  })
+                }
+                onPointerUp={(event) =>
+                  update({
+                    border_radius: uniformBorderRadius(
+                      Number((event.target as HTMLInputElement).value),
+                    ),
+                  })
+                }
+                className="w-full cursor-pointer accent-[#7A5AF8]"
+              />
+            </Panel>
+          ) : null}
+        </div>
 
         <Divider />
         <div className="flex items-center gap-3">
 
 
-          <ToolbarButton
-            title="Crop image"
-            pressed={openPanel === "crop"}
-            onClick={() => togglePanel("crop")}
-          >
-            <Crop size={16} aria-hidden="true" />
-          </ToolbarButton>
+          <div className="relative">
+            <button
+              type="button"
+              title="Crop image"
+              aria-label="Crop image"
+              aria-pressed={openPanel === "crop"}
+              onClick={() => togglePanel("crop")}
+              className={cn(
+                "p-1 rounded-[12px] border-0 bg-transparent text-[#05070A] hover:bg-[#F4F3FF]",
+                openPanel === "crop" && "bg-[#F4F1FF] text-[#7C3AED]",
+              )}
+            >
+              <Crop size={18} aria-hidden="true" />
+            </button>
+          </div>
 
-          <ToolbarButton
+          <button
+            type="button"
             title="Flip horizontally"
-            pressed={element.flip_h === true}
+            aria-label="Flip horizontally"
+            aria-pressed={element.flip_h === true}
             onClick={() => update({ flip_h: !(element.flip_h ?? false) })}
+            className={cn(
+              "p-1 rounded-[12px] border-0 bg-transparent text-[#05070A] hover:bg-[#F4F3FF]",
+              element.flip_h === true && "bg-[#F4F1FF] text-[#7C3AED]",
+            )}
           >
-            <FlipHorizontal2 size={16} aria-hidden="true" />
-          </ToolbarButton>
+            <FlipHorizontal2 size={18} aria-hidden="true" />
+          </button>
 
-          <ToolbarButton
+          <button
+            type="button"
             title="Flip vertically"
-            pressed={element.flip_v === true}
+            aria-label="Flip vertically"
+            aria-pressed={element.flip_v === true}
             onClick={() => update({ flip_v: !(element.flip_v ?? false) })}
+            className={cn(
+              "p-1 rounded-[12px] border-0 bg-transparent text-[#05070A] hover:bg-[#F4F3FF]",
+              element.flip_v === true && "bg-[#F4F1FF] text-[#7C3AED]",
+            )}
           >
-            <FlipVertical2 size={16} aria-hidden="true" />
-          </ToolbarButton>
+            <FlipVertical2 size={18} aria-hidden="true" />
+          </button>
 
         </div>
         <Divider />
 
-        <ToolbarButton
-          title="Image opacity"
-          pressed={openPanel === "opacity"}
-          onClick={() => togglePanel("opacity")}
-        >
-          <CheckerSwatch />
-        </ToolbarButton>
-
-        {openPanel === "radius" ? (
-          <Panel className="flex h-16 items-center px-5">
-            <input
-              aria-label="Image border radius"
-              type="range"
-              min={0}
-              max={maxRadius}
-              step={Math.max(0.01, maxRadius / 100)}
-              value={radius}
-              onChange={(event) =>
-                update({
-                  border_radius: uniformBorderRadius(
-                    Number(event.target.value),
-                  ),
-                })
-              }
-              className="w-full cursor-pointer accent-[#8B00FF]"
-            />
-          </Panel>
-        ) : null}
-
-        {openPanel === "fit" ? (
-          <Panel className="flex flex-col max-w-[110px] gap-1 rounded-[12px] py-2.5">
-            {FIT_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={fit === option.value}
-                onClick={() => {
-                  update({ fit: option.value });
-                  setOpenPanel(null);
-                }}
-                className={cn(
-                  "flex w-full items-center rounded-[12px] px-4 py-2.5 text-left text-xs  text-[#000000] hover:bg-[#F8F8FA]",
-                  fit === option.value && "bg-[#F4F1FF] text-[#7C3AED]",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </Panel>
-        ) : null}
-
-        {openPanel === "crop" ? (
-          <Panel className="flex h-16 items-center gap-2 px-3">
-            <FocusSlider
-              axis="X"
-              value={focusX}
-              onChange={(focus_x) => update({ fit: "cover", focus_x })}
-            />
-            <FocusSlider
-              axis="Y"
-              value={focusY}
-              onChange={(focus_y) => update({ fit: "cover", focus_y })}
-            />
-          </Panel>
-        ) : null}
-
-        {openPanel === "opacity" ? (
-          <Panel className="flex h-16 items-center px-5">
-            <input
-              aria-label="Image opacity"
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={element.opacity ?? 1}
-              onChange={(event) =>
-                update({ opacity: Number(event.target.value) })
-              }
-              className="w-full cursor-pointer accent-[#8B00FF]"
-            />
-          </Panel>
-        ) : null}
+        <div className="relative">
+          <button
+            type="button"
+            title="Image opacity"
+            aria-label="Image opacity"
+            aria-pressed={openPanel === "opacity"}
+            onClick={() => togglePanel("opacity")}
+            className={cn(
+              "p-1 rounded-[12px] border-0 bg-transparent text-[#05070A] hover:bg-[#F4F3FF]",
+              openPanel === "opacity" && "bg-[#F4F1FF] text-[#7C3AED]",
+            )}
+          >
+            <CheckerSwatch />
+          </button>
+          {openPanel === "opacity" ? (
+            <Panel className="flex min-w-[115px] items-center p-2.5">
+              <input
+                aria-label="Image opacity"
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={opacityDraft}
+                onChange={(event) => setOpacityDraft(Number(event.target.value))}
+                onKeyUp={(event) =>
+                  update({ opacity: Number((event.target as HTMLInputElement).value) })
+                }
+                onPointerUp={(event) =>
+                  update({ opacity: Number((event.target as HTMLInputElement).value) })
+                }
+                className="w-full cursor-pointer accent-[#7A5AF8]"
+              />
+            </Panel>
+          ) : null}
+        </div>
       </div>
-    </div>
+      {openPanel === "crop" ? (
+        <>
+          <div
+            className="absolute z-[6] rounded-[1px] border border-[#7A5AF8] bg-transparent"
+            style={{
+              left: box.x * scale,
+              top: box.y * scale,
+              width: box.w * scale,
+              height: box.h * scale,
+            }}
+            onPointerDown={(event) => {
+              const target = event.currentTarget;
+              target.setPointerCapture(event.pointerId);
+              setIsCropDragging(true);
+              updateCropDraftFromPointer(target, event.clientX, event.clientY);
+            }}
+            onPointerMove={(event) => {
+              if (!isCropDragging) return;
+              updateCropDraftFromPointer(
+                event.currentTarget,
+                event.clientX,
+                event.clientY,
+              );
+            }}
+            onPointerUp={(event) => {
+              const next = updateCropDraftFromPointer(
+                event.currentTarget,
+                event.clientX,
+                event.clientY,
+              );
+              setIsCropDragging(false);
+              commitCrop(next);
+            }}
+          >
+            <div className="pointer-events-none absolute left-1/3 top-0 h-full w-px bg-white/25" />
+            <div className="pointer-events-none absolute left-2/3 top-0 h-full w-px bg-white/25" />
+            <div className="pointer-events-none absolute top-1/3 h-px w-full bg-white/25" />
+            <div className="pointer-events-none absolute top-2/3 h-px w-full bg-white/25" />
+          </div>
+          <div
+            className="pointer-events-none absolute z-[8] rounded-full bg-black/75 px-4 py-2 text-sm text-white"
+            style={{
+              left: (box.x + box.w / 2) * scale,
+              top: Math.max(8, box.y * scale - 42),
+              transform: "translateX(-50%)",
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Info size={14} />
+              Click and drag on the image to position it.
+            </span>
+          </div>
+          <div
+            className="absolute z-[8] flex items-center gap-3 rounded-xl bg-white px-4 py-2 shadow-[0_4px_14px_rgba(0,0,0,0.16)]"
+            style={{
+              left: (box.x + box.w / 2) * scale,
+              top: (box.y + box.h) * scale + 10,
+              transform: "translateX(-50%)",
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <label className="flex min-w-[230px] items-center gap-2">
+              <span className="w-4 text-xs font-semibold text-[#6B7280]">X</span>
+              <input
+                aria-label="Image crop focus X"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={cropDraft.x}
+                onChange={(event) =>
+                  setCropDraft((prev) => ({ ...prev, x: Number(event.target.value) }))
+                }
+                onKeyUp={(event) => {
+                  const next = {
+                    ...cropDraft,
+                    x: Number((event.target as HTMLInputElement).value),
+                  };
+                  setCropDraft(next);
+                  commitCrop(next);
+                }}
+                onPointerUp={(event) => {
+                  const next = {
+                    ...cropDraft,
+                    x: Number((event.target as HTMLInputElement).value),
+                  };
+                  setCropDraft(next);
+                  commitCrop(next);
+                }}
+                className="w-full cursor-pointer accent-[#7A5AF8]"
+              />
+            </label>
+            <label className="flex min-w-[230px] items-center gap-2">
+              <span className="w-4 text-xs font-semibold text-[#6B7280]">Y</span>
+              <input
+                aria-label="Image crop focus Y"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={cropDraft.y}
+                onChange={(event) =>
+                  setCropDraft((prev) => ({ ...prev, y: Number(event.target.value) }))
+                }
+                onKeyUp={(event) => {
+                  const next = {
+                    ...cropDraft,
+                    y: Number((event.target as HTMLInputElement).value),
+                  };
+                  setCropDraft(next);
+                  commitCrop(next);
+                }}
+                onPointerUp={(event) => {
+                  const next = {
+                    ...cropDraft,
+                    y: Number((event.target as HTMLInputElement).value),
+                  };
+                  setCropDraft(next);
+                  commitCrop(next);
+                }}
+                className="w-full cursor-pointer accent-[#7A5AF8]"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                commitCrop();
+                setOpenPanel(null);
+              }}
+              className="rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white"
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              aria-label="Close crop controls"
+              onClick={() => setOpenPanel(null)}
+              className="rounded-md p-2 text-[#4B5563] hover:bg-[#F4F3FF]"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </>
+      ) : null}
+    </>
+
   );
 }
 
@@ -254,7 +463,7 @@ function Panel({
   return (
     <div
       className={cn(
-        "absolute left-0 top-[calc(100%+8px)] z-10 box-border w-full rounded-lg bg-white shadow-[0_0_4px_rgba(0,0,0,0.16)]",
+        "absolute left-1/2 top-[calc(100%+8px)] z-10 box-border -translate-x-1/2 rounded-lg bg-white shadow-[0_0_4px_rgba(0,0,0,0.16)]",
         className,
       )}
     >
@@ -263,77 +472,10 @@ function Panel({
   );
 }
 
-function FocusSlider({
-  axis,
-  value,
-  onChange,
-}: {
-  axis: "X" | "Y";
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="flex min-w-0 flex-1 items-center gap-2">
-      <span className="w-3 text-xs font-bold text-[#111827]">{axis}</span>
-      <input
-        aria-label={`Image crop focus ${axis}`}
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="min-w-0 flex-1 cursor-pointer accent-[#8B00FF]"
-      />
-      <span className="w-8 text-right text-[11px] text-[#4B5563]">
-        {Math.round(value)}%
-      </span>
-    </label>
-  );
-}
-
-function ToolbarButton({
-  children,
-  onClick,
-  pressed,
-  title,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  pressed?: boolean;
-  title: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "flex  flex-none items-center justify-center rounded-md border-0 bg-transparent  text-[#05070A] hover:bg-[#F8F8FA]",
-        pressed && "bg-[#F4F1FF] text-[#7C3AED]",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function Divider() {
   return <span aria-hidden="true" className="mx-3 h-6 w-px flex-none bg-[#EDEEEF]" />;
 }
 
-function BorderRadiusIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M1.75 4.08333V2.91667C1.75 2.60725 1.87292 2.3105 2.09171 2.09171C2.3105 1.87292 2.60725 1.75 2.91667 1.75H4.08333" stroke="black" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9.9165 1.75H11.0832C11.3926 1.75 11.6893 1.87292 11.9081 2.09171C12.1269 2.3105 12.2498 2.60725 12.2498 2.91667V4.08333" stroke="black" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12.2498 9.91666V11.0833C12.2498 11.3927 12.1269 11.6895 11.9081 11.9083C11.6893 12.1271 11.3926 12.25 11.0832 12.25H9.9165" stroke="black" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4.08333 12.25H2.91667C2.60725 12.25 2.3105 12.1271 2.09171 11.9083C1.87292 11.6895 1.75 11.3927 1.75 11.0833V9.91666" stroke="black" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function CheckerSwatch() {
   return (

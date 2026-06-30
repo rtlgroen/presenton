@@ -6,6 +6,7 @@ export type ElementToolbarKey =
   | "bullets"
   | "image"
   | "shape"
+  | "line"
   | "chart"
   | "svg"
   | "table";
@@ -188,7 +189,7 @@ export const ELEMENT_REGISTRY = {
   line: {
     label: "Line",
     addable: false,
-    toolbar: null,
+    toolbar: "line",
     inspector: null,
     renderers: { konva: "line", domOverlay: null },
     export: { pptx: "line", pdf: "raster" },

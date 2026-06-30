@@ -3,6 +3,7 @@ export { BulletsToolbar } from "./BulletsToolbar";
 export { ChartToolbar } from "./ChartToolbar";
 export { DesignVariablesToolbar } from "./DesignVariablesToolbar";
 export { ImageToolbar } from "./ImageToolbar";
+export { LineToolbar } from "./LineToolbar";
 export { ShapeToolbar } from "./ShapeToolbar";
 export { SvgInlineEditor, svgDraftFromElement } from "./SvgInlineEditor";
 export { SvgToolbar } from "./SvgToolbar";
