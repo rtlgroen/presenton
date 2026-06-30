@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 import { compileCustomLayout, CompiledLayout } from "./compileLayout";
 import TemplateService from "../(presentation-generator)/services/api/template";
 import type { TemplateV2Layout } from "@/app/(presentation-generator)/custom-template/types";
+import { normalizeBackendAssetUrls } from "@/utils/api";
 
 /**
  * API response types
@@ -549,9 +550,14 @@ export function useTemplateV2Details(templateId: string) {
         void fetchTemplate();
     }, [fetchTemplate]);
 
+    const normalizedTemplate = useMemo(
+        () => normalizeBackendAssetUrls(template),
+        [template]
+    );
+
     return {
-        template,
-        layouts: getRenderableTemplateV2Layouts(template),
+        template: normalizedTemplate,
+        layouts: getRenderableTemplateV2Layouts(normalizedTemplate),
         loading,
         error,
         refetch: fetchTemplate,

@@ -636,17 +636,20 @@ function TemplateV2KonvaSlideComponent({
 
     const handleInsertElements = (event: Event) => {
       const detail = (event as CustomEvent<TemplateV2InsertElementsDetail>).detail;
-      if (!detail?.elements?.length) return;
+      const elements = detail?.elements ?? [];
+      const insertedComponents = detail?.components ?? [];
+      if (elements.length === 0 && insertedComponents.length === 0) return;
       if (!eventTargetsThisSlide(detail, slideId, surfaceSlideIndex, isSurfaceActive)) {
         return;
       }
 
-      const nextUi = appendInsertedElements(
+      const nextIndex = readArray(currentUiRef.current.components).length;
+      const nextUi = appendInsertedContent(
         currentUiRef.current,
-        detail.elements as unknown as UnknownRecord[],
+        elements as unknown as UnknownRecord[],
+        insertedComponents as unknown as UnknownRecord[],
         detail.label,
       );
-      const nextIndex = readArray(nextUi.components).length - detail.elements.length;
       commitUi(nextUi);
       setSelection({
         kind: "component",
@@ -2752,9 +2755,10 @@ function localElementBox(component: RawComponent, path: number[]) {
   return null;
 }
 
-function appendInsertedElements(
+function appendInsertedContent(
   sourceUi: RawUi,
   elements: UnknownRecord[],
+  insertedComponents: UnknownRecord[],
   label?: string,
 ) {
   const components = [...readArray(sourceUi.components)];
@@ -2762,7 +2766,39 @@ function appendInsertedElements(
   elements.forEach((element, offset) => {
     components.push(insertedElementToComponent(element, label, start + offset));
   });
+  insertedComponents.forEach((component, offset) => {
+    components.push(
+      insertedComponentToRaw(
+        component,
+        label,
+        start + elements.length + offset,
+      ),
+    );
+  });
   return { ...sourceUi, components };
+}
+
+function insertedComponentToRaw(
+  component: UnknownRecord,
+  label: string | undefined,
+  index: number,
+): RawComponent {
+  const conversion = sourceElementConversion(component);
+  const box = sourceElementBox(component, conversion);
+  const elements = readArray(component.elements)
+    .filter(isRecord)
+    .map((element) => rawElementFromInsertedElement(element, conversion));
+  return {
+    ...component,
+    id: `${normalizeId(
+      readString(component.id) ?? label ?? "inserted-component",
+    )}_${index + 1}`,
+    description:
+      readString(component.description) ?? label ?? "Inserted component",
+    position: { x: box.x, y: box.y },
+    size: { width: box.width, height: box.height },
+    elements,
+  };
 }
 
 function insertedElementToComponent(

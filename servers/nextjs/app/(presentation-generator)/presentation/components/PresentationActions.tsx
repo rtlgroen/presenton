@@ -49,6 +49,7 @@ import {
   TEMPLATE_V2_CHART_UPDATE_EVENT,
   type TemplateV2ChartEditorDetail,
   type TemplateV2ChartUpdateDetail,
+  type TemplateV2InsertComponent,
   type TemplateV2InsertElementsDetail,
 } from "../../components/templateV2Events";
 
@@ -426,78 +427,105 @@ const makeImageElement = ({
 	  border_radius: imageRadius,
 	});
 
-const createImageInsertElements = (kind?: string): SlideElement[] => {
+type EditorInsertContent = {
+  elements?: SlideElement[];
+  components?: TemplateV2InsertComponent[];
+};
+
+const createImageInsertContent = (kind?: string): EditorInsertContent => {
   switch (kind) {
     case "image":
-      return [
-        makeImageElement({
-          x: 1.05,
-          y: 1.0,
-          width: 4.2,
-          height: 2.7,
-        }),
-      ];
+      return {
+        elements: [
+          makeImageElement({
+            x: 1.05,
+            y: 1.0,
+            width: 4.2,
+            height: 2.7,
+          }),
+        ],
+      };
     case "image-text":
-      return [
-        makeImageElement({
-          x: 0.95,
-          y: 1.0,
-          width: 3.9,
-          height: 2.55,
-        }),
-        makeTextElement({
-          text: "Add a heading",
-          x: 5.1,
-          y: 1.12,
-          width: 3.3,
-          height: 0.5,
-          size: 24,
-          bold: true,
-        }),
-        makeTextElement({
-          text: "Add supporting text for this image.",
-          x: 5.1,
-          y: 1.76,
-          width: 3.35,
-          height: 0.85,
-          size: 16,
-          color: "475467",
-          lineHeight: 1.3,
-        }),
-      ];
+      return {
+        components: [
+          {
+            id: "image_text",
+            description: "Image with heading and supporting text",
+            position: { x: 0.95, y: 1.0 },
+            size: { width: 7.5, height: 2.55 },
+            elements: [
+              makeImageElement({
+                x: 0,
+                y: 0,
+                width: 3.9,
+                height: 2.55,
+              }),
+              makeTextElement({
+                text: "Add a heading",
+                x: 4.15,
+                y: 0.12,
+                width: 3.3,
+                height: 0.5,
+                size: 24,
+                bold: true,
+              }),
+              makeTextElement({
+                text: "Add supporting text for this image.",
+                x: 4.15,
+                y: 0.76,
+                width: 3.35,
+                height: 0.85,
+                size: 16,
+                color: "475467",
+                lineHeight: 1.3,
+              }),
+            ],
+          },
+        ],
+      };
     case "image-grid":
-      return [
-        makeImageElement({
-          x: 1.0,
-          y: 0.95,
-          width: 2.35,
-          height: 1.55,
-          name: "Image 1",
-        }),
-        makeImageElement({
-          x: 3.55,
-          y: 0.95,
-          width: 2.35,
-          height: 1.55,
-          name: "Image 2",
-        }),
-        makeImageElement({
-          x: 1.0,
-          y: 2.7,
-          width: 2.35,
-          height: 1.55,
-          name: "Image 3",
-        }),
-        makeImageElement({
-          x: 3.55,
-          y: 2.7,
-          width: 2.35,
-          height: 1.55,
-          name: "Image 4",
-        }),
-      ];
+      return {
+        components: [
+          {
+            id: "image_grid",
+            description: "Two-by-two image grid",
+            position: { x: 1.0, y: 0.95 },
+            size: { width: 4.9, height: 3.3 },
+            elements: [
+              makeImageElement({
+                x: 0,
+                y: 0,
+                width: 2.35,
+                height: 1.55,
+                name: "Image 1",
+              }),
+              makeImageElement({
+                x: 2.55,
+                y: 0,
+                width: 2.35,
+                height: 1.55,
+                name: "Image 2",
+              }),
+              makeImageElement({
+                x: 0,
+                y: 1.75,
+                width: 2.35,
+                height: 1.55,
+                name: "Image 3",
+              }),
+              makeImageElement({
+                x: 2.55,
+                y: 1.75,
+                width: 2.35,
+                height: 1.55,
+                name: "Image 4",
+              }),
+            ],
+          },
+        ],
+      };
     default:
-      return [];
+      return {};
   }
 };
 
@@ -1460,16 +1488,24 @@ const PresentationActions = (props: PresentationActionsProps) => {
     dispatchUiState({ type: "closeChartEditor" });
   };
 
-  const insertEditorElements = (elements: SlideElement[], label: string) => {
+  const insertEditorContent = (
+    content: EditorInsertContent,
+    label: string,
+  ) => {
     if (typeof window === "undefined") return;
     if (typeof props.currentSlide !== "number") {
       notify.warning("Select a slide", "Choose a slide before adding content.");
       return;
     }
-    if (elements.length === 0) return;
+    if (
+      (content.elements?.length ?? 0) === 0 &&
+      (content.components?.length ?? 0) === 0
+    ) {
+      return;
+    }
 
     const detail: TemplateV2InsertElementsDetail = {
-      elements,
+      ...content,
       label,
       slideIndex: props.currentSlide,
     };
@@ -1486,6 +1522,10 @@ const PresentationActions = (props: PresentationActionsProps) => {
     }
   };
 
+  const insertEditorElements = (elements: SlideElement[], label: string) => {
+    insertEditorContent({ elements }, label);
+  };
+
   const handleTextItemSelect = (item: PaletteItem) => {
     insertEditorElements(createTextInsertElements(item.id), item.label);
   };
@@ -1499,7 +1539,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
   };
 
   const handleImageItemSelect = (item: PaletteItem) => {
-    insertEditorElements(createImageInsertElements(item.id), item.label);
+    insertEditorContent(createImageInsertContent(item.id), item.label);
   };
 
   const handleElementItemSelect = (item: PaletteItem) => {

@@ -13,8 +13,17 @@ export const TEMPLATE_V2_CHART_EDITOR_EVENT =
 export const TEMPLATE_V2_CHART_UPDATE_EVENT =
   "presenton:template-v2-chart-update";
 
-export type TemplateV2InsertElementsDetail = {
+export type TemplateV2InsertComponent = {
+  id?: string;
+  description?: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
   elements: SlideElement[];
+};
+
+export type TemplateV2InsertElementsDetail = {
+  elements?: SlideElement[];
+  components?: TemplateV2InsertComponent[];
   label?: string;
   slideId?: string | number | null;
   slideIndex?: number | null;
@@ -43,4 +52,3 @@ export type TemplateV2ChartUpdateDetail = {
   slideId?: string | number | null;
   slideIndex?: number | null;
 };
-
