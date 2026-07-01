@@ -28,6 +28,7 @@ import {
 } from "react-konva";
 import { notify } from "@/components/ui/sonner";
 import type { TemplateV2Layout } from "@/components/slide-editor/lib/template-v2-import";
+import { renderMarkdownTextRuns } from "@/components/slide-editor/lib/markdown-text";
 import { effectiveLineHeight } from "@/components/slide-editor/lib/text-line-height";
 import { textRunsContent } from "@/components/slide-editor/lib/text-runs";
 import type {
@@ -1640,6 +1641,157 @@ const MemoizedRawElementVisual = memo(
     previous.onTableCellEdit === next.onTableCellEdit,
 );
 
+const richMeasureCtx: { ctx: CanvasRenderingContext2D | null } = { ctx: null };
+
+function measureContext(): CanvasRenderingContext2D | null {
+  if (typeof document === "undefined") return null;
+  if (!richMeasureCtx.ctx) {
+    richMeasureCtx.ctx = document.createElement("canvas").getContext("2d");
+  }
+  return richMeasureCtx.ctx;
+}
+
+function richFontCss(font: RenderTextFont): string {
+  const italic = font.italic ? "italic " : "";
+  const weight = font.bold ? "700 " : "400 ";
+  return `${italic}${weight}${font.size}px "${font.family}", Helvetica, sans-serif`;
+}
+
+function measureRunText(text: string, font: RenderTextFont): number {
+  if (!text) return 0;
+  const ctx = measureContext();
+  if (!ctx) return text.length * font.size * TEXT_AVERAGE_CHAR_EM;
+  ctx.font = richFontCss(font);
+  const width = ctx.measureText(text).width;
+  const spacing = font.letterSpacing ? font.letterSpacing * text.length : 0;
+  return width + spacing;
+}
+
+// Convert the stored per-run array into render-ready runs, inheriting any
+// missing font properties from the element's base font.
+function editorRunsFromElement(element: RawElement): RenderTextRun[] {
+  const base = rawFont(element);
+  const built: RenderTextRun[] = [];
+  for (const value of readArray(element.runs)) {
+    const record = asRecord(value);
+    if (!record) continue;
+    const text = readString(record.text) ?? "";
+    if (!text) continue;
+    built.push({ text, font: fontFromRecord(asRecord(record.font), base) });
+  }
+  if (built.length === 0) {
+    return [{ text: rawTextContent(element), font: base }];
+  }
+  return built;
+}
+
+type LaidToken = {
+  text: string;
+  font: RenderTextFont;
+  x: number;
+  y: number;
+};
+
+// Minimal inline text-layout engine: greedily word-wraps a sequence of runs
+// (each with its own font) inside `maxWidth`, honouring explicit newlines,
+// horizontal alignment per line and vertical alignment of the whole block.
+// Konva has no native mixed-style text, so each token is later drawn as its
+// own <Text> node.
+function layoutRichText(
+  runs: RenderTextRun[],
+  maxWidth: number,
+  baseFont: RenderTextFont,
+  align: string,
+  verticalAlign: string,
+  boxHeight: number,
+): { tokens: LaidToken[]; contentHeight: number } {
+  type Tok = { text: string; font: RenderTextFont; newline: boolean; space: boolean; width: number };
+  const tokens: Tok[] = [];
+  for (const run of runs) {
+    const display = displayText(run.text);
+    if (!display) continue;
+    for (const part of display.split(/(\n|[ \t]+)/)) {
+      if (part === "") continue;
+      if (part === "\n") {
+        tokens.push({ text: "", font: run.font, newline: true, space: false, width: 0 });
+      } else {
+        const space = /^[ \t]+$/.test(part);
+        tokens.push({
+          text: part,
+          font: run.font,
+          newline: false,
+          space,
+          width: measureRunText(part, run.font),
+        });
+      }
+    }
+  }
+
+  type Line = { toks: Tok[]; height: number; width: number };
+  const lines: Line[] = [];
+  let cur: Tok[] = [];
+  let curWidth = 0;
+  const flush = () => {
+    const height = cur.length
+      ? Math.max(...cur.map((t) => t.font.size * t.font.lineHeight))
+      : baseFont.size * baseFont.lineHeight;
+    lines.push({ toks: cur, height, width: curWidth });
+    cur = [];
+    curWidth = 0;
+  };
+  for (const tok of tokens) {
+    if (tok.newline) {
+      flush();
+      continue;
+    }
+    if (tok.space && cur.length === 0) continue;
+    if (!tok.space && curWidth + tok.width > maxWidth && cur.length > 0) {
+      flush();
+    }
+    cur.push(tok);
+    curWidth += tok.width;
+  }
+  flush();
+
+  const contentHeight = lines.reduce((sum, line) => sum + line.height, 0);
+  let y =
+    verticalAlign === "middle"
+      ? (boxHeight - contentHeight) / 2
+      : verticalAlign === "bottom"
+        ? boxHeight - contentHeight
+        : 0;
+  if (y < 0) y = 0;
+
+  const laid: LaidToken[] = [];
+  for (const line of lines) {
+    let lineWidth = line.width;
+    for (let i = line.toks.length - 1; i >= 0 && line.toks[i].space; i--) {
+      lineWidth -= line.toks[i].width;
+    }
+    let x =
+      align === "center"
+        ? (maxWidth - lineWidth) / 2
+        : align === "right"
+          ? maxWidth - lineWidth
+          : 0;
+    if (x < 0) x = 0;
+    for (const tok of line.toks) {
+      if (tok.text) {
+        const tokenBoxHeight = tok.font.size * tok.font.lineHeight;
+        laid.push({
+          text: tok.text,
+          font: tok.font,
+          x,
+          y: y + (line.height - tokenBoxHeight),
+        });
+      }
+      x += tok.width;
+    }
+    y += line.height;
+  }
+  return { tokens: laid, contentHeight };
+}
+
 function RawRichTextElement({
   element,
   width,
@@ -1737,6 +1889,43 @@ function RawRichTextElement({
     );
   }
 
+  // Multi-run (partially styled) text elements are laid out per-run so each
+  // segment keeps its own font. Everything else — text-list (explicit joined
+  // string) and single-run text — uses the original single-node path, so
+  // existing content renders byte-for-byte as before.
+  const runs = typeof text === "string" ? null : editorRunsFromElement(element);
+  if (runs && runs.length > 1) {
+    const { tokens } = layoutRichText(
+      runs,
+      width,
+      font,
+      align,
+      verticalAlign,
+      height,
+    );
+    return (
+      <Group listening={interactive} {...shadowProps(element)}>
+        {tokens.map((tok, index) => (
+          <Text
+            key={index}
+            x={tok.x}
+            y={tok.y}
+            text={tok.text}
+            fill={withHash(tok.font.color)}
+            fontFamily={`${tok.font.family}, Helvetica, sans-serif`}
+            fontSize={tok.font.size}
+            fontStyle={`${tok.font.bold ? "bold" : "normal"} ${tok.font.italic ? "italic" : ""}`}
+            textDecoration={tok.font.underline ? "underline" : ""}
+            lineHeight={tok.font.lineHeight}
+            letterSpacing={tok.font.letterSpacing}
+            wrap="none"
+            listening={interactive}
+          />
+        ))}
+      </Group>
+    );
+  }
+
   return (
     <Text
       width={width}
@@ -1761,20 +1950,29 @@ function RawRichTextElement({
 function rawRenderTextRuns(element: RawElement): RenderTextRun[] {
   const baseFont = rawFont(element);
   const runs = readArray(element.runs)
-    .map((run) => {
+    .flatMap((run) => {
       const record = asRecord(run);
-      const text = displayText(readString(record?.text) ?? "");
-      if (!text) return null;
-      return {
+      const text = readString(record?.text) ?? "";
+      if (!text) return [];
+      const sourceRun = {
         text,
-        font: fontFromRecord(asRecord(record?.font), baseFont),
-      } satisfies RenderTextRun;
+        font: fontToSource(fontFromRecord(asRecord(record?.font), baseFont)),
+      } satisfies TextRun;
+      return renderMarkdownTextRuns([sourceRun]).map((renderedRun) => ({
+        text: renderedRun.text,
+        font: fontFromRecord(asRecord(renderedRun.font), baseFont),
+      }));
     })
-    .filter(Boolean) as RenderTextRun[];
+    .filter((run) => run.text) as RenderTextRun[];
 
   return runs.length > 0
     ? runs
-    : [{ text: displayText(rawTextContent(element)), font: baseFont }];
+    : renderMarkdownTextRuns([
+        { text: rawTextContent(element) || " ", font: fontToSource(baseFont) },
+      ]).map((run) => ({
+        text: run.text,
+        font: fontFromRecord(asRecord(run.font), baseFont),
+      }));
 }
 
 function textRunsHaveMixedStyle(runs: RenderTextRun[]) {
@@ -3668,8 +3866,11 @@ function rawTextRunsForEditor(element: RawElement): TextRun[] {
     })
     .filter(Boolean) as TextRun[];
 
-  if (runs.length > 0) return runs;
-  return [{ text: rawTextContent(element) || " ", font: fallbackFont }];
+  return renderMarkdownTextRuns(
+    runs.length > 0
+      ? runs
+      : [{ text: rawTextContent(element) || " ", font: fallbackFont }],
+  );
 }
 
 function setRawTextContent(
@@ -3680,12 +3881,14 @@ function setRawTextContent(
   const styled = style ? applyTextStyle(element, style) : element;
   const sourceRuns = readArray(styled.runs);
   const firstRun = asRecord(sourceRuns[0]) ?? {};
-  const runs = markdownTextRuns(text, rawFont(styled)).map((run) => ({
+  const runs = renderMarkdownTextRuns([
+    { text, font: fontToSource(rawFont(styled)) },
+  ]).map((run) => ({
     ...firstRun,
     text: run.text,
     font: {
       ...(asRecord(firstRun.font) ?? {}),
-      ...fontToSource(run.font),
+      ...(asRecord(run.font) ?? {}),
     },
   }));
   return {
@@ -3726,48 +3929,6 @@ function rawInlineTextFontRecord(value: unknown, fallback: unknown) {
     line_height: font.line_height ?? font.lineHeight,
     letter_spacing: font.letter_spacing ?? font.letterSpacing,
   };
-}
-
-function markdownTextRuns(text: string, baseFont: RenderTextFont): RenderTextRun[] {
-  const runs: RenderTextRun[] = [];
-  let index = 0;
-  let buffer = "";
-  let bold = false;
-  let italic = false;
-
-  const flush = () => {
-    if (!buffer) return;
-    runs.push({
-      text: buffer,
-      font: {
-        ...baseFont,
-        bold: baseFont.bold || bold,
-        italic: baseFont.italic || italic,
-      },
-    });
-    buffer = "";
-  };
-
-  while (index < text.length) {
-    const nextTwo = text.slice(index, index + 2);
-    const nextOne = text[index];
-    if (nextTwo === "**" || nextTwo === "__") {
-      flush();
-      bold = !bold;
-      index += 2;
-      continue;
-    }
-    if (nextOne === "*" || nextOne === "_") {
-      flush();
-      italic = !italic;
-      index += 1;
-      continue;
-    }
-    buffer += nextOne;
-    index += 1;
-  }
-  flush();
-  return runs.length > 0 ? runs : [{ text: " ", font: baseFont }];
 }
 
 function rawTextListContent(element: RawElement) {
