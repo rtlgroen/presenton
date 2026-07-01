@@ -7,10 +7,13 @@ import {
   ChevronDown,
   Grid3X3,
   PaintBucket,
+  Plus,
   Scan,
   SlidersHorizontal,
   Sparkles,
   Square,
+  Trash2,
+  Ungroup,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -27,6 +30,7 @@ type PanelId =
   | "horizontal-alignment"
   | "vertical-alignment"
   | "spacing"
+  | "items"
   | "fill"
   | "stroke"
   | "radius"
@@ -49,17 +53,18 @@ type TemplateV2LayoutToolbarProps = {
   box: TemplateV2LayoutToolbarBox;
   element: TemplateV2LayoutElement;
   onChange: (changes: RawRecord) => void;
+  onDisintegrate?: () => void;
 };
 
 const LAYOUT_ALIGNMENTS: Array<{
   label: string;
   value: LayoutAlignment;
 }> = [
-  { label: "Start", value: "flex-start" },
-  { label: "Center", value: "center" },
-  { label: "End", value: "flex-end" },
-  { label: "Stretch", value: "stretch" },
-];
+    { label: "Start", value: "flex-start" },
+    { label: "Center", value: "center" },
+    { label: "End", value: "flex-end" },
+    { label: "Stretch", value: "stretch" },
+  ];
 
 const HORIZONTAL_ALIGNMENTS = ["left", "center", "right"] as const;
 const VERTICAL_ALIGNMENTS = ["top", "middle", "bottom"] as const;
@@ -80,6 +85,10 @@ function readString(value: unknown, fallback: string) {
   return typeof value === "string" && value ? value : fallback;
 }
 
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function readColor(value: unknown, fallback: string) {
   const color = readString(value, fallback);
   return color.startsWith("#") ? color : `#${color}`;
@@ -89,6 +98,35 @@ function capitalize(value: string) {
   return value
     .replace("flex-", "")
     .replace(/(^|[-_])\w/g, (part) => part.replace(/[-_]/, "").toUpperCase());
+}
+
+function cloneChildForAppend(child: unknown, index: number) {
+  const cloned =
+    child && typeof child === "object"
+      ? JSON.parse(JSON.stringify(child))
+      : child;
+  if (!cloned || typeof cloned !== "object" || Array.isArray(cloned)) {
+    return cloned;
+  }
+  const next = { ...(cloned as RawRecord) };
+  delete next.id;
+  if (typeof next.name === "string") {
+    next.name = `${next.name}_copy_${index + 1}`;
+  }
+  return next;
+}
+
+function childrenBounds(element: RawRecord) {
+  const children = readArray(element.children);
+  const min = Math.max(0, readNumber(element.min_children));
+  const max = readNumber(element.max_children, Number.POSITIVE_INFINITY);
+  return {
+    canAdd: children.length > 0 && children.length < max,
+    canRemove: children.length > min,
+    children,
+    max,
+    min,
+  };
 }
 
 function ControlButton({
@@ -197,6 +235,84 @@ function PanelControl({
   );
 }
 
+function ItemsControl({
+  element,
+  onChange,
+  onToggle,
+  openPanel,
+}: Omit<TemplateV2LayoutToolbarProps, "box"> & {
+  onToggle: (panel: Exclude<PanelId, null>) => void;
+  openPanel: PanelId;
+}) {
+  const { canAdd, canRemove, children, max, min } = childrenBounds(element);
+  const addItem = () => {
+    if (!canAdd) return;
+    const source = children[children.length - 1];
+    onChange({
+      children: [
+        ...children,
+        cloneChildForAppend(source, children.length),
+      ],
+    });
+  };
+  const removeItem = () => {
+    if (!canRemove) return;
+    onChange({ children: children.slice(0, -1) });
+  };
+
+  return (
+    <PanelControl
+      id="items"
+      label="Items"
+      icon={<Plus size={15} aria-hidden />}
+      openPanel={openPanel}
+      onToggle={onToggle}
+      panelClassName="w-[230px] space-y-2 p-3"
+    >
+      <div className="flex items-center justify-between text-xs text-[#4B5563]">
+        <span>Count</span>
+        <span>
+          {children.length}
+          {Number.isFinite(max) ? ` / ${max}` : ""}
+        </span>
+      </div>
+      <button
+        type="button"
+        disabled={!canAdd}
+        onClick={addItem}
+        className={cn(
+          "flex h-8 w-full items-center justify-center gap-2 rounded-md text-xs font-medium",
+          canAdd
+            ? "bg-[#F4F1FF] text-[#7A5AF8] hover:bg-[#ECE6FF]"
+            : "cursor-not-allowed bg-[#F3F4F6] text-[#9CA3AF]",
+        )}
+      >
+        <Plus size={14} aria-hidden />
+        Add item
+      </button>
+      <button
+        type="button"
+        disabled={!canRemove}
+        onClick={removeItem}
+        className={cn(
+          "flex h-8 w-full items-center justify-center gap-2 rounded-md text-xs font-medium",
+          canRemove
+            ? "bg-white text-[#991B1B] ring-1 ring-[#FECACA] hover:bg-[#FEF2F2]"
+            : "cursor-not-allowed bg-[#F3F4F6] text-[#9CA3AF]",
+        )}
+      >
+        <Trash2 size={14} aria-hidden />
+        Remove last
+      </button>
+      {min > 0 ? (
+        <p className="text-[11px] leading-4 text-[#6B7280]">
+          Minimum items: {min}
+        </p>
+      ) : null}
+    </PanelControl>
+  );
+}
+
 function FlexControls({
   element,
   onChange,
@@ -277,6 +393,12 @@ function FlexControls({
           onCommit={(row_gap) => onChange({ row_gap })}
         />
       </PanelControl>
+      <ItemsControl
+        element={element}
+        onChange={onChange}
+        openPanel={openPanel}
+        onToggle={onToggle}
+      />
     </>
   );
 }
@@ -346,6 +468,12 @@ function GridControls({
           onCommit={(row_gap) => onChange({ row_gap })}
         />
       </PanelControl>
+      <ItemsControl
+        element={element}
+        onChange={onChange}
+        openPanel={openPanel}
+        onToggle={onToggle}
+      />
     </>
   );
 }
@@ -584,9 +712,11 @@ export function TemplateV2LayoutToolbar({
   box,
   element,
   onChange,
+  onDisintegrate,
 }: TemplateV2LayoutToolbarProps) {
   const [openPanel, setOpenPanel] = useState<PanelId>(null);
-  const estimatedWidth = element.type === "container" ? 700 : 440;
+  const estimatedWidth = (element.type === "container" ? 700 : 440) +
+    (onDisintegrate ? 118 : 0);
   const left = Math.max(8, Math.min(box.x, STAGE_WIDTH - estimatedWidth - 8));
   const top =
     box.y >= 58
@@ -610,6 +740,15 @@ export function TemplateV2LayoutToolbar({
         {capitalize(element.type)}
       </span>
       <Divider />
+      {onDisintegrate ? (
+        <>
+          <ControlButton title="Disintegrate" onClick={onDisintegrate}>
+            <Ungroup size={15} aria-hidden />
+            <span>Disintegrate</span>
+          </ControlButton>
+          <Divider />
+        </>
+      ) : null}
 
       {element.type === "flex" ? (
         <FlexControls
