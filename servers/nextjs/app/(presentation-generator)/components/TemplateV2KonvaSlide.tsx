@@ -1339,6 +1339,7 @@ function RawElementNode({
   const children = childInfo?.items ?? [];
   const laidOutChildren = layoutChildren(element, children, box);
   const clipChildren = shouldClipElementChildren(element, childInfo);
+  const centerOrigin = shouldUseCenterOrigin(element);
   const handleTableCellSelect = useCallback(
     (rowIndex: number, colIndex: number) => {
       onTableCellSelect(selection, rowIndex, colIndex);
@@ -1358,10 +1359,12 @@ function RawElementNode({
         groupRef.current = node;
         setNodeRef(key, node);
       }}
-      x={box.x}
-      y={box.y}
+      x={centerOrigin ? box.x + box.width / 2 : box.x}
+      y={centerOrigin ? box.y + box.height / 2 : box.y}
       width={box.width}
       height={box.height}
+      offsetX={centerOrigin ? box.width / 2 : 0}
+      offsetY={centerOrigin ? box.height / 2 : 0}
       clipX={clipChildren ? 0 : undefined}
       clipY={clipChildren ? 0 : undefined}
       clipWidth={clipChildren ? box.width : undefined}
@@ -1378,13 +1381,17 @@ function RawElementNode({
       }}
       onClick={(event) => {
         if (!isEditMode) return;
-        event.cancelBubble = true;
-        onSelect(selection);
+        if (componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+          event.cancelBubble = true;
+          onSelect(selection);
+        }
       }}
       onTap={(event) => {
         if (!isEditMode) return;
-        event.cancelBubble = true;
-        onSelect(selection);
+        if (componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+          event.cancelBubble = true;
+          onSelect(selection);
+        }
       }}
       onDblClick={(event) => {
         if (!isEditMode) return;
@@ -2428,17 +2435,6 @@ function updateElementArray(
 
 function deleteSelectionFromUi(sourceUi: RawUi, selection: Selection) {
   if (!selection) return sourceUi;
-  if (
-    selection.kind === "element" &&
-    selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX
-  ) {
-    const currentElements = readArray(sourceUi.elements);
-    const elements = deleteElementFromArray(
-      currentElements,
-      selection.elementPath,
-    );
-    return elements === currentElements ? sourceUi : { ...sourceUi, elements };
-  }
 
   const components = [...readArray(sourceUi.components)];
   if (selection?.kind === "component") {
@@ -2446,46 +2442,86 @@ function deleteSelectionFromUi(sourceUi: RawUi, selection: Selection) {
     return { ...sourceUi, components };
   }
   if (selection?.kind === "element") {
+    if (selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+      const currentElements = readArray(sourceUi.elements);
+      const elements = deleteLayoutChildFromArray(
+        currentElements,
+        selection.elementPath,
+      );
+      return elements === currentElements ? sourceUi : { ...sourceUi, elements };
+    }
+
     const component = asRecord(components[selection.componentIndex]);
     if (!component) return sourceUi;
     const currentElements = readArray(component.elements);
-    const elements = deleteElementFromArray(
+    const elements = deleteLayoutChildFromArray(
       currentElements,
       selection.elementPath,
     );
-    if (elements === currentElements) return sourceUi;
-    components[selection.componentIndex] = { ...component, elements };
+    if (elements !== currentElements) {
+      components[selection.componentIndex] = { ...component, elements };
+      return { ...sourceUi, components };
+    }
+
+    components.splice(selection.componentIndex, 1);
     return { ...sourceUi, components };
   }
   return sourceUi;
 }
 
-function deleteElementFromArray(elements: unknown[], path: number[]) {
+function deleteLayoutChildFromArray(elements: unknown[], path: number[]) {
   const [index, ...rest] = path;
   if (!Number.isInteger(index) || index < 0 || index >= elements.length) {
     return elements;
   }
-  if (rest.length === 0) {
-    const next = [...elements];
-    next.splice(index, 1);
-    return next;
-  }
   const current = asRecord(elements[index]);
   const childInfo = current ? childArrayInfo(current) : null;
   if (!current || !childInfo) return elements;
-  if (childInfo.key === "item" && rest.length === 1) {
-    const next = [...elements];
-    next[index] = {
-      ...current,
-      count: Math.max(0, (readNumber(current.count) ?? childInfo.items.length) - 1),
-    };
-    return next;
+  if (rest.length >= 1 && isFlowLayoutElement(current)) {
+    if (childInfo.key === "item") {
+      const count = Math.max(
+        0,
+        readNumber(current.count) ?? childInfo.items.length,
+      );
+      const minCount = Math.max(0, readNumber(current.min_count) ?? 0);
+      if (count <= minCount) return elements;
+      const next = [...elements];
+      next[index] = {
+        ...current,
+        count: Math.max(0, count - 1),
+      };
+      return next;
+    }
+    if (childInfo.key === "children") {
+      const minChildren = Math.max(0, readNumber(current.min_children) ?? 0);
+      if (childInfo.items.length <= minChildren) return elements;
+      const updatedChildren = [...childInfo.items];
+      updatedChildren.splice(rest[0], 1);
+      const next = [...elements];
+      next[index] = withUpdatedChildItems(
+        current,
+        childInfo,
+        updatedChildren,
+        rest[0],
+      );
+      return next;
+    }
   }
-  const updatedChildren = deleteElementFromArray(childInfo.items, rest);
+  const updatedChildren = deleteLayoutChildFromArray(childInfo.items, rest);
   if (updatedChildren === childInfo.items) return elements;
   const next = [...elements];
   next[index] = withUpdatedChildItems(current, childInfo, updatedChildren, rest[0]);
   return next;
+}
+
+function isFlowLayoutElement(element: RawElement) {
+  const type = readString(element.type);
+  return (
+    type === "flex" ||
+    type === "grid" ||
+    type === "list-view" ||
+    type === "grid-view"
+  );
 }
 
 function resizeComponent(
@@ -2535,10 +2571,12 @@ function positionFromNodeInParent(
   renderedBox: Box,
 ): Point {
   const absolute = node.absolutePosition();
+  const offsetX = node.offsetX() ? renderedBox.width / 2 : 0;
+  const offsetY = node.offsetY() ? renderedBox.height / 2 : 0;
   return clampRelativePosition(
     {
-      x: absolute.x - parentBox.x,
-      y: absolute.y - parentBox.y,
+      x: absolute.x - parentBox.x - offsetX,
+      y: absolute.y - parentBox.y - offsetY,
     },
     renderedBox,
     parentBox,
@@ -2574,6 +2612,11 @@ function layoutChildren(
     box: null as Box | null,
     layoutManaged: false,
   }));
+}
+
+function shouldUseCenterOrigin(element: RawElement) {
+  const type = readString(element.type);
+  return type === "image" || type === "svg";
 }
 
 function layoutContainerChildren(
