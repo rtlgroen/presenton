@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
   type ChangeEvent as ReactChangeEvent,
-  type CSSProperties,
 } from "react";
 import type Konva from "konva";
 import { useDispatch } from "react-redux";
@@ -29,19 +28,31 @@ import {
 } from "react-konva";
 import { notify } from "@/components/ui/sonner";
 import type { TemplateV2Layout } from "@/components/slide-editor/lib/template-v2-import";
+import { effectiveLineHeight } from "@/components/slide-editor/lib/text-line-height";
+import { textRunsContent } from "@/components/slide-editor/lib/text-runs";
+import type {
+  TemplateV2InlineEditKind,
+  TemplateV2TextEditStyle,
+} from "@/components/slide-editor/lib/template-v2-text-editing";
 import {
   SLIDE_H,
   SLIDE_W,
   type ChartElement,
   type ChartSeries,
+  type Font,
   type SlideElement,
+  type TextRun,
 } from "@/components/slide-editor/lib/slide-schema";
 import {
   useTableCellSelection,
+  useTemplateV2InlineEditing,
   type TableCellSelection,
   type TableSlideElement,
 } from "@/components/slide-editor/state";
-import { TableInlineEditor } from "@/components/slide-editor/inline";
+import {
+  TableInlineEditor,
+  TemplateV2InlineEditor,
+} from "@/components/slide-editor/inline";
 import { ElementToolbar } from "@/components/slide-editor/workspace/ElementToolbar";
 import {
   loadKonvaImage,
@@ -128,20 +139,8 @@ type LaidOutChild = {
   box: Box | null;
   layoutManaged: boolean;
 };
-type TextEditStyle = {
-  family: string;
-  size: number;
-  color: string;
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  lineHeight: number;
-  letterSpacing: number;
-  wrap: string;
-  horizontal: "left" | "center" | "right";
-  vertical: "top" | "middle" | "bottom";
-};
-type RenderTextFont = Omit<TextEditStyle, "horizontal" | "vertical">;
+type TextEditStyle = TemplateV2TextEditStyle;
+type RenderTextFont = Omit<TemplateV2TextEditStyle, "horizontal" | "vertical">;
 type RenderTextRun = {
   text: string;
   font: RenderTextFont;
@@ -159,16 +158,6 @@ type ElementSelection = {
 };
 
 type Selection = ComponentSelection | ElementSelection | null;
-
-type InlineEdit =
-  | {
-    kind: "text" | "text-list" | "svg";
-    selection: ElementSelection;
-    draft: string;
-    frame?: Box | null;
-    style?: TextEditStyle;
-  }
-  | null;
 
 type TemplateV2KonvaSlideProps = {
   layout: TemplateV2Layout;
@@ -198,7 +187,17 @@ function TemplateV2KonvaSlideComponent({
     cloneJson(layout as RawUi),
   );
   const [selection, setSelection] = useState<Selection>(null);
-  const [inlineEdit, setInlineEdit] = useState<InlineEdit>(null);
+  const {
+    inlineEdit,
+    clearInlineEdit,
+    startInlineEdit,
+    updateInlineDraft,
+    updateInlineEdit,
+    updateInlineRuns,
+    updateInlineTextSelectionRange,
+  } = useTemplateV2InlineEditing<ElementSelection>({
+    keyForSelection,
+  });
   const [iconEditorSelection, setIconEditorSelection] =
     useState<ElementSelection | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -256,11 +255,19 @@ function TemplateV2KonvaSlideComponent({
     ? absoluteBoxForSelection(uiDraft, selection)
     : null;
   const toolbarElement = useMemo(
-    () =>
-      selectedElement && selectedBox
-        ? rawElementForEditorToolbar(selectedElement, selectedBox)
-        : null,
-    [selectedBox, selectedElement],
+    () => {
+      if (!selectedElement || !selectedBox) return null;
+      const inlineTextElement =
+        inlineEdit &&
+        inlineEdit.kind === "text" &&
+        inlineEdit.runs &&
+        selection?.kind === "element" &&
+        keyForSelection(inlineEdit.selection) === keyForSelection(selection)
+          ? setRawTextRunsContent(selectedElement, inlineEdit.runs)
+          : selectedElement;
+      return rawElementForEditorToolbar(inlineTextElement, selectedBox);
+    },
+    [inlineEdit, selectedBox, selectedElement, selection],
   );
   const componentToolbarElement = useMemo(
     () =>
@@ -269,9 +276,6 @@ function TemplateV2KonvaSlideComponent({
         : null,
     [selectedComponent],
   );
-  const inlineEditElement = inlineEdit
-    ? getElementAtSelection(uiDraft, inlineEdit.selection)
-    : null;
   const inlineEditBox = inlineEdit
     ? absoluteBoxForSelection(uiDraft, inlineEdit.selection)
     : null;
@@ -289,12 +293,12 @@ function TemplateV2KonvaSlideComponent({
     setUiDraft(next);
     setSelection(null);
     clearTableCellSelection();
-    setInlineEdit(null);
+    clearInlineEdit();
     setIconEditorSelection(null);
     undoStackRef.current = [];
     redoStackRef.current = [];
     setHistoryAvailability({ canUndo: false, canRedo: false });
-  }, [clearTableCellSelection, layout]);
+  }, [clearInlineEdit, clearTableCellSelection, layout]);
 
   const isSurfaceActive = useCallback(
     () =>
@@ -390,11 +394,11 @@ function TemplateV2KonvaSlideComponent({
     ) => {
       activateSurface();
       setSelection(elementSelection);
-      setInlineEdit(null);
+      clearInlineEdit();
       setIconEditorSelection(null);
       selectTableCellSelection(elementSelection, rowIndex, colIndex);
     },
-    [activateSurface, selectTableCellSelection],
+    [activateSurface, clearInlineEdit, selectTableCellSelection],
   );
 
   const editTableCell = useCallback(
@@ -405,11 +409,11 @@ function TemplateV2KonvaSlideComponent({
     ) => {
       activateSurface();
       setSelection(elementSelection);
-      setInlineEdit(null);
+      clearInlineEdit();
       setIconEditorSelection(null);
       editTableCellSelection(elementSelection, rowIndex, colIndex);
     },
-    [activateSurface, editTableCellSelection],
+    [activateSurface, clearInlineEdit, editTableCellSelection],
   );
 
   const updateComponent = useCallback(
@@ -439,9 +443,9 @@ function TemplateV2KonvaSlideComponent({
     commitUi(deleteSelectionFromUi(currentUiRef.current, selection));
     setSelection(null);
     clearTableCellSelection();
-    setInlineEdit(null);
+    clearInlineEdit();
     setIconEditorSelection(null);
-  }, [clearTableCellSelection, commitUi, selection]);
+  }, [clearInlineEdit, clearTableCellSelection, commitUi, selection]);
 
   const createClipboardPayload = useCallback((): TemplateV2ClipboardPayload | null => {
     if (!selection) return null;
@@ -479,11 +483,11 @@ function TemplateV2KonvaSlideComponent({
       if (!result) return;
       commitUi(result.ui);
       setSelection(result.selection);
-      setInlineEdit(null);
+      clearInlineEdit();
       setIconEditorSelection(null);
       activateSurface();
     },
-    [activateSurface, commitUi],
+    [activateSurface, clearInlineEdit, commitUi],
   );
 
   useTemplateV2Clipboard({
@@ -505,15 +509,17 @@ function TemplateV2KonvaSlideComponent({
         elementSelection,
       );
       if (type === "text") {
-        setInlineEdit({
+        const runs = rawTextRunsForEditor(element);
+        startInlineEdit({
           kind: "text",
           selection: elementSelection,
-          draft: rawTextContent(element),
+          draft: textRunsContent(runs),
+          runs,
           frame,
           style: rawTextStyle(element),
         });
       } else if (type === "text-list") {
-        setInlineEdit({
+        startInlineEdit({
           kind: "text-list",
           selection: elementSelection,
           draft: rawTextListContent(element),
@@ -521,7 +527,7 @@ function TemplateV2KonvaSlideComponent({
           style: rawTextStyle(element),
         });
       } else if (type === "svg") {
-        setInlineEdit({
+        startInlineEdit({
           kind: "svg",
           selection: elementSelection,
           draft: rawSvgContent(element),
@@ -529,7 +535,7 @@ function TemplateV2KonvaSlideComponent({
         });
       }
     },
-    [clearTableCellEditing],
+    [clearTableCellEditing, startInlineEdit],
   );
 
   const closeInlineEditor = useCallback(
@@ -544,13 +550,14 @@ function TemplateV2KonvaSlideComponent({
             current.draft,
             current.style,
             current.frame,
+            current.runs,
           ),
         );
       }
       setSelection(current.selection);
-      setInlineEdit(null);
+      clearInlineEdit();
     },
-    [inlineEdit, updateElement],
+    [clearInlineEdit, inlineEdit, updateElement],
   );
 
   const applyToolbarElementChange = useCallback(
@@ -561,15 +568,25 @@ function TemplateV2KonvaSlideComponent({
       if (!current || !box) return;
       const next = mergeEditorToolbarElement(current, editorElement, box);
       updateElement(selection, () => next);
-      setInlineEdit((active) =>
-        active &&
-          active.style &&
-          keyForSelection(active.selection) === keyForSelection(selection)
-          ? { ...active, style: rawTextStyle(next) }
-          : active,
-      );
+      updateInlineEdit(selection, (active) => {
+        if (
+          !active?.style ||
+          keyForSelection(active.selection) !== keyForSelection(selection)
+        ) {
+          return active;
+        }
+        if (active.kind === "text") {
+          return {
+            ...active,
+            draft: rawTextContent(next),
+            runs: rawTextRunsForEditor(next),
+            style: rawTextStyle(next),
+          };
+        }
+        return { ...active, style: rawTextStyle(next) };
+      });
     },
-    [selection, updateElement],
+    [selection, updateElement, updateInlineEdit],
   );
 
   const applyComponentToolbarChange = useCallback(
@@ -607,10 +624,10 @@ function TemplateV2KonvaSlideComponent({
       }
       activateSurface();
       setSelection(elementSelection);
-      setInlineEdit(null);
+      clearInlineEdit();
       setIconEditorSelection(elementSelection);
     },
-    [activateSurface],
+    [activateSurface, clearInlineEdit],
   );
 
   const handleIconChange = useCallback(
@@ -809,7 +826,7 @@ function TemplateV2KonvaSlideComponent({
       }
 
       setSelection(null);
-      setInlineEdit(null);
+      clearInlineEdit();
       clearSurface();
     };
     document.addEventListener("pointerdown", handlePointerDown, true);
@@ -817,7 +834,7 @@ function TemplateV2KonvaSlideComponent({
       document.removeEventListener("pointerdown", handlePointerDown, true);
       clearSurface();
     };
-  }, [activateSurface, clearSurface, isEditMode]);
+  }, [activateSurface, clearInlineEdit, clearSurface, isEditMode]);
 
   useHotkey(
     "Mod+Z",
@@ -883,7 +900,7 @@ function TemplateV2KonvaSlideComponent({
           if (event.target === event.target.getStage()) {
             setSelection(null);
             clearTableCellSelection();
-            setInlineEdit(null);
+            clearInlineEdit();
           }
         }}
         onTouchStart={(event) => {
@@ -891,7 +908,7 @@ function TemplateV2KonvaSlideComponent({
           if (event.target === event.target.getStage()) {
             setSelection(null);
             clearTableCellSelection();
-            setInlineEdit(null);
+            clearInlineEdit();
           }
         }}
       >
@@ -972,6 +989,13 @@ function TemplateV2KonvaSlideComponent({
           path={keyForSelection(selection)}
           scale={EDITOR_SCALE}
           selectedTableCell={selectedTableCell}
+          textSelectionRange={
+            inlineEdit &&
+            inlineEdit.kind === "text" &&
+            keyForSelection(inlineEdit.selection) === keyForSelection(selection)
+              ? inlineEdit.textSelectionRange
+              : null
+          }
           onChange={(_index, element) => applyToolbarElementChange(element)}
           onEditChart={() => openChartEditor(selection)}
           onEditImage={() => openImageUpload(selection)}
@@ -993,16 +1017,23 @@ function TemplateV2KonvaSlideComponent({
           onClose={clearTableCellEditing}
         />
       ) : null}
-      {inlineEdit && inlineEditElement && inlineEditBox ? (
-        <RawInlineEditor
+      {inlineEdit && inlineEditBox ? (
+        <TemplateV2InlineEditor
           key={keyForSelection(inlineEdit.selection)}
           draft={inlineEdit.draft}
-          element={inlineEditElement}
           kind={inlineEdit.kind}
           box={inlineEditBox}
+          runs={inlineEdit.runs}
           style={inlineEdit.style}
-          onChange={(draft) =>
-            setInlineEdit((current) => (current ? { ...current, draft } : current))
+          onChange={updateInlineDraft}
+          onRunsChange={(runs) =>
+            updateInlineRuns(inlineEdit.selection, runs)
+          }
+          onSelectionChange={(textSelectionRange) =>
+            updateInlineTextSelectionRange(
+              inlineEdit.selection,
+              textSelectionRange,
+            )
           }
           onClose={(commit) => closeInlineEditor(commit)}
         />
@@ -1582,14 +1613,93 @@ function RawRichTextElement({
 }) {
   const font = rawFont(element);
   const content = text ?? rawTextContent(element);
+  const displayContent = displayText(content);
+  const renderRuns = text == null ? rawRenderTextRuns(element) : [];
+  const renderRunsDifferFromElement =
+    renderRuns.length > 0 &&
+    textRunsHaveMixedStyle([{ text: "", font }, ...renderRuns]);
   const align = readString(element.alignment?.horizontal) ?? "left";
   const verticalAlign = readString(element.alignment?.vertical) ?? "top";
+  const textLineHeight = effectiveLineHeight({
+    text: displayContent,
+    width,
+    fontSize: font.size,
+    lineHeight: font.lineHeight,
+    fallback: 1.15,
+    wrap: font.wrap,
+  });
+
+  if (renderRunsDifferFromElement) {
+    const lines = layoutRenderTextRuns(renderRuns, width);
+    const lineMetrics = lines.map((line) => ({
+      height: lineRenderHeight(line, textLineHeight),
+      width: line.reduce((sum, segment) => sum + segment.width, 0),
+    }));
+    const totalHeight = lineMetrics.reduce(
+      (sum, metric) => sum + metric.height,
+      0,
+    );
+    const startY =
+      verticalAlign === "middle"
+        ? Math.max(0, (height - totalHeight) / 2)
+        : verticalAlign === "bottom"
+          ? Math.max(0, height - totalHeight)
+          : 0;
+    let y = startY;
+
+    return (
+      <Group listening={interactive}>
+        {lines.map((line, lineIndex) => {
+          const lineMetric = lineMetrics[lineIndex] ?? {
+            height: font.size * textLineHeight,
+            width: 0,
+          };
+          const startX =
+            align === "center"
+              ? Math.max(0, (width - lineMetric.width) / 2)
+              : align === "right"
+                ? Math.max(0, width - lineMetric.width)
+                : 0;
+          let x = startX;
+          const lineY = y;
+          y += lineMetric.height;
+          return line.map((segment, segmentIndex) => {
+            const segmentX = x;
+            x += segment.width;
+            return (
+              <Text
+                key={`${lineIndex}:${segmentIndex}`}
+                x={segmentX}
+                y={lineY}
+                width={segment.width}
+                height={lineMetric.height}
+                text={segment.text}
+                fill={withHash(segment.font.color)}
+                fontFamily={`${segment.font.family}, Helvetica, sans-serif`}
+                fontSize={segment.font.size}
+                fontStyle={`${segment.font.bold ? "bold" : "normal"} ${
+                  segment.font.italic ? "italic" : ""
+                }`}
+                textDecoration={segment.font.underline ? "underline" : ""}
+                verticalAlign="middle"
+                lineHeight={segment.font.lineHeight ?? textLineHeight}
+                letterSpacing={segment.font.letterSpacing}
+                wrap="none"
+                {...shadowProps(element)}
+                listening={interactive}
+              />
+            );
+          });
+        })}
+      </Group>
+    );
+  }
 
   return (
     <Text
       width={width}
       height={height}
-      text={displayText(content)}
+      text={displayContent}
       fill={withHash(font.color)}
       fontFamily={`${font.family}, Helvetica, sans-serif`}
       fontSize={font.size}
@@ -1597,12 +1707,106 @@ function RawRichTextElement({
       textDecoration={font.underline ? "underline" : ""}
       align={align}
       verticalAlign={verticalAlign}
-      lineHeight={font.lineHeight}
+      lineHeight={textLineHeight}
       letterSpacing={font.letterSpacing}
       wrap={font.wrap === "none" ? "none" : "word"}
       {...shadowProps(element)}
       listening={interactive}
     />
+  );
+}
+
+function rawRenderTextRuns(element: RawElement): RenderTextRun[] {
+  const baseFont = rawFont(element);
+  const runs = readArray(element.runs)
+    .map((run) => {
+      const record = asRecord(run);
+      const text = displayText(readString(record?.text) ?? "");
+      if (!text) return null;
+      return {
+        text,
+        font: fontFromRecord(asRecord(record?.font), baseFont),
+      } satisfies RenderTextRun;
+    })
+    .filter(Boolean) as RenderTextRun[];
+
+  return runs.length > 0
+    ? runs
+    : [{ text: displayText(rawTextContent(element)), font: baseFont }];
+}
+
+function textRunsHaveMixedStyle(runs: RenderTextRun[]) {
+  const first = runs[0]?.font;
+  return runs.some((run) => JSON.stringify(run.font) !== JSON.stringify(first));
+}
+
+function layoutRenderTextRuns(runs: RenderTextRun[], width: number) {
+  const lines: Array<Array<RenderTextRun & { width: number }>> = [[]];
+  let lineWidth = 0;
+
+  const pushLine = () => {
+    if (lines[lines.length - 1]?.length === 0) return;
+    lines.push([]);
+    lineWidth = 0;
+  };
+
+  for (const run of runs) {
+    const parts = run.text.match(/\n|[^\S\n]+|[^\s]+/g) ?? [run.text];
+    for (const part of parts) {
+      if (part === "\n") {
+        pushLine();
+        continue;
+      }
+      const segmentWidth = measureRenderText(part, run.font);
+      const isWhitespace = part.trim().length === 0;
+      if (
+        !isWhitespace &&
+        lineWidth > 0 &&
+        lineWidth + segmentWidth > width
+      ) {
+        pushLine();
+      }
+      if (lines.length === 0) lines.push([]);
+      lines[lines.length - 1].push({
+        ...run,
+        text: part,
+        width: segmentWidth,
+      });
+      lineWidth += segmentWidth;
+    }
+  }
+
+  return lines.filter((line) => line.length > 0);
+}
+
+function lineRenderHeight(
+  line: Array<RenderTextRun & { width: number }>,
+  fallbackLineHeight: number,
+) {
+  return Math.max(
+    1,
+    ...line.map(
+      (segment) =>
+        segment.font.size * (segment.font.lineHeight ?? fallbackLineHeight),
+    ),
+  );
+}
+
+let renderTextMeasureCanvas: HTMLCanvasElement | null = null;
+
+function measureRenderText(text: string, font: RenderTextFont) {
+  const fallbackWidth =
+    text.length * font.size * (font.bold ? 0.58 : TEXT_AVERAGE_CHAR_EM);
+  if (typeof document === "undefined") return fallbackWidth;
+  renderTextMeasureCanvas ??= document.createElement("canvas");
+  const context = renderTextMeasureCanvas.getContext("2d");
+  if (!context) return fallbackWidth;
+  context.font = `${font.italic ? "italic " : ""}${
+    font.bold ? "700 " : "400 "
+  }${font.size}px ${font.family}, Helvetica, sans-serif`;
+  return (
+    context.measureText(text).width +
+    ((font.letterSpacing ?? 0) * Math.max(0, text.length - 1))
   );
 }
 
@@ -1872,97 +2076,6 @@ function RawInfographicElement({
         fill="#172033"
       />
     </Group>
-  );
-}
-
-function RawInlineEditor({
-  draft,
-  element,
-  kind,
-  box,
-  style,
-  onChange,
-  onClose,
-}: {
-  draft: string;
-  element: RawElement;
-  kind: NonNullable<InlineEdit>["kind"];
-  box: Box;
-  style?: TextEditStyle;
-  onChange: (draft: string) => void;
-  onClose: (commit: boolean) => void;
-}) {
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const font = style ?? rawTextStyle(element);
-  const isCode = kind === "svg";
-  const closeAfterBlur = useCallback(() => {
-    window.setTimeout(() => {
-      const active = document.activeElement;
-      if (active && editorRef.current?.contains(active)) return;
-      onClose(true);
-    }, 0);
-  }, [onClose]);
-
-  return (
-    <div
-      ref={editorRef}
-      data-inline-edit-ignore="true"
-      onBlur={closeAfterBlur}
-      onPointerDown={(event) => event.stopPropagation()}
-      onMouseDown={(event) => event.stopPropagation()}
-      style={{
-        position: "absolute",
-        zIndex: 30,
-        inset: 0,
-        pointerEvents: "none",
-      }}
-    >
-      <textarea
-        autoFocus
-        data-inline-edit-ignore="true"
-        value={draft}
-        onMouseDown={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose(false);
-          }
-          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-            event.preventDefault();
-            onClose(true);
-          }
-        }}
-        style={{
-          position: "absolute",
-          zIndex: 31,
-          left: box.x,
-          top: box.y,
-          width: box.width,
-          height: box.height,
-          pointerEvents: "auto",
-          border: "1px solid #7C51F8",
-          outline: "none",
-          resize: "none",
-          padding: 0,
-          background: isCode
-            ? "rgba(7,20,37,0.96)"
-            : "rgba(255,255,255,0.08)",
-          color: isCode ? "#E7EDF8" : withHash(font.color),
-          caretColor: isCode ? "#E7EDF8" : withHash(font.color),
-          fontFamily: isCode
-            ? "Menlo, Consolas, monospace"
-            : `${font.family}, Helvetica, sans-serif`,
-          fontSize: isCode ? 12 : font.size,
-          fontWeight: font.bold ? 700 : 400,
-          fontStyle: font.italic ? "italic" : "normal",
-          lineHeight: font.lineHeight,
-          letterSpacing: font.letterSpacing,
-          textAlign: font.horizontal as CSSProperties["textAlign"],
-        }}
-      />
-    </div>
   );
 }
 
@@ -3414,13 +3527,20 @@ function isBoxVisualType(type: string | null) {
 
 function elementWithInlineDraft(
   element: RawElement,
-  kind: NonNullable<InlineEdit>["kind"],
+  kind: TemplateV2InlineEditKind,
   draft: string,
   style?: TextEditStyle,
   frame?: Box | null,
+  runs?: TextRun[],
 ) {
   if (kind === "text") {
-    return preserveInlineEditFrame(setRawTextContent(element, draft, style), frame);
+    const next =
+      runs != null
+        ? setRawTextRunsContent(element, runs)
+        : draft === rawTextContent(element)
+        ? element
+        : setRawTextContent(element, draft, style);
+    return preserveInlineEditFrame(next, frame);
   }
   if (kind === "text-list") {
     const next = setRawTextListContent(element, draft);
@@ -3460,6 +3580,27 @@ function rawTextContent(element: RawElement) {
   return "";
 }
 
+function rawTextRunsForEditor(element: RawElement): TextRun[] {
+  const fallbackFont = fontToSource(rawFont(element));
+  const runs = readArray(element.runs)
+    .map((run) => {
+      const record = asRecord(run);
+      if (!record) return null;
+      const text = readString(record.text) ?? "";
+      if (!text) return null;
+      return {
+        text,
+        font: fontToSource(
+          fontFromRecord(asRecord(record.font), rawFont(element)),
+        ),
+      } satisfies TextRun;
+    })
+    .filter(Boolean) as TextRun[];
+
+  if (runs.length > 0) return runs;
+  return [{ text: rawTextContent(element) || " ", font: fallbackFont }];
+}
+
 function setRawTextContent(
   element: RawElement,
   text: string,
@@ -3480,6 +3621,39 @@ function setRawTextContent(
     ...styled,
     text,
     runs,
+  };
+}
+
+function setRawTextRunsContent(
+  element: RawElement,
+  runs: TextRun[],
+): RawElement {
+  const sourceRuns = readArray(element.runs);
+  const nextRuns = (runs.length > 0 ? runs : [{ text: " " }]).map(
+    (run, index) => {
+      const sourceRun = asRecord(sourceRuns[index]) ?? {};
+      return {
+        ...sourceRun,
+        text: run.text,
+        font: rawInlineTextFontRecord(run.font, sourceRun.font),
+      };
+    },
+  );
+  return {
+    ...element,
+    text: textRunsContent(nextRuns),
+    runs: nextRuns,
+  };
+}
+
+function rawInlineTextFontRecord(value: unknown, fallback: unknown) {
+  const font = asRecord(value);
+  if (!font) return fallback;
+  return {
+    ...(asRecord(fallback) ?? {}),
+    ...font,
+    line_height: font.line_height ?? font.lineHeight,
+    letter_spacing: font.letter_spacing ?? font.letterSpacing,
   };
 }
 
@@ -3759,10 +3933,14 @@ function rawElementForEditorToolbar(
   };
 
   if (type === "text") {
-    projected.runs = readArray(element.runs).map((value) => {
+    const runs = readArray(element.runs).map((value) => {
       const run = asRecord(value) ?? {};
       return { ...run, font: rawFontRecordForEditor(run.font) };
     });
+    projected.runs =
+      runs.length > 0
+        ? runs
+        : [{ text: rawTextContent(element) || " ", font: projected.font }];
   } else if (type === "text-list") {
     projected.items = readArray(element.items).map((item) => {
       if (Array.isArray(item)) {
@@ -4141,7 +4319,7 @@ function fontFromRecord(
   };
 }
 
-function fontToSource(font: RenderTextFont) {
+function fontToSource(font: RenderTextFont): Font {
   return {
     family: font.family,
     size: font.size,
@@ -4151,7 +4329,7 @@ function fontToSource(font: RenderTextFont) {
     underline: font.underline,
     line_height: font.lineHeight,
     letter_spacing: font.letterSpacing,
-    wrap: font.wrap,
+    wrap: readFontWrap(font.wrap),
   };
 }
 
@@ -4323,6 +4501,14 @@ function readVerticalAlignment(value: unknown): TextEditStyle["vertical"] {
   const normalized = readString(value);
   if (normalized === "middle" || normalized === "bottom") return normalized;
   return "top";
+}
+
+function readFontWrap(value: unknown): Font["wrap"] {
+  const normalized = readString(value);
+  if (normalized === "none" || normalized === "char" || normalized === "word") {
+    return normalized;
+  }
+  return "word";
 }
 
 function alignmentOffset(alignment: string | null, available: number, used: number) {
