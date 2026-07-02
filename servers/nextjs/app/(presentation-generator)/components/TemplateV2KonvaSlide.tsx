@@ -1108,10 +1108,10 @@ function TemplateV2KonvaSlideComponent({
           {isEditMode ? (
             <TemplateV2SelectionTransformers
               nodeRefs={nodeRefs}
-              parentComponentKey={selectedParentComponentKey}
+              parentComponentKey={inlineEdit ? null : selectedParentComponentKey}
               selectedKey={selectedKey}
               selectionKind={selection?.kind ?? null}
-              suppressSelectedOutline={Boolean(selectedTableCell)}
+              suppressSelectedOutline={Boolean(selectedTableCell || inlineEdit)}
             />
           ) : null}
         </Layer>
