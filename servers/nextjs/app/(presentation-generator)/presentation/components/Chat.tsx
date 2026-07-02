@@ -3,6 +3,8 @@
 import {
   ChevronDown,
   ChevronRight,
+  Image as ImageIcon,
+  Link as LinkIcon,
   Loader2,
   MessageCircleMore,
   Plus,
@@ -13,6 +15,8 @@ import {
   UserRound,
 } from "lucide-react";
 import React, {
+  ChangeEvent,
+  ClipboardEvent,
   FormEvent,
   KeyboardEvent,
   ReactNode,
@@ -23,6 +27,7 @@ import React, {
 } from "react";
 import { notify } from "@/components/ui/sonner";
 import MarkdownRenderer from "@/components/MarkDownRender";
+import { ImagesApi } from "../../services/api/images";
 import { PresentationChatApi } from "../../services/api/chat";
 import type {
   ChatConversationSummary,
@@ -259,6 +264,17 @@ type ChatMessage = {
   activity?: AssistantActivity[];
 };
 
+type PastedChatImage = {
+  id: string;
+  name: string;
+  url: string;
+};
+
+type ChatLink = {
+  id: string;
+  url: string;
+};
+
 type ChatProps = {
   presentationId: string;
   resourceId?: string;
@@ -345,6 +361,32 @@ const createMessageId = () => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+const URL_PATTERN =
+  /(https?:\/\/[^\s<>"']+\.[^\s<>"']+|www\.[^\s<>"']+\.[^\s<>"']+)/gi;
+
+function pullLinksFromText(text: string) {
+  const links: ChatLink[] = [];
+  const cleanText = text
+    .replace(URL_PATTERN, (match) => {
+      const url = match.replace(/[.,;:!?)}\]]+$/g, "");
+      links.push({
+        id: createMessageId(),
+        url: url.startsWith("www.") ? `https://${url}` : url,
+      });
+      return match.slice(url.length);
+    })
+    .replace(/[ \t]{2,}/g, " ")
+    .trimStart();
+  return { cleanText, links };
+}
+
+function appendInputText(previous: string, next: string) {
+  if (!next) return previous;
+  if (!previous) return next.trimStart();
+  if (/\s$/.test(previous) || /^\s/.test(next)) return `${previous}${next}`;
+  return `${previous} ${next}`;
+}
+
 const conversationStorageKey = (scope: string, resourceId: string) =>
   `presenton:chat:${scope}:conversationId:${resourceId}`;
 
@@ -377,6 +419,7 @@ const TOOL_LABELS: Record<string, string> = {
   getEditableElements: "Element finder",
   updateElementContent: "Content updater",
   deleteComponent: "Component remover",
+  ungroupComponent: "Component ungrouper",
   swapComponentVariant: "Variant swapper",
   getSlideElements: "Element finder",
   updateSlideElement: "Content updater",
@@ -396,6 +439,7 @@ const MUTATING_TOOLS = new Set([
   "setPresentationTheme",
   "updateElementContent",
   "deleteComponent",
+  "ungroupComponent",
   "swapComponentVariant",
   "updateSlideElement",
   "updateSlideComponent",
@@ -410,6 +454,7 @@ const SLIDE_FOCUS_TOOLS = new Set([
   "deleteSlide",
   "updateElementContent",
   "deleteComponent",
+  "ungroupComponent",
   "swapComponentVariant",
   "updateSlideElement",
   "updateSlideComponent",
@@ -680,6 +725,9 @@ const Chat = ({
     string | null
   >(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pastedImages, setPastedImages] = useState<PastedChatImage[]>([]);
+  const [chatLinks, setChatLinks] = useState<ChatLink[]>([]);
+  const [isUploadingPastedImage, setIsUploadingPastedImage] = useState(false);
   const [expandedActivityByMessage, setExpandedActivityByMessage] = useState<
     Record<string, boolean>
   >({});
@@ -709,6 +757,9 @@ const Chat = ({
     setActiveMutationToolCount(0);
     setActiveAssistantMessageId(null);
     setErrorMessage(null);
+    setPastedImages([]);
+    setChatLinks([]);
+    setIsUploadingPastedImage(false);
     setExpandedActivityByMessage({});
 
     if (!activeResourceId) {
@@ -959,6 +1010,26 @@ const Chat = ({
       );
     }
 
+    if (pastedImages.length > 0) {
+      contextLines.push(
+        [
+          "UI context: the user pasted image(s) into chat for this request. If they ask to add or replace an image, use updateElementContent on an image element with the exact pasted image URL.",
+          ...pastedImages.map(
+            (image, index) => `Pasted image ${index + 1}: ${image.url}`
+          ),
+        ].join("\n")
+      );
+    }
+
+    if (chatLinks.length > 0) {
+      contextLines.push(
+        [
+          "UI context: the user added link(s) to chat for this request. Use the exact URL when the user refers to the link.",
+          ...chatLinks.map((link, index) => `Link ${index + 1}: ${link.url}`),
+        ].join("\n")
+      );
+    }
+
     if (contextLines.length === 0) {
       return message;
     }
@@ -969,6 +1040,8 @@ const Chat = ({
   const resetChat = () => {
     setMessages([]);
     setInput("");
+    setPastedImages([]);
+    setChatLinks([]);
     setConversationId(null);
     setActiveMutationToolCount(0);
     setErrorMessage(null);
@@ -1116,8 +1189,19 @@ const Chat = ({
 
   const submitMessage = async (rawMessage: string) => {
     const trimmedMessage = rawMessage.trim();
+    const hasAttachedContext = pastedImages.length > 0 || chatLinks.length > 0;
+    const outboundMessage =
+      trimmedMessage ||
+      (chatLinks.length > 0
+        ? "Use the provided link."
+        : "Use the pasted image.");
 
-    if (!trimmedMessage || isSending || isHistoryLoading) {
+    if (
+      (!trimmedMessage && !hasAttachedContext) ||
+      isSending ||
+      isHistoryLoading ||
+      isUploadingPastedImage
+    ) {
       return;
     }
 
@@ -1132,7 +1216,7 @@ const Chat = ({
     const userMessage: ChatMessage = {
       id: createMessageId(),
       role: "user",
-      content: trimmedMessage,
+      content: outboundMessage,
     };
 
     const assistantMessageId = createMessageId();
@@ -1166,7 +1250,7 @@ const Chat = ({
       const response = await chatAdapter.streamMessage(
         {
           resourceId: activeResourceId,
-          message: buildBackendMessage(trimmedMessage),
+          message: buildBackendMessage(outboundMessage),
           conversation_id: conversationId ?? undefined,
         },
         {
@@ -1246,6 +1330,8 @@ const Chat = ({
       await refreshPresentationIfNeeded(
         Array.isArray(response.tool_calls) ? response.tool_calls : []
       );
+      setPastedImages([]);
+      setChatLinks([]);
     } catch (error) {
       if (isAbortError(error)) {
         setMessages((previous) =>
@@ -1311,6 +1397,82 @@ const Chat = ({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void submitMessage(input);
+  };
+
+  const addChatLinks = (links: ChatLink[]) => {
+    if (links.length === 0) return;
+    setChatLinks((previous) => {
+      const seen = new Set(previous.map((link) => link.url));
+      return [
+        ...previous,
+        ...links.filter((link) => {
+          if (seen.has(link.url)) return false;
+          seen.add(link.url);
+          return true;
+        }),
+      ];
+    });
+  };
+
+  const handleInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const { cleanText, links } = pullLinksFromText(event.target.value);
+    setInput(cleanText);
+    addChatLinks(links);
+  };
+
+  const handlePaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files).filter((file) =>
+      file.type.startsWith("image/")
+    );
+    if (isSending || isHistoryLoading) {
+      return;
+    }
+
+    const pastedText = event.clipboardData.getData("text");
+    const { cleanText, links } = pullLinksFromText(pastedText);
+
+    if (files.length === 0 && links.length > 0) {
+      event.preventDefault();
+      setInput((previous) => appendInputText(previous, cleanText));
+      addChatLinks(links);
+      return;
+    }
+
+    if (files.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    addChatLinks(links);
+    if (cleanText) {
+      setInput((previous) => appendInputText(previous, cleanText));
+    }
+    setIsUploadingPastedImage(true);
+    try {
+      const uploads = await Promise.all(files.map((file) => ImagesApi.uploadImage(file)));
+      const nextImages = uploads
+        .map((upload, index) => ({
+          id: upload.id || createMessageId(),
+          name: files[index]?.name || `Pasted image ${index + 1}`,
+          url: upload.file_url || upload.path,
+        }))
+        .filter((image) => image.url);
+      if (nextImages.length === 0) {
+        throw new Error("Image upload did not return a URL.");
+      }
+      setPastedImages((previous) => [...previous, ...nextImages]);
+      notify.success(
+        "Image pasted",
+        `${nextImages.length} image${nextImages.length === 1 ? "" : "s"} ready to use.`
+      );
+    } catch (error) {
+      notify.error(
+        "Could not paste image",
+        error instanceof Error ? error.message : "Image upload failed."
+      );
+    } finally {
+      setIsUploadingPastedImage(false);
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1625,6 +1787,60 @@ const Chat = ({
             )}
           </div>
         )}
+        {(pastedImages.length > 0 || chatLinks.length > 0 || isUploadingPastedImage) && (
+          <div className="mb-2 flex max-w-full flex-wrap items-center gap-1.5">
+            {chatLinks.map((link) => (
+              <span
+                key={link.id}
+                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-[8px] border border-[#DBEAFE] bg-[#EFF6FF] px-2 py-1 text-xs font-medium text-[#1D4ED8]"
+              >
+                <LinkIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{link.url}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setChatLinks((previous) =>
+                      previous.filter((item) => item.id !== link.id)
+                    )
+                  }
+                  className="rounded-full p-0.5 text-[#2563EB] transition-colors hover:bg-[#DBEAFE]"
+                  aria-label="Remove link"
+                  title="Remove link"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {pastedImages.map((image) => (
+              <span
+                key={image.id}
+                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-[8px] border border-[#EDEEEF] bg-[#F9FAFB] px-2 py-1 text-xs font-medium text-[#344054]"
+              >
+                <ImageIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{image.name}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPastedImages((previous) =>
+                      previous.filter((item) => item.id !== image.id)
+                    )
+                  }
+                  className="rounded-full p-0.5 text-[#667085] transition-colors hover:bg-[#E4E7EC]"
+                  aria-label="Remove pasted image"
+                  title="Remove pasted image"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {isUploadingPastedImage && (
+              <span className="inline-flex items-center gap-1.5 rounded-[8px] border border-[#EDEEEF] bg-[#F9FAFB] px-2 py-1 text-xs font-medium text-[#667085]">
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                Uploading image
+              </span>
+            )}
+          </div>
+        )}
         <textarea
           ref={inputRef}
           name="chat-input"
@@ -1633,7 +1849,8 @@ const Chat = ({
           rows={3}
           value={input}
           disabled={isSending || isHistoryLoading}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={handleInputChange}
+          onPaste={handlePaste}
           onKeyDown={handleKeyDown}
           placeholder={
             isOutlineVariant
@@ -1761,7 +1978,11 @@ const Chat = ({
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim() || isHistoryLoading}
+                disabled={
+                  (!input.trim() && pastedImages.length === 0 && chatLinks.length === 0) ||
+                  isHistoryLoading ||
+                  isUploadingPastedImage
+                }
                 className="flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-medium text-[#191919] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{
                   background:

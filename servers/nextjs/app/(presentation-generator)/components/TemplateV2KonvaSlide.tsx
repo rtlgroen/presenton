@@ -28,13 +28,13 @@ import {
 } from "react-konva";
 import { notify } from "@/components/ui/sonner";
 import type { TemplateV2Layout } from "@/components/slide-editor/lib/template-v2-import";
-import { disintegrateTemplateV2ComponentInUi } from "@/components/slide-editor/lib/template-v2-disintegration";
 import {
   ensureGoogleFontsForDescriptors,
   ensureTemplateFontsForDescriptors,
   templateFontOptionsFromMap,
   type TemplateFontOption,
 } from "@/components/slide-editor/lib/google-fonts";
+import { ungroupTemplateV2ComponentInUi } from "@/components/slide-editor/lib/template-v2-ungroup";
 import { effectiveLineHeight } from "@/components/slide-editor/lib/text-line-height";
 import { textRunsContent } from "@/components/slide-editor/lib/text-runs";
 import type {
@@ -815,7 +815,7 @@ function TemplateV2KonvaSlideComponent({
 
   const ungroupSelectedComponent = useCallback(() => {
     if (selection?.kind !== "component" || !canUngroupSelectedComponent) return;
-    const result = disintegrateTemplateV2ComponentInUi(
+    const result = ungroupTemplateV2ComponentInUi(
       currentUiRef.current,
       selection.componentIndex,
       {

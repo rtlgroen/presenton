@@ -95,6 +95,7 @@ class TemplateV2ChatService(PresentationChatService):
             "getEditableElements",
             "updateElementContent",
             "deleteComponent",
+            "ungroupComponent",
             "swapComponentVariant",
         }:
             return None
@@ -121,6 +122,7 @@ class TemplateV2ChatService(PresentationChatService):
             "getEditableElements",
             "updateElementContent",
             "deleteComponent",
+            "ungroupComponent",
             "swapComponentVariant",
         }:
             return None
@@ -161,6 +163,7 @@ class TemplateV2ChatService(PresentationChatService):
             "getEditableElements": "Finding editable elements",
             "updateElementContent": "Updating template content",
             "deleteComponent": "Deleting the template component",
+            "ungroupComponent": "Separating component elements",
             "swapComponentVariant": "Swapping component variant",
         }
         return labels.get(tool_name, f"Running {tool_name}")
