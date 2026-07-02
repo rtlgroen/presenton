@@ -39,6 +39,8 @@ import {
   applyTextStyle,
   displayText,
   editorFontRecordToRaw,
+  fontScaleFromResize,
+  fontFromRecord,
   layoutRenderTextRuns,
   layoutRichText,
   lineRenderHeight,
@@ -57,6 +59,7 @@ import {
   rawTextListItemText,
   rawTextRunsForEditor,
   rawTextStyle,
+  scaleRawTextMetrics,
   setRawSvgContent,
   setRawTextContent,
   setRawTextListContent,
@@ -228,6 +231,7 @@ function TemplateV2KonvaSlideComponent({
   const [uiDraft, setUiDraft] = useState<RawUi>(() =>
     normalizeMarkdownTextInUi(cloneJson(layout as RawUi)),
   );
+  const fontLoadState = useFontLoadState(uiDraft);
   const currentUiRef = useRef<RawUi>(uiDraft);
   const [selection, setSelection] = useState<Selection>(null);
   const {
@@ -1148,8 +1152,14 @@ function TemplateV2KonvaSlideComponent({
           activateSurface();
         }}
       >
-        <Layer>
+        <Layer listening={false}>
           <Rect width={STAGE_WIDTH} height={STAGE_HEIGHT} fill={backgroundColor(uiDraft)} />
+        </Layer>
+        <Layer
+          key={`fonts:${fontLoadState.revision}`}
+          listening={fontLoadState.ready}
+          visible={fontLoadState.ready}
+        >
           {rootElements.map((element, elementIndex) => (
             <MemoizedRawElementNode
               key={`root:${rawElementKey(element, elementIndex)}`}
@@ -1324,6 +1334,213 @@ function TemplateV2KonvaSlideComponent({
 
 export const TemplateV2KonvaSlide = memo(TemplateV2KonvaSlideComponent);
 TemplateV2KonvaSlide.displayName = "TemplateV2KonvaSlide";
+
+function useFontLoadState(ui: RawUi) {
+  const fontSignature = useMemo(() => fontLoadSignatureForUi(ui), [ui]);
+  const [state, setState] = useState(() => ({
+    revision: 0,
+    ready: areFontDescriptorsLoaded(fontSignature),
+  }));
+
+  useEffect(() => {
+    if (
+      typeof document === "undefined" ||
+      !document.fonts ||
+      !fontSignature
+    ) {
+      setState((current) =>
+        current.ready ? current : { ...current, ready: true },
+      );
+      return;
+    }
+
+    let cancelled = false;
+    let animationFrame: number | null = null;
+    const markReady = () => {
+      if (cancelled) return;
+      setState((current) => ({
+        revision: current.revision + 1,
+        ready: true,
+      }));
+    };
+    const scheduleReady = () => {
+      if (cancelled) return;
+      if (animationFrame != null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = null;
+        markReady();
+      });
+    };
+
+    const fonts = document.fonts;
+    const descriptors = fontSignature.split("\n").filter(Boolean);
+    setState((current) =>
+      current.ready && areFontDescriptorsLoaded(fontSignature)
+        ? current
+        : { ...current, ready: false },
+    );
+
+    void Promise.all(descriptors.map((descriptor) => fonts.load(descriptor)))
+      .then(() => fonts.ready)
+      .then(scheduleReady)
+      .catch(scheduleReady);
+    fonts.addEventListener?.("loadingdone", scheduleReady);
+    fonts.addEventListener?.("loadingerror", scheduleReady);
+
+    return () => {
+      cancelled = true;
+      if (animationFrame != null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      fonts.removeEventListener?.("loadingdone", scheduleReady);
+      fonts.removeEventListener?.("loadingerror", scheduleReady);
+    };
+  }, [fontSignature]);
+
+  return state;
+}
+
+function areFontDescriptorsLoaded(signature: string) {
+  if (!signature || typeof document === "undefined" || !document.fonts) {
+    return true;
+  }
+  return signature
+    .split("\n")
+    .filter(Boolean)
+    .every((descriptor) => {
+      try {
+        return document.fonts.check(descriptor);
+      } catch {
+        return false;
+      }
+    });
+}
+
+function fontLoadSignatureForUi(ui: RawUi) {
+  const descriptors = new Set<string>();
+  const visitElement = (value: unknown) => {
+    const element = asRecord(value);
+    if (!element) return;
+    collectElementFontDescriptors(element, descriptors);
+    childArrayInfo(element)?.items.forEach(visitElement);
+  };
+
+  readArray(ui.elements).forEach(visitElement);
+  readArray(ui.components).forEach((component) => {
+    readArray(asRecord(component)?.elements).forEach(visitElement);
+  });
+
+  return Array.from(descriptors).sort().join("\n");
+}
+
+function collectElementFontDescriptors(
+  element: RawElement,
+  descriptors: Set<string>,
+) {
+  const type = readString(element.type);
+  if (type !== "text" && type !== "text-list" && type !== "table") return;
+
+  const baseFont = rawFont(element);
+  addFontLoadDescriptor(baseFont, descriptors);
+  collectRunFontDescriptors(element.runs, baseFont, descriptors);
+  collectTextListFontDescriptors(element.items, baseFont, descriptors);
+  collectTableFontDescriptors(element.columns, baseFont, descriptors);
+  collectTableRowsFontDescriptors(element.rows, baseFont, descriptors);
+}
+
+function collectRunFontDescriptors(
+  value: unknown,
+  fallback: ReturnType<typeof rawFont>,
+  descriptors: Set<string>,
+) {
+  if (!Array.isArray(value)) return;
+  value.forEach((run) => {
+    const record = asRecord(run);
+    if (record?.font) {
+      addFontLoadDescriptor(
+        fontFromRecord(asRecord(record.font), fallback),
+        descriptors,
+      );
+    }
+  });
+}
+
+function collectTextListFontDescriptors(
+  value: unknown,
+  fallback: ReturnType<typeof rawFont>,
+  descriptors: Set<string>,
+) {
+  if (!Array.isArray(value)) return;
+  value.forEach((item) => {
+    if (Array.isArray(item)) {
+      collectRunFontDescriptors(item, fallback, descriptors);
+      return;
+    }
+    const record = asRecord(item);
+    if (!record) return;
+    if (record.font) {
+      addFontLoadDescriptor(
+        fontFromRecord(asRecord(record.font), fallback),
+        descriptors,
+      );
+    }
+    collectRunFontDescriptors(record.runs, fallback, descriptors);
+  });
+}
+
+function collectTableRowsFontDescriptors(
+  value: unknown,
+  fallback: ReturnType<typeof rawFont>,
+  descriptors: Set<string>,
+) {
+  if (!Array.isArray(value)) return;
+  value.forEach((row) =>
+    collectTableFontDescriptors(row, fallback, descriptors),
+  );
+}
+
+function collectTableFontDescriptors(
+  value: unknown,
+  fallback: ReturnType<typeof rawFont>,
+  descriptors: Set<string>,
+) {
+  if (!Array.isArray(value)) return;
+  value.forEach((cell) => {
+    const record = asRecord(cell);
+    if (!record) return;
+    if (record.font) {
+      addFontLoadDescriptor(
+        fontFromRecord(asRecord(record.font), fallback),
+        descriptors,
+      );
+    }
+    collectRunFontDescriptors(record.runs, fallback, descriptors);
+
+    const textRecord = asRecord(record.text);
+    if (!textRecord) return;
+    if (textRecord.font) {
+      addFontLoadDescriptor(
+        fontFromRecord(asRecord(textRecord.font), fallback),
+        descriptors,
+      );
+    }
+    collectRunFontDescriptors(textRecord.runs, fallback, descriptors);
+  });
+}
+
+function addFontLoadDescriptor(
+  font: ReturnType<typeof rawFont>,
+  descriptors: Set<string>,
+) {
+  const family = font.family.trim();
+  if (!family) return;
+  const escapedFamily = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const style = font.italic ? "italic " : "";
+  const weight = font.bold ? "700 " : "400 ";
+  descriptors.add(`${style}${weight}16px "${escapedFamily}"`);
+}
 
 function RawComponentNode({
   component,
@@ -1636,8 +1853,9 @@ function RawElementNode({
         };
         node.scaleX(1);
         node.scaleY(1);
+        const fontScale = fontScaleFromResize(scaleX, scaleY);
         onElementChange(selection, (current) => ({
-          ...current,
+          ...scaleRawElementTextMetrics(current, fontScale),
           position: positionFromNodeInParent(
             node,
             parentBox,
@@ -2530,6 +2748,7 @@ function resizeComponent(
   component: RawComponent,
   next: Box & { scaleX: number; scaleY: number; rotation?: number },
 ) {
+  const fontScale = fontScaleFromResize(next.scaleX, next.scaleY);
   return {
     ...component,
     position: { x: next.x, y: next.y },
@@ -2539,6 +2758,7 @@ function resizeComponent(
       readArray(component.elements),
       next.scaleX,
       next.scaleY,
+      fontScale,
     ),
   };
 }
@@ -2547,6 +2767,7 @@ function scaleRawElements(
   elements: unknown[],
   scaleX: number,
   scaleY: number,
+  fontScale: number,
 ): unknown[] {
   return elements.map((value) => {
     const element = asRecord(value);
@@ -2554,10 +2775,11 @@ function scaleRawElements(
     const box = elementBox(element);
     const childInfo = childArrayInfo(element);
     const scaledChildren = childInfo
-      ? scaleRawElements(childInfo.items, scaleX, scaleY)
+      ? scaleRawElements(childInfo.items, scaleX, scaleY, fontScale)
       : null;
+    const scaledElement = scaleRawElementTextMetrics(element, fontScale);
     return {
-      ...element,
+      ...scaledElement,
       position: { x: box.x * scaleX, y: box.y * scaleY },
       size: { width: box.width * scaleX, height: box.height * scaleY },
       ...(childInfo && scaledChildren
@@ -2565,6 +2787,17 @@ function scaleRawElements(
         : {}),
     };
   });
+}
+
+function scaleRawElementTextMetrics(element: RawElement, fontScale: number) {
+  if (!Number.isFinite(fontScale) || Math.abs(fontScale - 1) < 0.001) {
+    return element;
+  }
+  const type = readString(element.type);
+  if (type !== "text" && type !== "text-list" && type !== "table") {
+    return element;
+  }
+  return scaleRawTextMetrics(element, fontScale);
 }
 
 function positionFromNodeInParent(

@@ -42,6 +42,9 @@ const DEFAULT_FONT: RenderTextFont = {
   letterSpacing: 0,
   wrap: "word",
 };
+const MIN_TRANSFORM_FONT_SIZE = 1;
+const MAX_TRANSFORM_FONT_SIZE = 512;
+const TRANSFORM_FONT_SCALE_EPSILON = 0.001;
 
 const richMeasureCtx: { ctx: CanvasRenderingContext2D | null } = { ctx: null };
 let renderTextMeasureCanvas: HTMLCanvasElement | null = null;
@@ -762,6 +765,121 @@ export function rawFontToSource(value: unknown) {
     line_height: font.line_height ?? font.lineHeight,
     letter_spacing: font.letter_spacing ?? font.letterSpacing,
   });
+}
+
+export function fontScaleFromResize(scaleX: number, scaleY: number) {
+  const safeX = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1;
+  const safeY = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1;
+  return Math.sqrt(safeX * safeY);
+}
+
+export function scaleRawTextMetrics(
+  element: TemplateV2RawTextElement,
+  scale: number,
+): TemplateV2RawTextElement {
+  if (
+    !Number.isFinite(scale) ||
+    Math.abs(scale - 1) < TRANSFORM_FONT_SCALE_EPSILON
+  ) {
+    return element;
+  }
+
+  return stripUndefined({
+    ...element,
+    font: scaleRawFontMetrics(element.font, scale),
+    runs: scaleRawTextRunsMetrics(element.runs, scale),
+    items: scaleRawTextListItemsMetrics(element.items, scale),
+    columns: scaleRawTableCellsMetrics(element.columns, scale),
+    rows: scaleRawTableRowsMetrics(element.rows, scale),
+  });
+}
+
+function scaleRawTextRunsMetrics(value: unknown, scale: number) {
+  if (!Array.isArray(value)) return value;
+  return value.map((run) => {
+    const record = asRecord(run);
+    if (!record) return run;
+    return stripUndefined({
+      ...record,
+      font: scaleRawFontMetrics(record.font, scale),
+    });
+  });
+}
+
+function scaleRawTextListItemsMetrics(value: unknown, scale: number) {
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    if (Array.isArray(item)) return scaleRawTextRunsMetrics(item, scale);
+    const record = asRecord(item);
+    if (!record) return item;
+    return stripUndefined({
+      ...record,
+      font: scaleRawFontMetrics(record.font, scale),
+      runs: scaleRawTextRunsMetrics(record.runs, scale),
+    });
+  });
+}
+
+function scaleRawTableRowsMetrics(value: unknown, scale: number) {
+  if (!Array.isArray(value)) return value;
+  return value.map((row) =>
+    Array.isArray(row) ? scaleRawTableCellsMetrics(row, scale) : row,
+  );
+}
+
+function scaleRawTableCellsMetrics(value: unknown, scale: number) {
+  if (!Array.isArray(value)) return value;
+  return value.map((cell) => {
+    const record = asRecord(cell);
+    if (!record) return cell;
+    const textRecord = asRecord(record.text);
+    return stripUndefined({
+      ...record,
+      font: scaleRawFontMetrics(record.font, scale),
+      runs: scaleRawTextRunsMetrics(record.runs, scale),
+      text: textRecord
+        ? stripUndefined({
+            ...textRecord,
+            font: scaleRawFontMetrics(textRecord.font, scale),
+            runs: scaleRawTextRunsMetrics(textRecord.runs, scale),
+          })
+        : record.text,
+    });
+  });
+}
+
+function scaleRawFontMetrics(value: unknown, scale: number) {
+  const font = asRecord(value);
+  if (!font) return value;
+
+  const next = { ...font };
+  const size = readNumber(font.size);
+  if (size != null) {
+    next.size = scaleFontSize(size, scale);
+  }
+
+  const letterSpacing = readNumber(font.letter_spacing);
+  if (letterSpacing != null) {
+    next.letter_spacing = scaleTextMetric(letterSpacing, scale);
+  }
+
+  const camelLetterSpacing = readNumber(font.letterSpacing);
+  if (camelLetterSpacing != null) {
+    next.letterSpacing = scaleTextMetric(camelLetterSpacing, scale);
+  }
+
+  return stripUndefined(next);
+}
+
+function scaleFontSize(size: number, scale: number) {
+  return Math.min(
+    MAX_TRANSFORM_FONT_SIZE,
+    Math.max(MIN_TRANSFORM_FONT_SIZE, scaleTextMetric(size, scale)),
+  );
+}
+
+function scaleTextMetric(value: number, scale: number) {
+  return Math.round(value * scale * 100) / 100;
 }
 
 function reconcileTextRunsWithStoredText(
