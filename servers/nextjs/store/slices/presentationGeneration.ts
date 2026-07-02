@@ -136,6 +136,55 @@ const presentationGenerationSlice = createSlice({
         );
       }
     },
+    duplicatePresentationSlide: (
+      state,
+      action: PayloadAction<{ index: number; slideId: string }>
+    ) => {
+      if (state.presentationData?.slides) {
+        const slides = state.presentationData.slides;
+        const sourceSlide = slides[action.payload.index];
+        if (!sourceSlide) {
+          return;
+        }
+
+        const duplicatedSlide = {
+          ...JSON.parse(JSON.stringify(sourceSlide)),
+          id: action.payload.slideId,
+          index: action.payload.index + 1,
+        };
+
+        slides.splice(action.payload.index + 1, 0, duplicatedSlide);
+        state.presentationData.slides = slides.map((slide: any, idx: number) => ({
+          ...slide,
+          index: idx,
+        }));
+      }
+    },
+    movePresentationSlide: (
+      state,
+      action: PayloadAction<{ fromIndex: number; toIndex: number }>
+    ) => {
+      if (state.presentationData?.slides) {
+        const slides = state.presentationData.slides;
+        const { fromIndex, toIndex } = action.payload;
+        if (
+          fromIndex === toIndex ||
+          fromIndex < 0 ||
+          toIndex < 0 ||
+          fromIndex >= slides.length ||
+          toIndex >= slides.length
+        ) {
+          return;
+        }
+
+        const [movedSlide] = slides.splice(fromIndex, 1);
+        slides.splice(toIndex, 0, movedSlide);
+        state.presentationData.slides = slides.map((slide: any, idx: number) => ({
+          ...slide,
+          index: idx,
+        }));
+      }
+    },
     updateSlide: (
       state,
       action: PayloadAction<{ index: number; slide: Slide }>
@@ -432,6 +481,8 @@ export const {
   updateSlide,
   updateSlideUi,
   deletePresentationSlide,
+  duplicatePresentationSlide,
+  movePresentationSlide,
   updateSlideContent,
   updateSlideImage,
   updateImageProperties,

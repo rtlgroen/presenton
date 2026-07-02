@@ -3,7 +3,6 @@ import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -301,10 +300,13 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
 
   const totalSlides = presentationData?.slides?.length ?? 0;
   const highlightedSlideIndex = glowingSlideIndex;
-  const targetedSlidesSet = useMemo(
-    () => new Set(chatTargetedSlides),
-    [chatTargetedSlides]
-  );
+
+  useEffect(() => {
+    if (totalSlides <= 0 || selectedSlide <= totalSlides - 1) {
+      return;
+    }
+    setSelectedSlide(totalSlides - 1);
+  }, [selectedSlide, totalSlides]);
 
   useEffect(() => {
     if (!isFollowModeEnabled || !isChatSending || totalSlides <= 0) {
@@ -545,11 +547,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                             isChatEditing={
                               highlightedSlideIndex !== null &&
                               index === highlightedSlideIndex
-                            }
-                            isChatTargeted={
-                              isChatSending &&
-                              highlightedSlideIndex !== index &&
-                              targetedSlidesSet.has(index)
                             }
                           />
                           // <div></div>
