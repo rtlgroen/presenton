@@ -103,6 +103,14 @@ class DeleteComponentInput(StrictSchemaModel):
     model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
 
 
+class UngroupComponentInput(StrictSchemaModel):
+    slide_index: int = Field(alias="slideIndex", ge=0, le=1000)
+    component_id: str = Field(alias="componentId", min_length=1, max_length=120)
+    reason: str = Field(min_length=20, max_length=500)
+
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+
 class SwapComponentVariantInput(OpenAIStrictSchemaModel):
     slide_index: int = Field(alias="slideIndex", ge=0, le=1000)
     component_id: str = Field(alias="componentId", min_length=1, max_length=120)

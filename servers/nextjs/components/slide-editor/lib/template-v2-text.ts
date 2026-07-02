@@ -373,18 +373,23 @@ export function setRawTextListContent(
 
 export function rawTableCellText(cell: unknown) {
   if (typeof cell === "string" || typeof cell === "number") {
-    return String(cell);
+    return displayText(String(cell));
   }
   const record = asRecord(cell);
   if (!record) return "";
   const runs = readArray(record.runs);
   if (runs.length > 0) {
-    return runs
-      .map((run) => readString(asRecord(run)?.text) ?? "")
-      .join("");
+    return textRunsContent(
+      renderMarkdownTextRuns(
+        runs.map((run) => ({
+          text: readString(asRecord(run)?.text) ?? "",
+          font: asRecord(run)?.font as TextRun["font"],
+        })),
+      ),
+    );
   }
   const textRecord = asRecord(record.text);
-  return readString(textRecord?.text) ?? readString(record.text) ?? "";
+  return displayText(readString(textRecord?.text) ?? readString(record.text) ?? "");
 }
 
 export function rawSvgContent(element: TemplateV2RawTextElement) {

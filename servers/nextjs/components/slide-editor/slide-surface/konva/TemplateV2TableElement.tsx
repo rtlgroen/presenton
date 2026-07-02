@@ -1,4 +1,7 @@
 import { Group, Line, Rect, Text } from "react-konva";
+import { renderMarkdownTextRuns } from "../../lib/markdown-text";
+import type { TextRun } from "../../lib/slide-schema";
+import { layoutRichText } from "../../lib/template-v2-text";
 import { effectiveLineHeight } from "../../lib/text-line-height";
 
 type UnknownRecord = Record<string, any>;
@@ -67,7 +70,22 @@ export function TemplateV2TableElement({
             asRecord(cell.font) ?? asRecord(firstRun.font),
             font,
           );
-          const text = rawTableCellText(cell);
+          const fill =
+            fillColor(cell.fill ?? cell.color) ??
+            (rowIndex === 0 ? "#F2F4F7" : "#FFFFFF");
+          const runs = readableTableCellRuns(
+            rawTableCellRuns(cell, cellFont),
+            fill,
+            rowIndex === 0,
+          );
+          const renderRuns =
+            rowIndex === 0
+              ? runs.map((run) => ({
+                  ...run,
+                  font: { ...run.font, bold: true },
+                }))
+              : runs;
+          const text = tableCellTextContent(runs);
           const fontSize = cellFont.size;
           const textWidth = Math.max(1, cellW - 12);
           const cellLineHeight = effectiveLineHeight({
@@ -78,9 +96,6 @@ export function TemplateV2TableElement({
             fallback: 1.15,
             wrap: cellFont.wrap,
           });
-          const fill =
-            fillColor(cell.fill ?? cell.color) ??
-            (rowIndex === 0 ? "#F2F4F7" : "#FFFFFF");
           return (
             <Group
               key={`${rowIndex}-${colIndex}`}
@@ -116,21 +131,16 @@ export function TemplateV2TableElement({
                 stroke={strokeColor(cell.stroke) ?? "#D0D5DD"}
                 strokeWidth={strokeWidth(cell.stroke) || 1}
               />
-              <Text
+              <TableCellText
                 x={6}
                 y={4}
                 width={textWidth}
                 height={Math.max(1, cellH - 8)}
-                text={text}
-                fill={withHash(cellFont.color)}
-                fontFamily={`${cellFont.family}, Helvetica, sans-serif`}
-                fontSize={fontSize}
-                fontStyle={rowIndex === 0 || cellFont.bold ? "bold" : "normal"}
-                textDecoration={cellFont.underline ? "underline" : ""}
-                lineHeight={cellLineHeight}
-                letterSpacing={cellFont.letterSpacing}
+                runs={renderRuns}
+                font={rowIndex === 0 ? { ...cellFont, bold: true } : cellFont}
                 align={readString(cell.alignment) ?? "left"}
                 verticalAlign="middle"
+                lineHeight={cellLineHeight}
               />
             </Group>
           );
@@ -188,7 +198,13 @@ function RawDefaultTableElement({
         const cell = rows[0]?.[colIndex];
         const cellRecord = asRecord(cell) ?? {};
         const cellFont = fontFromRecord(asRecord(cellRecord.font), font);
-        const text = rawTableCellText(cell);
+        const fill = fillColor(cellRecord.color ?? cellRecord.fill) ?? headerFill;
+        const runs = readableTableCellRuns(
+          rawTableCellRuns(cell, cellFont),
+          fill,
+          true,
+        );
+        const text = tableCellTextContent(runs);
         const fontSize = cellFont.size || headerFontSize;
         const textWidth = Math.max(1, cellW - headerPadX * 2);
         const cellLineHeight = effectiveLineHeight({
@@ -199,7 +215,6 @@ function RawDefaultTableElement({
           fallback: 1.15,
           wrap: "none",
         });
-        const fill = fillColor(cellRecord.color ?? cellRecord.fill) ?? headerFill;
         return (
           <Group
             key={`default-header-${colIndex}`}
@@ -228,21 +243,19 @@ function RawDefaultTableElement({
             }}
           >
             <Rect width={cellW} height={headerH} fill={fill} />
-            <Text
+            <TableCellText
               x={headerPadX}
               y={0}
               width={textWidth}
               height={headerH}
-              text={text}
-              fill={withHash(cellFont.color)}
-              fontFamily={`${cellFont.family}, Helvetica, sans-serif`}
-              fontSize={fontSize}
-              fontStyle="bold"
-              textDecoration={cellFont.underline ? "underline" : ""}
-              lineHeight={cellLineHeight}
-              letterSpacing={cellFont.letterSpacing}
+              runs={runs.map((run) => ({
+                ...run,
+                font: { ...run.font, bold: true, size: fontSize },
+              }))}
+              font={{ ...cellFont, bold: true, size: fontSize }}
               align={readString(cellRecord.alignment) ?? "left"}
               verticalAlign="middle"
+              lineHeight={cellLineHeight}
               wrap="none"
             />
             {colIndex > 0 ? (
@@ -264,7 +277,13 @@ function RawDefaultTableElement({
               const cell = rows[rowIndex + 1]?.[colIndex];
               const cellRecord = asRecord(cell) ?? {};
               const cellFont = fontFromRecord(asRecord(cellRecord.font), font);
-              const text = rawTableCellText(cell);
+              const fill = fillColor(cellRecord.color ?? cellRecord.fill);
+              const runs = readableTableCellRuns(
+                rawTableCellRuns(cell, cellFont),
+                fill,
+                false,
+              );
+              const text = tableCellTextContent(runs);
               const fontSize = cellFont.size || bodyFontSize;
               const textWidth = Math.max(1, cellW - bodyPadX * 2);
               const cellLineHeight = effectiveLineHeight({
@@ -275,7 +294,6 @@ function RawDefaultTableElement({
                 fallback: 1.15,
                 wrap: cellFont.wrap,
               });
-              const fill = fillColor(cellRecord.color ?? cellRecord.fill);
               return (
                 <Group
                   key={`default-body-cell-${rowIndex}-${colIndex}`}
@@ -309,21 +327,19 @@ function RawDefaultTableElement({
                     fill={fill ?? "rgba(0,0,0,0.01)"}
                   />
                   {text ? (
-                    <Text
+                    <TableCellText
                       x={bodyPadX}
                       y={0}
                       width={textWidth}
                       height={rowH}
-                      text={text}
-                      fill={withHash(cellFont.color)}
-                      fontFamily={`${cellFont.family}, Helvetica, sans-serif`}
-                      fontSize={fontSize}
-                      fontStyle={cellFont.bold ? "bold" : "normal"}
-                      textDecoration={cellFont.underline ? "underline" : ""}
-                      lineHeight={cellLineHeight}
-                      letterSpacing={cellFont.letterSpacing}
+                      runs={runs.map((run) => ({
+                        ...run,
+                        font: { ...run.font, size: fontSize },
+                      }))}
+                      font={{ ...cellFont, size: fontSize }}
                       align={readString(cellRecord.alignment) ?? "left"}
                       verticalAlign="middle"
+                      lineHeight={cellLineHeight}
                     />
                   ) : null}
                 </Group>
@@ -343,6 +359,74 @@ function RawDefaultTableElement({
         totalRows={rows.length}
         width={width}
       />
+    </Group>
+  );
+}
+
+function TableCellText({
+  x,
+  y,
+  width,
+  height,
+  runs,
+  font,
+  align,
+  verticalAlign,
+  lineHeight,
+  wrap,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  runs: Array<{ text: string; font: RenderTextFont }>;
+  font: RenderTextFont;
+  align: string;
+  verticalAlign: string;
+  lineHeight: number;
+  wrap?: string;
+}) {
+  const baseFont = { ...font, lineHeight };
+  const renderRuns = runs.map((run) => ({
+    ...run,
+    font: {
+      ...run.font,
+      lineHeight: run.font.lineHeight || lineHeight,
+    },
+  }));
+  const { tokens } = layoutRichText(
+    renderRuns,
+    width,
+    baseFont,
+    align,
+    verticalAlign,
+    height,
+    wrap ?? font.wrap,
+  );
+
+  return (
+    <Group x={x} y={y} listening={false}>
+      {tokens.map((token, index) => (
+        <Text
+          key={index}
+          x={token.x}
+          y={token.y}
+          width={token.width}
+          height={token.height}
+          text={token.text}
+          fill={withHash(token.font.color)}
+          fontFamily={`${token.font.family}, Helvetica, sans-serif`}
+          fontSize={token.font.size}
+          fontStyle={`${token.font.bold ? "bold" : "normal"} ${
+            token.font.italic ? "italic" : ""
+          }`}
+          textDecoration={token.font.underline ? "underline" : ""}
+          lineHeight={token.font.lineHeight}
+          letterSpacing={token.font.letterSpacing}
+          wrap="none"
+          listening={false}
+        />
+      ))}
     </Group>
   );
 }
@@ -426,19 +510,81 @@ function rawTableRows(element: RawElement) {
 }
 
 function rawTableCellText(cell: unknown) {
+  return tableCellTextContent(rawTableCellRuns(cell, rawFont({})));
+}
+
+function rawTableCellRuns(cell: unknown, fallbackFont: RenderTextFont) {
+  const sourceRuns = rawTableCellSourceRuns(cell, fallbackFont);
+  return renderMarkdownTextRuns(sourceRuns).map((run) => ({
+    text: run.text,
+    font: fontFromRecord(asRecord(run.font), fallbackFont),
+  }));
+}
+
+function rawTableCellSourceRuns(
+  cell: unknown,
+  fallbackFont: RenderTextFont,
+): TextRun[] {
   if (typeof cell === "string" || typeof cell === "number") {
-    return String(cell);
+    return [{ text: String(cell), font: fontToTextRunFont(fallbackFont) }];
   }
   const record = asRecord(cell);
-  if (!record) return "";
+  if (!record) return [{ text: "", font: fontToTextRunFont(fallbackFont) }];
+  const cellFont = fontFromRecord(asRecord(record.font), fallbackFont);
   const runs = readArray(record.runs);
   if (runs.length > 0) {
     return runs
-      .map((run) => readString(asRecord(run)?.text) ?? "")
-      .join("");
+      .map((run) => {
+        const runRecord = asRecord(run) ?? {};
+        return {
+          text: readString(runRecord.text) ?? "",
+          font: fontToTextRunFont(
+            fontFromRecord(asRecord(runRecord.font), cellFont),
+          ),
+        };
+      })
+      .filter((run) => run.text.length > 0);
   }
   const textRecord = asRecord(record.text);
-  return readString(textRecord?.text) ?? readString(record.text) ?? "";
+  return [
+    {
+      text: readString(textRecord?.text) ?? readString(record.text) ?? "",
+      font: fontToTextRunFont(cellFont),
+    },
+  ];
+}
+
+function fontToTextRunFont(font: RenderTextFont): TextRun["font"] {
+  return {
+    family: font.family,
+    size: font.size,
+    color: font.color,
+    bold: font.bold,
+    italic: font.italic,
+    underline: font.underline,
+    line_height: font.lineHeight,
+    letter_spacing: font.letterSpacing,
+    wrap: readFontWrap(font.wrap),
+  };
+}
+
+function tableCellTextContent(runs: Array<{ text: string }>) {
+  return runs.map((run) => run.text).join("");
+}
+
+function readableTableCellRuns(
+  runs: Array<{ text: string; font: RenderTextFont }>,
+  fill: string | undefined,
+  isHeader: boolean,
+) {
+  if (isHeader) return runs;
+  return runs.map((run) => ({
+    ...run,
+    font: {
+      ...run.font,
+      color: readableTableTextColor(run.font.color, fill),
+    },
+  }));
 }
 
 function rawFont(element: RawElement) {
@@ -521,6 +667,12 @@ function readBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+function readFontWrap(value: unknown) {
+  return value === "word" || value === "char" || value === "none"
+    ? value
+    : undefined;
+}
+
 function withHash(value: string | null | undefined) {
   if (!value) return undefined;
   return value.startsWith("#") || value.startsWith("rgb") ? value : `#${value}`;
@@ -528,4 +680,63 @@ function withHash(value: string | null | undefined) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function readableTableTextColor(color: string, fill: string | undefined) {
+  const textColor = withHash(color) ?? color;
+  const textLuminance = colorLuminance(textColor);
+  const fillLuminance = colorLuminance(fill);
+  if (textLuminance == null || fillLuminance == null) return textColor;
+
+  const contrast = contrastRatio(textLuminance, fillLuminance);
+  if (contrast >= 3) return textColor;
+  return fillLuminance > 0.5 ? "#111827" : "#FFFFFF";
+}
+
+function contrastRatio(left: number, right: number) {
+  const lighter = Math.max(left, right);
+  const darker = Math.min(left, right);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function colorLuminance(color: string | undefined) {
+  const rgb = parseColor(color);
+  if (!rgb) return null;
+  const [r, g, b] = rgb.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function parseColor(color: string | undefined): [number, number, number] | null {
+  if (!color) return null;
+  const value = color.trim();
+  const hex = value.startsWith("#") ? value.slice(1) : value;
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+    return [
+      parseInt(hex[0] + hex[0], 16),
+      parseInt(hex[1] + hex[1], 16),
+      parseInt(hex[2] + hex[2], 16),
+    ];
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return [
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16),
+    ];
+  }
+
+  const rgb = value.match(
+    /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i,
+  );
+  if (!rgb) return null;
+  return [
+    clamp(Number(rgb[1]), 0, 255),
+    clamp(Number(rgb[2]), 0, 255),
+    clamp(Number(rgb[3]), 0, 255),
+  ];
 }

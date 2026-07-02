@@ -1,6 +1,6 @@
 type RawRecord = Record<string, any>;
 
-export type TemplateV2DisintegrationBox = {
+export type TemplateV2UngroupBox = {
   x: number;
   y: number;
   width: number;
@@ -13,43 +13,43 @@ type ChildArrayInfo = {
 
 type LaidOutChild = {
   child: RawRecord;
-  box: TemplateV2DisintegrationBox | null;
+  box: TemplateV2UngroupBox | null;
 };
 
-type DisintegrationDeps = {
+type UngroupDeps = {
   childArrayInfo: (element: RawRecord) => ChildArrayInfo | null;
-  componentBox: (component: RawRecord) => TemplateV2DisintegrationBox;
-  elementBox: (element: RawRecord) => TemplateV2DisintegrationBox;
+  componentBox: (component: RawRecord) => TemplateV2UngroupBox;
+  elementBox: (element: RawRecord) => TemplateV2UngroupBox;
   isBoxVisualType: (type: string | null) => boolean;
   layoutChildren: (
     parent: RawRecord,
     children: unknown[],
-    parentBox: TemplateV2DisintegrationBox,
+    parentBox: TemplateV2UngroupBox,
   ) => LaidOutChild[];
 };
 
-export type TemplateV2DisintegrationSelection = {
+export type TemplateV2UngroupSelection = {
   kind: "component";
   componentIndex: number;
 };
 
-export function disintegrateTemplateV2ComponentInUi(
+export function ungroupTemplateV2ComponentInUi(
   sourceUi: RawRecord,
   componentIndex: number,
-  deps: DisintegrationDeps,
-): { ui: RawRecord; selection: TemplateV2DisintegrationSelection } | null {
+  deps: UngroupDeps,
+): { ui: RawRecord; selection: TemplateV2UngroupSelection } | null {
   const components = [...readArray(sourceUi.components)];
   const component = asRecord(components[componentIndex]);
   if (!component) return null;
 
-  const disintegratedComponents = disintegratedComponentsFromComponent(
+  const ungroupedComponents = ungroupedComponentsFromComponent(
     component,
     componentIndex,
     deps,
   );
-  if (disintegratedComponents.length === 0) return null;
+  if (ungroupedComponents.length === 0) return null;
 
-  components.splice(componentIndex, 1, ...disintegratedComponents);
+  components.splice(componentIndex, 1, ...ungroupedComponents);
   return {
     ui: {
       ...sourceUi,
@@ -62,10 +62,10 @@ export function disintegrateTemplateV2ComponentInUi(
   };
 }
 
-function disintegratedComponentsFromComponent(
+function ungroupedComponentsFromComponent(
   component: RawRecord,
   componentIndex: number,
-  deps: DisintegrationDeps,
+  deps: UngroupDeps,
 ): RawRecord[] {
   const componentBoxValue = deps.componentBox(component);
   const idBase = normalizeId(
@@ -78,7 +78,7 @@ function disintegratedComponentsFromComponent(
     .filter(isRecord)
     .flatMap((element) => {
       const box = deps.elementBox(element);
-      return disintegrateElementTree(
+      return ungroupElementTree(
         element,
         {
           x: componentBoxValue.x + box.x,
@@ -89,14 +89,14 @@ function disintegratedComponentsFromComponent(
         deps,
       );
     })
-    .map((entry, index) => disintegratedComponent(entry, idBase, index));
+    .map((entry, index) => ungroupedComponent(entry, idBase, index));
 }
 
-function disintegrateElementTree(
+function ungroupElementTree(
   element: RawRecord,
-  box: TemplateV2DisintegrationBox,
-  deps: DisintegrationDeps,
-): Array<{ element: RawRecord; box: TemplateV2DisintegrationBox }> {
+  box: TemplateV2UngroupBox,
+  deps: UngroupDeps,
+): Array<{ element: RawRecord; box: TemplateV2UngroupBox }> {
   const childInfo = deps.childArrayInfo(element);
   if (!childInfo) return [{ element, box }];
 
@@ -111,7 +111,7 @@ function disintegrateElementTree(
     )
     .flatMap((item) => {
       const childBox = item.box ?? deps.elementBox(item.child);
-      return disintegrateElementTree(
+      return ungroupElementTree(
         item.child,
         {
           x: box.x + childBox.x,
@@ -126,8 +126,8 @@ function disintegrateElementTree(
   return [...currentLevel, ...children];
 }
 
-function disintegratedComponent(
-  entry: { element: RawRecord; box: TemplateV2DisintegrationBox },
+function ungroupedComponent(
+  entry: { element: RawRecord; box: TemplateV2UngroupBox },
   idBase: string,
   index: number,
 ): RawRecord {
@@ -159,7 +159,7 @@ function stripElementChildren(element: RawRecord): RawRecord {
 
 function elementHasVisibleBoxStyle(
   element: RawRecord,
-  deps: DisintegrationDeps,
+  deps: UngroupDeps,
 ) {
   const type = readString(element.type);
   if (!deps.isBoxVisualType(type)) return false;

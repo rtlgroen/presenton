@@ -199,6 +199,75 @@ def test_template_v2_tool_deletes_component_by_id_only():
     assert component_ids == ["hero"]
 
 
+def test_template_v2_tool_ungroups_positioned_group_component():
+    template = _template()
+    template.layouts["layouts"][0]["components"].append(
+        {
+            "id": "stack",
+            "description": "Stacked visual component for ungroup testing.",
+            "position": {"x": 10, "y": 20},
+            "size": {"width": 80, "height": 40},
+            "elements": [
+                {
+                    "type": "group",
+                    "name": "Stack",
+                    "position": {"x": 1, "y": 2},
+                    "size": {"width": 50, "height": 20},
+                    "children": [
+                        {
+                            "type": "rectangle",
+                            "position": {"x": 3, "y": 4},
+                            "size": {"width": 20, "height": 10},
+                            "fill": {"color": "#000000"},
+                        },
+                        {
+                            "type": "text",
+                            "decorative": False,
+                            "name": "Label",
+                            "position": {"x": 8, "y": 6},
+                            "size": {"width": 30, "height": 12},
+                            "max_length": 100,
+                            "min_length": 1,
+                            "runs": [{"text": "Overlapped"}],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    session = _FakeTemplateSession(template)
+    tools = TemplateV2ChatTools(TemplateV2ContextStore(session, template.id))
+
+    result = _run(
+        tools.execute_tool_call(
+            AssistantToolCall(
+                id="call_1",
+                name="ungroupComponent",
+                arguments=json.dumps(
+                    {
+                        "slideIndex": 0,
+                        "componentId": "stack",
+                        "reason": "User explicitly asked to ungroup overlapped items.",
+                    }
+                ),
+            )
+        )
+    )
+
+    components = template.layouts["layouts"][0]["components"]
+    assert result["ok"] is True
+    assert result["result"]["created_component_ids"] == ["stack_part_1", "stack_part_2"]
+    assert [component["id"] for component in components] == [
+        "hero",
+        "body",
+        "stack_part_1",
+        "stack_part_2",
+    ]
+    assert components[2]["position"] == {"x": 14.0, "y": 26.0}
+    assert components[2]["elements"][0]["position"] == {"x": 0, "y": 0}
+    assert session.commit_count == 1
+
+
 def test_template_v2_service_persists_history_with_template_scope():
     template = _template()
     session = _FakeTemplateSession(template)

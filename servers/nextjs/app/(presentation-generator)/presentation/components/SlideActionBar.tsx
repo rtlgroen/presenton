@@ -1,0 +1,385 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  ArrowDown,
+  ArrowUp,
+  Copy,
+  EllipsisVertical,
+  Headphones,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
+import { v4 as uuidv4 } from "uuid";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { notify } from "@/components/ui/sonner";
+import { cn } from "@/lib/utils";
+import {
+  addNewSlide,
+  deletePresentationSlide,
+  duplicatePresentationSlide,
+  movePresentationSlide,
+} from "@/store/slices/presentationGeneration";
+import { addToHistory } from "@/store/slices/undoRedoSlice";
+import { RootState } from "@/store/store";
+import { trackEvent, MixpanelEvent } from "@/utils/mixpanel";
+import {
+  BLANK_SLIDE_LAYOUT_ID,
+  BLANK_TEMPLATE_V2_LAYOUT,
+} from "../../_shared/blank-slide";
+import NewSlide from "./NewSlide";
+
+interface SlideActionBarProps {
+  slide: any;
+  selectedSlide: number;
+  presentationId: string;
+  onSlideSelected: (index: number) => void;
+  revealOnGroupHover?: boolean;
+}
+
+const menuItemClass =
+  "flex h-9 cursor-pointer select-none items-center gap-2.5 px-3 text-sm font-normal leading-none text-[#050505] outline-none transition-colors focus:bg-[#F7F6F9] data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:text-[#9B9B9B]";
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getSlideTemplateId(slide: any): string {
+  const layoutGroup =
+    typeof slide?.layout_group === "string" ? slide.layout_group : "";
+  const layout = typeof slide?.layout === "string" ? slide.layout : "";
+  const layoutTemplateId = layout.split(":")[0] || "";
+
+  if (layoutGroup.startsWith("template-v2")) {
+    return layoutGroup;
+  }
+  return layoutGroup || layoutTemplateId;
+}
+
+const SlideActionBar = ({
+  slide,
+  selectedSlide,
+  presentationId,
+  onSlideSelected,
+  revealOnGroupHover = false,
+}: SlideActionBarProps) => {
+  const dispatch = useDispatch();
+  const pathname = usePathname();
+  const [showNewSlideSelection, setShowNewSlideSelection] = useState(false);
+  const [isSpeakerPopoverOpen, setIsSpeakerPopoverOpen] = useState(false);
+  const [isSlideMenuOpen, setIsSlideMenuOpen] = useState(false);
+  const { presentationData, isStreaming } = useSelector(
+    (state: RootState) => state.presentationGeneration
+  );
+
+  const slides = Array.isArray(presentationData?.slides)
+    ? presentationData.slides
+    : [];
+  const slideCount = slides.length;
+  const currentIndex =
+    typeof slide?.index === "number" ? slide.index : selectedSlide;
+  const slideLayout = typeof slide?.layout === "string" ? slide.layout : "";
+  const templateId = useMemo(() => getSlideTemplateId(slide), [slide]);
+  const isTemplateV2Slide = templateId.startsWith("template-v2");
+  const isCustomTemplate = templateId.startsWith("custom-");
+  const speakerNote =
+    typeof slide?.speaker_note === "string" ? slide.speaker_note.trim() : "";
+  const keepVisible =
+    showNewSlideSelection || isSpeakerPopoverOpen || isSlideMenuOpen;
+
+  if (!slide || !presentationData || slideCount === 0 || isStreaming) {
+    return null;
+  }
+
+  const rememberSlides = (actionType: string) => {
+    dispatch(
+      addToHistory({
+        slides,
+        actionType,
+      })
+    );
+  };
+
+  const handleBlankSlide = () => {
+    if (!templateId) {
+      notify.error(
+        "Could not add blank slide",
+        "This slide does not have a template context."
+      );
+      return;
+    }
+
+    const blankSlide = {
+      id: uuidv4(),
+      index: currentIndex,
+      content: {},
+      ...(isTemplateV2Slide
+        ? { ui: cloneJson(BLANK_TEMPLATE_V2_LAYOUT) }
+        : {}),
+      layout_group: templateId,
+      layout: isCustomTemplate
+        ? `${templateId}:${BLANK_SLIDE_LAYOUT_ID}`
+        : BLANK_SLIDE_LAYOUT_ID,
+      presentation: presentationId,
+    };
+
+    rememberSlides("ADD_BLANK_SLIDE");
+    dispatch(addNewSlide({ slideData: blankSlide, index: currentIndex }));
+    const insertedIndex = currentIndex + 1;
+    onSlideSelected(insertedIndex);
+    trackEvent(MixpanelEvent.Presentation_Slide_Added, {
+      pathname,
+      presentation_id: presentationId,
+      inserted_after_index: currentIndex,
+      template_id: templateId,
+      layout_id: BLANK_SLIDE_LAYOUT_ID,
+      source: "blank_action_bar",
+      is_custom_template: isCustomTemplate,
+      is_template_v2: isTemplateV2Slide,
+    });
+  };
+
+  const handleDuplicateSlide = () => {
+    rememberSlides("DUPLICATE_SLIDE");
+    dispatch(
+      duplicatePresentationSlide({
+        index: currentIndex,
+        slideId: uuidv4(),
+      })
+    );
+    const insertedIndex = currentIndex + 1;
+    onSlideSelected(insertedIndex);
+    trackEvent(MixpanelEvent.Presentation_Slide_Added, {
+      pathname,
+      presentation_id: presentationId,
+      inserted_after_index: currentIndex,
+      source: "duplicate_action_bar",
+      slide_id: slide?.id,
+      slide_index: currentIndex,
+      layout: slideLayout,
+    });
+  };
+
+  const handleMoveSlide = (toIndex: number) => {
+    if (toIndex < 0 || toIndex >= slideCount || toIndex === currentIndex) {
+      return;
+    }
+
+    rememberSlides("MOVE_SLIDE");
+    dispatch(movePresentationSlide({ fromIndex: currentIndex, toIndex }));
+    onSlideSelected(toIndex);
+    trackEvent(MixpanelEvent.Presentation_Slides_Reordered, {
+      pathname,
+      presentation_id: presentationId,
+      from_index: currentIndex,
+      to_index: toIndex,
+      slide_count: slideCount,
+      source: "action_bar",
+    });
+  };
+
+  const handleDeleteSlide = () => {
+    if (slideCount <= 1) {
+      notify.warning(
+        "Cannot delete slide",
+        "A presentation must contain at least one slide."
+      );
+      return;
+    }
+
+    const nextSelectedIndex = Math.min(currentIndex, slideCount - 2);
+    rememberSlides("DELETE_SLIDE");
+    dispatch(deletePresentationSlide(currentIndex));
+    onSlideSelected(nextSelectedIndex);
+    trackEvent(MixpanelEvent.Presentation_Slide_Deleted, {
+      pathname,
+      presentation_id: presentationId,
+      slide_id: slide?.id,
+      slide_index: currentIndex,
+      layout: slideLayout,
+    });
+  };
+
+  const openTemplatePicker = () => {
+    if (!templateId) {
+      notify.error(
+        "Could not open templates",
+        "This slide does not have a template context."
+      );
+      return;
+    }
+    setShowNewSlideSelection(true);
+  };
+
+  const newSlideModal =
+    showNewSlideSelection && templateId && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[1000] overflow-y-auto bg-black/50 px-4 py-16"
+            onClick={() => setShowNewSlideSelection(false)}
+          >
+            <div className="relative z-[1001] flex min-h-full items-start justify-center pt-10">
+              <div
+                className="w-full max-w-[675px]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <NewSlide
+                  index={currentIndex}
+                  templateID={templateId}
+                  setShowNewSlideSelection={setShowNewSlideSelection}
+                  presentationId={presentationId}
+                  onSlideAdded={onSlideSelected}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <>
+      <div
+        className={cn(
+          "z-[80] flex justify-center px-4 transition-opacity duration-300",
+          revealOnGroupHover
+            ? keepVisible
+              ? "opacity-100"
+              : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+            : "opacity-100"
+        )}
+      >
+        <div className="pointer-events-auto hide-scrollbar flex h-10 max-w-[calc(100%_-_2rem)] items-center overflow-x-auto rounded-[8px] border border-[#E6E6EC] bg-white px-2 shadow-[0_2px_14px_rgba(17,24,39,0.12)]">
+          <button
+            type="button"
+            onClick={handleBlankSlide}
+            className="flex h-8 shrink-0 items-center gap-2 rounded-[6px] px-2 text-sm font-normal leading-none text-[#111324] transition-colors hover:bg-[#F7F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5141e5]"
+          >
+            <span>Blank</span>
+            <Plus className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+
+          <Separator orientation="vertical" className="mx-2 h-6 shrink-0 bg-[#EDEEEF]" />
+
+          <button
+            type="button"
+            onClick={openTemplatePicker}
+            className="flex h-8 shrink-0 items-center gap-2 rounded-[6px] px-2 text-sm font-normal leading-none text-[#111324] transition-colors hover:bg-[#F7F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5141e5]"
+          >
+            <span>Use Template</span>
+            <Plus className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+
+          <Separator orientation="vertical" className="mx-2 h-6 shrink-0 bg-[#EDEEEF]" />
+
+          <Popover
+            open={isSpeakerPopoverOpen}
+            onOpenChange={setIsSpeakerPopoverOpen}
+          >
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Speaker notes"
+                className={cn(
+                  "flex h-8 w-10 shrink-0 items-center justify-center rounded-[6px] text-[#050505] transition-colors hover:bg-[#F7F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5141e5]",
+                  isSpeakerPopoverOpen && "bg-[#F7F6F9]"
+                )}
+              >
+                <Headphones className="h-4 w-4" strokeWidth={2.35} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="center"
+              sideOffset={14}
+              className="z-[90] w-[360px] rounded-[16px] border border-[#E6E6EC] bg-white p-0 font-syne shadow-[0_8px_24px_rgba(17,24,39,0.14)]"
+            >
+              <div className="border-b border-[#EDEEEF] px-5 py-4">
+                <p className="text-sm font-semibold text-[#191919]">
+                  Speaker notes
+                </p>
+              </div>
+              <div className="p-5">
+                <div className="max-h-[240px] min-h-[108px] overflow-auto whitespace-pre-wrap rounded-[12px] border border-[#EDEEEF] bg-[#FAFAFB] p-4 text-sm leading-relaxed text-[#333333]">
+                  {speakerNote || "No speaker notes for this slide."}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Separator orientation="vertical" className="mx-2 h-6 shrink-0 bg-[#EDEEEF]" />
+
+          <DropdownMenu.Root
+            open={isSlideMenuOpen}
+            onOpenChange={setIsSlideMenuOpen}
+          >
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                aria-label="Slide actions"
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-[#050505] transition-colors hover:bg-[#F7F6F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5141e5]",
+                  isSlideMenuOpen && "bg-[#F7F6F9]"
+                )}
+              >
+                <EllipsisVertical className="h-5 w-5" strokeWidth={2.4} />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                side="top"
+                align="end"
+                sideOffset={8}
+                className="z-[90] w-[188px] overflow-hidden rounded-[10px] border border-[#E6E6EC] bg-white py-2 font-syne shadow-[0_8px_24px_rgba(17,24,39,0.14)]"
+              >
+                <DropdownMenu.Item
+                  className={menuItemClass}
+                  onSelect={handleDuplicateSlide}
+                >
+                  <Copy className="h-4 w-4 shrink-0 text-current" />
+                  <span>Duplicate Slide</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={currentIndex <= 0}
+                  className={menuItemClass}
+                  onSelect={() => handleMoveSlide(currentIndex - 1)}
+                >
+                  <ArrowUp className="h-4 w-4 shrink-0 text-current" />
+                  <span>Move Up</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  disabled={currentIndex >= slideCount - 1}
+                  className={menuItemClass}
+                  onSelect={() => handleMoveSlide(currentIndex + 1)}
+                >
+                  <ArrowDown className="h-4 w-4 shrink-0 text-current" />
+                  <span>Move Down</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator className="my-2 h-px bg-[#EDEEEF]" />
+                <DropdownMenu.Item
+                  className={menuItemClass}
+                  onSelect={handleDeleteSlide}
+                >
+                  <Trash2 className="h-4 w-4 shrink-0 text-current" />
+                  <span>Delete Slide</span>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
+      </div>
+      {newSlideModal}
+    </>
+  );
+};
+
+export default SlideActionBar;

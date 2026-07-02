@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import math
 import re
 from typing import Any, Awaitable, Callable
 
@@ -17,6 +18,7 @@ from services.chat.v2.schemas import (
     NoArgsInput,
     SearchTemplateContentInput,
     SwapComponentVariantInput,
+    UngroupComponentInput,
     UpdateElementContentInput,
 )
 from templates.v2.models.layouts import SlideLayout
@@ -37,6 +39,7 @@ class TemplateV2ChatTools:
             "getEditableElements": self._get_editable_elements,
             "updateElementContent": self._update_element_content,
             "deleteComponent": self._delete_component,
+            "ungroupComponent": self._ungroup_component,
             "swapComponentVariant": self._swap_component_variant,
         }
 
@@ -100,6 +103,20 @@ class TemplateV2ChatTools:
                     "component/content from the template."
                 ),
                 schema=DeleteComponentInput,
+                strict=True,
+            ),
+            Tool(
+                name="ungroupComponent",
+                description=(
+                    "Split one component into separate components for its positioned "
+                    "child elements without deleting visible content. Use when the user "
+                    "explicitly asks to ungroup/break apart/separate "
+                    "items, or when an otherwise requested edit cannot be made with "
+                    "content updates, deletion, or variant swapping. Inspect the slide "
+                    "with includeFullJson=true first. Do not use for ordinary text "
+                    "edits, component swaps, or rearranging items inside a component."
+                ),
+                schema=UngroupComponentInput,
                 strict=True,
             ),
             Tool(
@@ -342,6 +359,58 @@ class TemplateV2ChatTools:
             ),
         }
 
+    async def _ungroup_component(self, args: dict[str, Any]) -> dict[str, Any]:
+        payload = UngroupComponentInput(**args)
+        layout = await self._context.get_slide_layout(payload.slide_index)
+        layout_dict = _model_dict(layout)
+        components = layout_dict.get("components")
+        if not isinstance(components, list):
+            raise ValueError("Slide layout has no components list.")
+
+        component_index = next(
+            (
+                index
+                for index, component in enumerate(components)
+                if isinstance(component, dict) and component.get("id") == payload.component_id
+            ),
+            None,
+        )
+        if component_index is None:
+            raise ValueError(f"Component '{payload.component_id}' was not found.")
+        component = components[component_index]
+        if not isinstance(component, dict):
+            raise ValueError("Target component is invalid.")
+
+        parts = _ungrouped_components_from_component(
+            component,
+            component_index,
+            used_ids={
+                str(item.get("id"))
+                for index, item in enumerate(components)
+                if index != component_index and isinstance(item, dict)
+            },
+        )
+        if len(parts) < 2:
+            raise ValueError("Component does not contain multiple safely separable elements.")
+
+        components[component_index : component_index + 1] = parts
+        updated_layout = SlideLayout.model_validate(layout_dict)
+        await self._context.save_slide_layout(
+            slide_index=payload.slide_index,
+            layout=updated_layout,
+        )
+        return {
+            "ungrouped": True,
+            "slide_index": payload.slide_index,
+            "slide_number": payload.slide_index + 1,
+            "component_id": payload.component_id,
+            "created_component_ids": [component["id"] for component in parts],
+            "message": (
+                f"Separated component '{payload.component_id}' into "
+                f"{len(parts)} component(s) on slide {payload.slide_index + 1}."
+            ),
+        }
+
     async def _swap_component_variant(self, args: dict[str, Any]) -> dict[str, Any]:
         payload = SwapComponentVariantInput(**args)
         layout = await self._context.get_slide_layout(payload.slide_index)
@@ -433,6 +502,140 @@ def _model_dict(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json", exclude_none=True)
     return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _ungrouped_components_from_component(
+    component: dict[str, Any],
+    component_index: int,
+    *,
+    used_ids: set[str],
+) -> list[dict[str, Any]]:
+    component_box = _required_box(component, label="component")
+    id_base = _normalize_component_id(
+        str(
+            component.get("id")
+            or component.get("name")
+            or component.get("description")
+            or f"component_{component_index + 1}"
+        )
+    )
+    entries: list[dict[str, Any]] = []
+    elements = component.get("elements")
+    if not isinstance(elements, list):
+        return []
+
+    for element in elements:
+        if not isinstance(element, dict):
+            continue
+        box = _required_box(element, label="element")
+        entries.extend(
+            _ungroup_element_tree(
+                element,
+                {
+                    "x": component_box["x"] + box["x"],
+                    "y": component_box["y"] + box["y"],
+                    "width": box["width"],
+                    "height": box["height"],
+                },
+            )
+        )
+
+    parts: list[dict[str, Any]] = []
+    for index, entry in enumerate(entries):
+        box = entry["box"]
+        element = copy.deepcopy(entry["element"])
+        element["position"] = {"x": 0, "y": 0}
+        element["size"] = {"width": box["width"], "height": box["height"]}
+        component_id = _unique_component_id(f"{id_base}_part_{index + 1}", used_ids)
+        parts.append(
+            {
+                "id": component_id,
+                "description": "Ungrouped component element",
+                "position": {"x": box["x"], "y": box["y"]},
+                "size": {"width": box["width"], "height": box["height"]},
+                "elements": [element],
+            }
+        )
+    return parts
+
+
+def _ungroup_element_tree(
+    element: dict[str, Any],
+    box: dict[str, float],
+) -> list[dict[str, Any]]:
+    children = element.get("children")
+    if not isinstance(children, list):
+        if any(
+            isinstance(element.get(key), (dict, list))
+            for key in ("child", "elements", "item")
+        ):
+            raise ValueError(
+                "Component contains layout-managed children that cannot be safely ungrouped."
+            )
+        return [{"element": element, "box": box}]
+
+    if element.get("type") != "group":
+        raise ValueError(
+            "Component contains layout-managed children that cannot be safely ungrouped."
+        )
+
+    entries: list[dict[str, Any]] = []
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+        child_box = _required_box(child, label="group child")
+        entries.extend(
+            _ungroup_element_tree(
+                child,
+                {
+                    "x": box["x"] + child_box["x"],
+                    "y": box["y"] + child_box["y"],
+                    "width": child_box["width"],
+                    "height": child_box["height"],
+                },
+            )
+        )
+    return entries
+
+
+def _required_box(value: dict[str, Any], *, label: str) -> dict[str, float]:
+    position = value.get("position")
+    size = value.get("size")
+    if not isinstance(position, dict) or not isinstance(size, dict):
+        raise ValueError(f"Cannot safely ungroup {label} without position and size.")
+    x = _finite_number(position.get("x"))
+    y = _finite_number(position.get("y"))
+    width = _finite_number(size.get("width"))
+    height = _finite_number(size.get("height"))
+    if x is None or y is None or width is None or height is None:
+        raise ValueError(f"Cannot safely ungroup {label} with invalid geometry.")
+    if width <= 0 or height <= 0:
+        raise ValueError(f"Cannot safely ungroup {label} with non-positive size.")
+    return {"x": x, "y": y, "width": width, "height": height}
+
+
+def _finite_number(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        return number if math.isfinite(number) else None
+    return None
+
+
+def _normalize_component_id(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    return normalized or "component"
+
+
+def _unique_component_id(base: str, used_ids: set[str]) -> str:
+    stem = base[:80].strip("_") or "component"
+    candidate = stem
+    suffix = 2
+    while candidate in used_ids:
+        suffix_text = f"_{suffix}"
+        candidate = f"{stem[: 80 - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
 
 
 def _compact_components(layout_dict: dict[str, Any]) -> list[dict[str, Any]]:
