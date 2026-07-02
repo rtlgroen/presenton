@@ -10,6 +10,7 @@ import EachSlide from "../EachSlide/NewEachSlide";
 
 interface SlidesListProps {
   slides: ProcessedSlide[];
+  templateFonts?: Record<string, string>;
   setSlides: React.Dispatch<React.SetStateAction<ProcessedSlide[]>>;
   retrySlide: (index: number) => void;
   onSlideUpdate: (index: number, updatedSlideData: Partial<ProcessedSlide>) => void;
@@ -22,6 +23,7 @@ interface SlidesListProps {
 
 export const SlidesList: React.FC<SlidesListProps> = ({
   slides,
+  templateFonts,
   setSlides,
   retrySlide,
   onSlideUpdate,
@@ -43,6 +45,7 @@ export const SlidesList: React.FC<SlidesListProps> = ({
           <EachSlide
             key={index}
             slide={slide}
+            templateFonts={templateFonts}
             index={index}
             isProcessing={slides.some((s) => s.processing)}
             retrySlide={retrySlide}

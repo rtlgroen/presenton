@@ -191,6 +191,7 @@ export interface ProcessedSlide extends SlideData {
 
 export interface EachSlideProps {
   slide: ProcessedSlide;
+  templateFonts?: Record<string, string>;
   index: number;
   retrySlide: (index: number) => void;
   setSlides: React.Dispatch<React.SetStateAction<ProcessedSlide[]>>;

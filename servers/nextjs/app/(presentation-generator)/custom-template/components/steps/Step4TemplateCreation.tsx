@@ -8,6 +8,7 @@ import { SchemaEditorPanel } from "../SchemaEditorPanel";
 
 interface Step4TemplateCreationProps {
   slides: ProcessedSlide[];
+  templateFonts?: Record<string, string>;
   setSlides: React.Dispatch<React.SetStateAction<ProcessedSlide[]>>;
   retrySlide: (index: number) => void;
   onSlideUpdate: (index: number, updatedSlideData: Partial<ProcessedSlide>) => void;
@@ -26,6 +27,7 @@ interface Step4TemplateCreationProps {
 
 export const Step4TemplateCreation: React.FC<Step4TemplateCreationProps> = ({
   slides,
+  templateFonts,
   setSlides,
   retrySlide,
   onSlideUpdate,
@@ -48,6 +50,7 @@ export const Step4TemplateCreation: React.FC<Step4TemplateCreationProps> = ({
             {/* Slides List */}
             <SlidesList
               slides={slides}
+              templateFonts={templateFonts}
               setSlides={setSlides}
               retrySlide={retrySlide}
               onSlideUpdate={onSlideUpdate}

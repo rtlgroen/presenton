@@ -10,6 +10,7 @@ import { TemplateV2LayoutPreview } from "./TemplateV2LayoutPreview";
 
 export interface SlideContentDisplayProps {
   slide: ProcessedSlide;
+  templateFonts?: Record<string, string>;
   compiledLayout: CompiledLayout | null;
   previewData?: Record<string, any> | null;
   retrySlide: (slideNumber: number) => void;
@@ -19,6 +20,7 @@ export interface SlideContentDisplayProps {
 
 export const SlideContentDisplay: React.FC<SlideContentDisplayProps> = ({
   slide,
+  templateFonts,
   compiledLayout,
   previewData,
   retrySlide,
@@ -32,6 +34,7 @@ export const SlideContentDisplay: React.FC<SlideContentDisplayProps> = ({
           <TemplateV2LayoutPreview
             layout={slide.v2Layout}
             slideDisplayRef={slideDisplayRef}
+            fonts={templateFonts}
           />
         </div>
       </div>

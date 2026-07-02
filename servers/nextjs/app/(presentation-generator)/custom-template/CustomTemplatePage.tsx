@@ -643,6 +643,7 @@ const CustomTemplatePage = ({
                     {showSlides && slides.length > 0 && (
                         <Step4TemplateCreation
                             slides={slides}
+                            templateFonts={state.previewData?.fonts}
                             setSlides={setSlides}
                             retrySlide={retrySlide}
                             onSlideUpdate={handleSlideUpdate}

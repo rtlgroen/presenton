@@ -30,6 +30,7 @@ import SchemaElementHighlighter from "../SchemaElementHighlighter";
 
 const EachSlide: React.FC<EachSlideProps> = ({
   slide,
+  templateFonts,
   index,
   retrySlide,
   setSlides,
@@ -434,6 +435,7 @@ const EachSlide: React.FC<EachSlideProps> = ({
           <div className="relative">
             <SlideContentDisplay
               slide={slide}
+              templateFonts={templateFonts}
               compiledLayout={compiledLayout}
               previewData={previewData}
               retrySlide={handleRetrySlide}
