@@ -446,15 +446,13 @@ function renderImage(item: JsonRecord, mode: RenderMode): string {
   if (!source) return "";
   const color = normalizeChartColor(readString(item.color));
   if (color && readBoolean(item.isIcon ?? item.is_icon)) {
+    const maskUrl = cssUrl(source);
+    const maskSize = imageMaskSize(item.fit);
     return `<div style="${frameStyle(item, mode)}${boxStyle(
       item
-    )}background:${escapeCssColor(
+    )}color:${escapeCssColor(
       color
-    )};-webkit-mask:url("${escapeCssUrl(
-      source
-    )}") center/${imageFit(item.fit)} no-repeat;mask:url("${escapeCssUrl(
-      source
-    )}") center/${imageFit(item.fit)} no-repeat;"></div>`;
+    )};background:currentColor;-webkit-mask:${maskUrl} center/${maskSize} no-repeat;mask:${maskUrl} center/${maskSize} no-repeat;"></div>`;
   }
   return `<img alt="" src="${escapeAttribute(source)}" style="${frameStyle(
     item,
@@ -1461,6 +1459,11 @@ function imageFit(value: unknown): string {
   return value === "cover" || value === "fill" ? value : "contain";
 }
 
+function imageMaskSize(value: unknown): string {
+  const fit = imageFit(value);
+  return fit === "fill" ? "100% 100%" : fit;
+}
+
 function imageFocusStyle(item: JsonRecord): string {
   const focus = readArray(item.focus);
   const rawX = item.focus_x ?? item.focusX ?? focus[0];
@@ -1548,10 +1551,15 @@ function escapeCssFont(value: string): string {
   return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 }
 
+function cssUrl(value: string): string {
+  return `url('${escapeCssUrl(value)}')`;
+}
+
 function escapeCssUrl(value: string): string {
   return value
     .replaceAll("\\", "\\\\")
     .replaceAll('"', '\\"')
+    .replaceAll("'", "\\'")
     .replaceAll("\n", "")
     .replaceAll("\r", "");
 }
