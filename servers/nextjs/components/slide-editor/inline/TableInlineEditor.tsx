@@ -116,6 +116,7 @@ export function TableInlineEditor({
     window.setTimeout(() => {
       const active = document.activeElement;
       if (active && editorRef.current?.contains(active)) return;
+      if (active?.closest?.("[data-inline-edit-ignore='true']")) return;
       onClose();
     }, 0);
   }, [onClose]);
@@ -191,7 +192,7 @@ export function TableInlineEditor({
       <TiptapInlineTextEditor
         baseFont={textElement.font ?? font}
         runs={textElement.runs}
-        onBlurOutside={onClose}
+        onBlurOutside={closeAfterBlur}
         onCommitShortcut={onClose}
         onEscape={onClose}
         onRunsChange={updateCellRuns}
