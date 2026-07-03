@@ -302,9 +302,9 @@ function GapControl({
   };
 
   return (
-    <label className="flex h-10 items-center gap-2 px-1 text-sm font-medium text-[#191919]">
+    <label className="flex  items-center gap-2 px-1 text-[14px] font-medium font-manrope text-[#191919]">
       <span>Gap</span>
-      <span className="flex h-8 items-center rounded-md bg-white">
+      <span className="flex  items-center rounded-md bg-white">
         <input
           type="number"
           min={0}
@@ -315,15 +315,15 @@ function GapControl({
             const nextValue = Number(event.target.value);
             if (Number.isFinite(nextValue)) commit(nextValue);
           }}
-          className="h-8 w-9 border-0 bg-transparent p-0 text-center text-sm font-medium outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className=" w-9 border-0 bg-transparent p-0 text-center text-[14px] font-medium font-manrope text-[#191919] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
-        <span className="flex h-7 w-4 flex-col items-center justify-center">
+        <span className="flex   flex-col items-center justify-center">
           <button
             type="button"
             title="Increase gap"
             aria-label="Increase gap"
             onClick={() => commit(value + 1)}
-            className="grid h-3 w-4 place-items-center rounded-sm text-[#05070A] hover:bg-[#F8F8FA]"
+            className="grid  place-items-center rounded-sm text-[#05070A] hover:bg-[#F8F8FA]"
           >
             <ChevronUp size={11} strokeWidth={2.4} aria-hidden />
           </button>
@@ -332,7 +332,7 @@ function GapControl({
             title="Decrease gap"
             aria-label="Decrease gap"
             onClick={() => commit(value - 1)}
-            className="grid h-3 w-4 place-items-center rounded-sm text-[#05070A] hover:bg-[#F8F8FA]"
+            className="grid   place-items-center rounded-sm text-[#05070A] hover:bg-[#F8F8FA]"
           >
             <ChevronDown size={11} strokeWidth={2.4} aria-hidden />
           </button>
@@ -371,39 +371,39 @@ function ItemsControl({
         aria-expanded={open}
         onClick={() => onToggle("items")}
         className={cn(
-          "grid h-8 w-8 place-items-center rounded-md border-0 bg-transparent text-[#05070A] hover:bg-[#F8F8FA]",
+          "grid h-7 w-7 place-items-center rounded-md border-0 bg-transparent text-[#05070A] hover:bg-[#F8F8FA]",
           open && "bg-[#F4F1FF] text-[#7C3AED]",
         )}
       >
-        <PlusCircle size={20} strokeWidth={2.2} aria-hidden />
+        <PlusCircle size={16} strokeWidth={1} aria-hidden />
       </button>
       {open ? (
-        <Panel className="w-[245px] overflow-hidden p-0">
+        <Panel className="w-[206px] overflow-hidden py-2.5">
           <button
             type="button"
             disabled={!canAdd}
             onClick={addItem}
             className={cn(
-              "flex h-[78px] w-full items-center gap-4 px-7 text-left text-[13px] font-medium text-[#191919] hover:bg-[#F8F8FA]",
+              "flex  w-full items-center gap-2 px-4 py-2.5 text-left text-[14px] font-medium font-manrope text-[#191919] hover:bg-[#F8F8FA]",
               !canAdd &&
               "cursor-not-allowed text-[#A0A3AD] hover:bg-transparent",
             )}
           >
-            <Plus size={20} strokeWidth={2.2} aria-hidden />
+            <Plus size={16} strokeWidth={1} aria-hidden />
             <span>Add Item</span>
           </button>
-          <div className="h-px bg-[#E7E8EC]" aria-hidden />
+          <div className="h-px my-1 bg-[#E7E8EC]" aria-hidden />
           <button
             type="button"
             disabled={!canRemove}
             onClick={removeItem}
             className={cn(
-              "flex h-[78px] w-full items-center gap-4 px-7 text-left text-[13px] font-medium text-[#191919] hover:bg-[#F8F8FA]",
+              "flex  w-full items-center gap-2 px-4 py-2.5 text-left text-[14px] font-medium font-manrope text-[#191919] hover:bg-[#F8F8FA]",
               !canRemove &&
               "cursor-not-allowed text-[#A0A3AD] hover:bg-transparent",
             )}
           >
-            <Trash2 size={20} strokeWidth={2.2} aria-hidden />
+            <Trash2 size={16} strokeWidth={1} aria-hidden />
             <span>Last Item</span>
             <span className="ml-auto text-[11px] text-[#8A8D96]">
               {children.length}
@@ -801,20 +801,8 @@ export function TemplateV2LayoutToolbar({
       : null;
   if (!componentActions && !hasLayoutControls && !ungroupAction) return null;
 
-  const estimatedWidth = toolbarWidthEstimate({
-    componentActions,
-    hasUngroupAction: Boolean(ungroupAction),
-    hasContainerControls,
-    hasFlowControls,
-  });
-  const left =
-    position?.left ??
-    Math.max(8, Math.min(box.x, STAGE_WIDTH - estimatedWidth - 8));
-  const top =
-    position?.top ??
-    (box.y >= 58
-      ? box.y - 50
-      : Math.min(STAGE_HEIGHT - 50, box.y + box.height + 10));
+
+
   const togglePanel = (panel: Exclude<PanelId, null>) => {
     setOpenPanel((current) => (current === panel ? null : panel));
   };
@@ -827,17 +815,16 @@ export function TemplateV2LayoutToolbar({
   const toolbar = (
     <div
       data-template-v2-floating-toolbar="true"
-      style={{ left, top }}
+      style={{ top: position?.top, left: position?.left }}
       onMouseDown={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
-      className="fixed z-[10000] flex h-10 items-center rounded-[10px] bg-white px-2.5 text-[#191919] shadow-[0_0_4px_rgba(0,0,0,0.15)]"
+      className="fixed z-[10000] flex h-10 items-center rounded-[6px] bg-white p-1.5 text-[#191919] shadow-[0_0_4px_rgba(0,0,0,0.15)]"
     >
       {ungroupAction ? (
         <>
-          <ControlButton title="Ungroup" onClick={ungroupAction.onUngroup}>
-
-            <span>Ungroup</span>
-          </ControlButton>
+          <div className="flex p-1.5 items-center gap-2 rounded-[6px] hover:bg-[#F6F6F9] cursor-pointer text-sm font-manrope font-medium text-[#191919]" title="Ungroup" onClick={ungroupAction.onUngroup}>
+            <span >Ungroup</span>
+          </div>
           <Divider />
         </>
       ) : null}
@@ -888,27 +875,6 @@ function normalizedLayoutType(element: TemplateV2LayoutElement) {
   return element.type;
 }
 
-function toolbarWidthEstimate({
-  componentActions,
-  hasUngroupAction,
-  hasContainerControls,
-  hasFlowControls,
-}: {
-  componentActions?: TemplateV2SelectionComponentActions | null;
-  hasUngroupAction: boolean;
-  hasContainerControls: boolean;
-  hasFlowControls: boolean;
-}) {
-  if (hasContainerControls) {
-    return 700 + (componentActions ? 48 : 0);
-  }
-  return (
-    (hasUngroupAction ? 116 : 0) +
-    (hasFlowControls ? 130 : 0) +
-    (componentActions ? 48 : 0) +
-    28
-  );
-}
 
 export function isTemplateV2LayoutElement(
   element: RawRecord | null | undefined,
