@@ -2,7 +2,15 @@ import { resolveBackendAssetUrl } from "@/utils/api";
 
 type JsonRecord = Record<string, unknown>;
 type RenderMode = "absolute" | "flow";
-type ChartKind = "bar" | "line" | "area" | "pie" | "donut";
+type ChartKind =
+  | "bar"
+  | "column"
+  | "stacked_bar"
+  | "stacked_column"
+  | "line"
+  | "area"
+  | "pie"
+  | "donut";
 type InfographicKind = "progress_bar" | "gauge";
 
 type JsonToHtmlItem = JsonRecord;
@@ -63,6 +71,8 @@ const ELEMENT_TYPES = new Set([
   "flex",
   "grid",
   "group",
+  "list-view",
+  "grid-view",
 ]);
 
 const DEFAULT_CHART_JS_URL =
@@ -413,8 +423,10 @@ function renderItem(item: JsonRecord, mode: RenderMode): string {
     case "container":
       return renderContainer(item, mode);
     case "flex":
+    case "list-view":
       return renderFlex(item, mode);
     case "grid":
+    case "grid-view":
       return renderGrid(item, mode);
     case "group":
       return renderGroup(item, mode);
@@ -432,6 +444,18 @@ function renderItem(item: JsonRecord, mode: RenderMode): string {
 function renderImage(item: JsonRecord, mode: RenderMode): string {
   const source = readString(item.data);
   if (!source) return "";
+  const color = normalizeChartColor(readString(item.color));
+  if (color && readBoolean(item.isIcon ?? item.is_icon)) {
+    return `<div style="${frameStyle(item, mode)}${boxStyle(
+      item
+    )}background:${escapeCssColor(
+      color
+    )};-webkit-mask:url("${escapeCssUrl(
+      source
+    )}") center/${imageFit(item.fit)} no-repeat;mask:url("${escapeCssUrl(
+      source
+    )}") center/${imageFit(item.fit)} no-repeat;"></div>`;
+  }
   return `<img alt="" src="${escapeAttribute(source)}" style="${frameStyle(
     item,
     mode
@@ -459,29 +483,35 @@ function renderText(item: JsonRecord, mode: RenderMode): string {
     vertical
   )};justify-content:${horizontalAlign(horizontal)};line-height:${cssNumber(
     readNumber(font.lineHeight ?? font.line_height) ?? 1.1
-  )};overflow:hidden;text-align:${textAlign(horizontal)};white-space:pre-wrap;word-break:break-word"><span style="width:100%">${runHtml}</span></div>`;
+  )};${textOverflowStyle()}text-align:${textAlign(horizontal)};"><span style="display:block;width:100%">${runHtml}</span></div>`;
 }
 
 function renderTextList(item: JsonRecord, mode: RenderMode): string {
+  const marker = readString(item.marker);
+  const tag = marker === "number" ? "ol" : "ul";
   const font = readRecord(item.font);
-  const alignment = readRecord(item.alignment);
-  const horizontal = readString(alignment.horizontal);
-  const vertical = readString(alignment.vertical);
-  const runs = readTextListRuns(item);
-  const runHtml = runs
-    .map((run) => {
-      const runFont = { ...font, ...readRecord(run.font) };
-      return `<span style="${fontStyle(runFont)}">${escapeHtml(
-        readStringValue(run.text)
-      )}</span>`;
+  const entries = readArray(item.items)
+    .map((entry) => {
+      const runs = readListRuns(entry);
+      const html = runs
+        .map(
+          (run) =>
+            `<span style="${fontStyle({
+              ...font,
+              ...readRecord(run.font),
+            })}">${escapeHtml(readStringValue(run.text))}</span>`
+        )
+        .join("");
+      return `<li style="${textOverflowStyle()}">${html}</li>`;
     })
     .join("");
+  const listStyle = `margin:0;padding-left:${marker === "none" ? 0 : 24}px;${
+    marker === "none" ? "list-style-type:none;" : ""
+  }`;
 
-  return `<div style="${frameStyle(item, mode)}${transformStyle(item)}${fontStyle(font)}display:flex;align-items:${verticalAlign(
-    vertical
-  )};justify-content:${horizontalAlign(horizontal)};line-height:${cssNumber(
-    readNumber(font.lineHeight ?? font.line_height) ?? 1.1
-  )};overflow:hidden;text-align:${textAlign(horizontal)};white-space:pre-wrap;word-break:break-word"><span style="width:100%">${runHtml}</span></div>`;
+  return `<div style="${frameStyle(item, mode)}${transformStyle(item)}${fontStyle(
+    font
+  )}${textOverflowStyle()}"><${tag} style="${listStyle}">${entries}</${tag}></div>`;
 }
 
 function renderTable(item: JsonRecord, mode: RenderMode): string {
@@ -515,7 +545,7 @@ function renderContainer(item: JsonRecord, mode: RenderMode): string {
     readString(alignment.vertical)
   )};justify-content:${horizontalAlign(
     readString(alignment.horizontal)
-  )};overflow:hidden`;
+  )};overflow:visible`;
   return `<div style="${style}">${
     child ? renderItem(child, readRecordOrNull(child.position) ? "absolute" : "flow") : ""
   }</div>`;
@@ -523,7 +553,7 @@ function renderContainer(item: JsonRecord, mode: RenderMode): string {
 
 function renderFlex(item: JsonRecord, mode: RenderMode): string {
   const direction = readString(item.direction) === "row" ? "row" : "column";
-  const children = readArray(item.children ?? item.elements)
+  const children = readLayoutChildren(item)
     .map((child) => renderItem(readRecord(child), "flow"))
     .join("");
   const gap = readNumber(item.gap) ?? 0;
@@ -539,7 +569,7 @@ function renderFlex(item: JsonRecord, mode: RenderMode): string {
     readNumber(item.columnGap ?? item.column_gap) ?? gap
   )}px;row-gap:${cssNumber(
     readNumber(item.rowGap ?? item.row_gap) ?? gap
-  )}px;overflow:hidden`;
+  )}px;overflow:visible`;
   return `<div style="${style}">${children}</div>`;
 }
 
@@ -547,7 +577,7 @@ function renderGrid(item: JsonRecord, mode: RenderMode): string {
   const columns = Math.max(1, Math.floor(readNumber(item.columns) ?? 1));
   const rows = readNumber(item.rows);
   const gap = readNumber(item.gap) ?? 0;
-  const children = readArray(item.children ?? item.elements)
+  const children = readLayoutChildren(item)
     .map((child) => renderItem(readRecord(child), "flow"))
     .join("");
   const style = `${frameStyle(item, mode)}${boxStyle(item)}${paddingStyle(
@@ -564,8 +594,20 @@ function renderGrid(item: JsonRecord, mode: RenderMode): string {
     readNumber(item.columnGap ?? item.column_gap) ?? gap
   )}px;row-gap:${cssNumber(
     readNumber(item.rowGap ?? item.row_gap) ?? gap
-  )}px;overflow:hidden`;
+  )}px;overflow:visible`;
   return `<div style="${style}">${children}</div>`;
+}
+
+function readLayoutChildren(item: JsonRecord): unknown[] {
+  const children = readArray(item.children);
+  if (children.length) return children;
+
+  const elements = readArray(item.elements);
+  if (elements.length) return elements;
+
+  const child = readRecordOrNull(item.item);
+  const count = Math.max(0, Math.floor(readNumber(item.count) ?? 0));
+  return child && count ? Array.from({ length: count }, () => child) : [];
 }
 
 function renderGroup(item: JsonRecord, mode: RenderMode): string {
@@ -760,9 +802,17 @@ function chartConfig(item: JsonRecord): JsonRecord {
   } else if (chartKind === "pie") {
     readRecord(config.options).cutout = "0%";
   } else {
+    const stacked =
+      chartKind === "stacked_bar" || chartKind === "stacked_column";
+    const horizontal = chartKind === "bar" || chartKind === "stacked_bar";
+    if (horizontal) {
+      readRecord(config.options).indexAxis = "y";
+    }
     readRecord(config.options).scales = {
       x: {
         display: readOptionalBoolean(item.xAxis ?? item.x_axis, true),
+        stacked,
+        beginAtZero: horizontal,
         grid: { display: false },
         title: {
           display: Boolean(readString(item.xAxisTitle ?? item.x_axis_title)),
@@ -780,6 +830,7 @@ function chartConfig(item: JsonRecord): JsonRecord {
       y: {
         display: readOptionalBoolean(item.yAxis ?? item.y_axis, true),
         beginAtZero: true,
+        stacked,
         grid: {
           display: readOptionalBoolean(item.grid, false),
           color: gridColor,
@@ -818,6 +869,8 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
     }));
   }
 
+  const lineLike = chartKind === "line" || chartKind === "area";
+
   return data.series.map((series, index) => {
     const color =
       data.seriesColors[index] ??
@@ -829,14 +882,14 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
       backgroundColor:
         data.series.length === 1 && data.pointColors.length
           ? data.pointColors
-          : chartKind === "line" || chartKind === "area"
+          : lineLike
             ? colorWithOpacity(color, 0.16)
             : color,
       borderColor: color,
-      borderWidth: chartKind === "line" || chartKind === "area" ? 3 : 0,
+      borderWidth: lineLike ? 3 : 0,
     };
 
-    if (chartKind === "line" || chartKind === "area") {
+    if (lineLike) {
       dataset.fill = chartKind === "area";
       dataset.pointRadius = 3;
       dataset.pointHoverRadius = 3;
@@ -848,25 +901,54 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
 }
 
 function normalizeChartData(item: JsonRecord): NormalizedChartData {
+  const points = readArray(item.data)
+    .map(readRecord)
+    .map((point, index) => {
+      const value = readNumber(point.value);
+      if (value == null) return null;
+      return {
+        label: readString(point.label) ?? `Value ${index + 1}`,
+        value,
+        color: normalizeChartColor(readString(point.color)),
+      };
+    })
+    .filter(
+      (
+        point
+      ): point is { label: string; value: number; color: string | null } =>
+        Boolean(point)
+    );
   const series = readArray(item.series)
     .map(readRecord)
-    .map((seriesItem, index) => ({
-      name: readString(seriesItem.name) ?? `Series ${index + 1}`,
-      values: readArray(seriesItem.values).map(
+    .map((series, index) => ({
+      name: readString(series.name) ?? `Series ${index + 1}`,
+      values: readArray(series.values).map(
         (value) => readNumber(value) ?? 0
       ),
     }))
-    .filter((seriesItem) => seriesItem.values.length);
-  const maxLength = Math.max(0, ...series.map((seriesItem) => seriesItem.values.length));
-  const categories = normalizeCategories(readArray(item.categories), maxLength);
+    .filter((series) => series.values.length);
+  if (!series.length && points.length) {
+    series.push({
+      name: readString(item.title) ?? "Series 1",
+      values: points.map((point) => point.value),
+    });
+  }
+  const maxLength = Math.max(0, ...series.map((item) => item.values.length));
+  const categoryValues = readArray(item.categories);
+  const categories = normalizeCategories(
+    categoryValues.length ? categoryValues : points.map((point) => point.label),
+    maxLength
+  );
   const seriesColors = readColorArray(item.seriesColors ?? item.series_colors);
 
   return {
     categories,
-    pointColors: [],
-    series: series.map((seriesItem) => ({
-      ...seriesItem,
-      values: padValues(seriesItem.values, categories.length),
+    pointColors: points
+      .map((point) => point.color)
+      .filter((color): color is string => Boolean(color)),
+    series: series.map((item) => ({
+      ...item,
+      values: padValues(item.values, categories.length),
     })),
     seriesColors:
       seriesColors.length > 0
@@ -898,6 +980,9 @@ function normalizeChartColor(value: string | null): string | null {
 }
 
 function chartKindFromValue(value: string | null): ChartKind {
+  if (value === "column") return "column";
+  if (value === "stacked_bar") return "stacked_bar";
+  if (value === "stacked_column") return "stacked_column";
   if (value === "line") return "line";
   if (value === "area") return "area";
   if (value === "pie") return "pie";
@@ -908,6 +993,13 @@ function chartKindFromValue(value: string | null): ChartKind {
 function chartJsType(chartKind: ChartKind): string {
   if (chartKind === "donut") return "doughnut";
   if (chartKind === "area") return "line";
+  if (
+    chartKind === "column" ||
+    chartKind === "stacked_bar" ||
+    chartKind === "stacked_column"
+  ) {
+    return "bar";
+  }
   return chartKind;
 }
 
@@ -1007,13 +1099,22 @@ function hasChartItem(item: JsonRecord): boolean {
     return readArray(item.children).map(readRecord).some(hasChartItem);
   }
 
+  if (Array.isArray(item.elements)) {
+    return readArray(item.elements).map(readRecord).some(hasChartItem);
+  }
+
   const child = readRecordOrNull(item.child);
-  return child ? hasChartItem(child) : false;
+  if (child) return hasChartItem(child);
+
+  const itemChild = readRecordOrNull(item.item);
+  return itemChild ? hasChartItem(itemChild) : false;
 }
 
 function renderChartScripts(): string {
   const chartJsUrl =
-    process.env.NEXT_PUBLIC_CHART_JS_URL || DEFAULT_CHART_JS_URL;
+    process.env.NEXT_PUBLIC_CHART_JS_URL ||
+    process.env.CHART_JS_URL ||
+    DEFAULT_CHART_JS_URL;
   return `<script src="${escapeAttribute(chartJsUrl)}"></script><script>${escapeScriptText(
     chartRendererScript()
   )}</script>`;
@@ -1171,6 +1272,10 @@ function tableCellStyle(cellValue: unknown, header: boolean): string {
   return style;
 }
 
+function textOverflowStyle(): string {
+  return "overflow:visible;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;";
+}
+
 function cellText(cellValue: unknown): string {
   if (typeof cellValue === "string" || typeof cellValue === "number") {
     return escapeHtml(readStringValue(cellValue));
@@ -1214,22 +1319,19 @@ function readRuns(item: JsonRecord): JsonRecord[] {
 function readListRuns(value: unknown): JsonRecord[] {
   if (Array.isArray(value)) return value.map(readRecord);
   const record = readRecord(value);
-  const text = readStringValue(record.text || value);
-  return text ? [{ text, font: record.font }] : [];
-}
-
-function readTextListRuns(item: JsonRecord): JsonRecord[] {
-  const marker = readString(item.marker);
-  const runs: JsonRecord[] = [];
-  readArray(item.items).forEach((entry, index) => {
-    const itemRuns = readListRuns(entry);
-    const prefix =
-      marker === "none" ? "" : marker === "number" ? `${index + 1}. ` : "• ";
-    if (index > 0) runs.push({ text: "\n", font: itemRuns[0]?.font });
-    if (prefix) runs.push({ text: prefix, font: itemRuns[0]?.font });
-    runs.push(...itemRuns);
-  });
-  return runs.length ? runs : [{ text: "" }];
+  const runs = readArray(record.runs).map(readRecord);
+  if (runs.length) return runs;
+  if (Object.prototype.hasOwnProperty.call(record, "text")) {
+    return [{ text: readStringValue(record.text), font: record.font }];
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return [{ text: readStringValue(value) }];
+  }
+  return [];
 }
 
 function isComponent(item: JsonRecord): item is JsonRecord & { elements: unknown[] } {
