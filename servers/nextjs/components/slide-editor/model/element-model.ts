@@ -14,7 +14,7 @@ import type {
   TextElement,
   TextListElement,
   TextRun,
-} from "@/components/slide-editor/schema/slide-schema";
+} from "@/components/slide-editor/types";
 import {
   applyTextRunFontToSelection,
   replaceTextRunsContent,
@@ -45,8 +45,8 @@ export function elementBox(element: Pick<SlideElement, "position" | "size">) {
   return {
     x: element.position?.x ?? 0,
     y: element.position?.y ?? 0,
-    w: element.size?.width ?? 0.1,
-    h: element.size?.height ?? 0.1,
+    w: element.size?.width ?? 1,
+    h: element.size?.height ?? 1,
   };
 }
 

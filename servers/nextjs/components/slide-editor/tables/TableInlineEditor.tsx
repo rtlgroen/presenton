@@ -10,7 +10,7 @@ import {
   elementFont,
   tableRowsAsStrings,
 } from "@/components/slide-editor/model/element-model";
-import type { Font, TableCell, TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { Font, TableCell, TextRun } from "@/components/slide-editor/types";
 import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-height";
 import {
   textRunsContent,

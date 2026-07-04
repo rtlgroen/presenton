@@ -15,7 +15,7 @@ import { useDispatch } from "react-redux";
 import { Loader2 } from "lucide-react";
 import { Layer, Rect, Stage } from "react-konva";
 import { notify } from "@/components/ui/sonner";
-import type { TemplateV2Layout } from "@/components/slide-editor/schema/template-v2-import";
+import type { TemplateV2Layout } from "@/components/slide-editor/importing/template-v2-import";
 import {
   templateFontOptionsFromMap,
 } from "@/components/slide-editor/text/google-fonts";
@@ -35,7 +35,7 @@ import type {
   ChartElement,
   SlideElement,
   TextRun,
-} from "@/components/slide-editor/schema/slide-schema";
+} from "@/components/slide-editor/types";
 import {
   useTableCellSelection,
   useTemplateV2InlineEditing,
@@ -79,7 +79,6 @@ import {
   MemoizedRawElementNode,
 } from "@/components/slide-editor/surface/nodes";
 import {
-  EDITOR_SCALE,
   MAX_HISTORY_ENTRIES,
   ROOT_ELEMENTS_COMPONENT_INDEX,
   SCROLL_DISMISS_THRESHOLD_PX,
@@ -1546,7 +1545,7 @@ function TemplateV2KonvaSlideComponent({
           element={toolbarElement}
           index={selection.componentIndex}
           path={keyForSelection(selection)}
-          scale={EDITOR_SCALE}
+          scale={1}
           selectedTableCell={selectedTableCell}
           templateFonts={templateFonts}
           textSelectionRange={
@@ -1571,7 +1570,7 @@ function TemplateV2KonvaSlideComponent({
           key={`${keyForSelection(selection)}:${editingTableCell.rowIndex}:${editingTableCell.colIndex}`}
           element={toolbarElement as TableSlideElement}
           index={selection.componentIndex}
-          scale={EDITOR_SCALE}
+          scale={1}
           selectedCell={editingTableCell}
           templateFonts={templateFonts}
           onChange={(_index, element) => applyToolbarElementChange(element)}

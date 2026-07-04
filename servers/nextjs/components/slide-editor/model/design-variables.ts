@@ -1,14 +1,7 @@
-import {
-  SLIDE_H,
-  SLIDE_W,
-  type DesignVariable,
-  type SlideElement,
-} from "@/components/slide-editor/schema/slide-schema";
-
-const SOURCE_W = 1280;
-const SOURCE_H = 720;
-const X_SCALE = SLIDE_W / SOURCE_W;
-const Y_SCALE = SLIDE_H / SOURCE_H;
+import type {
+  DesignVariable,
+  SlideElement,
+} from "@/components/slide-editor/types";
 
 type ElementWithChildren = Extract<SlideElement, { children: SlideElement[] }>;
 type ElementWithChild = Extract<SlideElement, { child?: SlideElement | null }>;
@@ -228,16 +221,16 @@ function scaleValueForTarget(targetPath: string, value: unknown) {
   const parent = parts.at(-2);
 
   if (parent === "font" && leaf === "size") return round(value);
-  if (parent === "size" && leaf === "width") return round(value * X_SCALE);
-  if (parent === "size" && leaf === "height") return round(value * Y_SCALE);
-  if (parent === "position" && leaf === "x") return round(value * X_SCALE);
-  if (parent === "position" && leaf === "y") return round(value * Y_SCALE);
+  if (parent === "size" && leaf === "width") return round(value);
+  if (parent === "size" && leaf === "height") return round(value);
+  if (parent === "position" && leaf === "x") return round(value);
+  if (parent === "position" && leaf === "y") return round(value);
   if (parent === "borderRadius" || parent === "border_radius") {
-    return round(value * X_SCALE);
+    return round(value);
   }
-  if (leaf === "offsetX") return round(value * X_SCALE);
-  if (leaf === "offsetY") return round(value * Y_SCALE);
-  if (leaf === "blur") return round(value * X_SCALE);
+  if (leaf === "offsetX") return round(value);
+  if (leaf === "offsetY") return round(value);
+  if (leaf === "blur") return round(value);
 
   return value;
 }

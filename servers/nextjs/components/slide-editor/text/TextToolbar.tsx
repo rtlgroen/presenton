@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import type { TextSlideElement } from "@/components/slide-editor/state/state";
 import { withHash } from "@/components/slide-editor/utils/color";
-import type { Font, Marker } from "@/components/slide-editor/schema/slide-schema";
+import type { Font, Marker } from "@/components/slide-editor/types";
 import {
   elementFont,
   mergeFont,

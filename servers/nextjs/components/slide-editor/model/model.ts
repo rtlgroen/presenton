@@ -1,15 +1,7 @@
 "use client";
 
 import type Konva from "konva";
-import type { TemplateV2Layout } from "@/components/slide-editor/schema/template-v2-import";
-import {
-  SLIDE_H,
-  SLIDE_W,
-  type ChartElement,
-  type ChartSeries,
-  type SlideElement,
-  type TextRun,
-} from "@/components/slide-editor/schema/slide-schema";
+import type { SlideElement, TextRun } from "@/components/slide-editor/types";
 import type {
   TemplateV2InlineEditKind,
   TemplateV2TextEditStyle,
@@ -22,7 +14,6 @@ import {
   fontScaleFromResize,
   rawFont,
   rawFontRecordForEditor,
-  rawFontToSource,
   rawTableCellText,
   rawTextContent,
   rawTextListItemText,
@@ -36,85 +27,123 @@ import {
   normalizeRawTextMarkdownElement,
   textVisualLocalBox,
 } from "@/components/slide-editor/text/template-v2-text";
-import { rawChartType } from "@/components/slide-editor/charts/chart-data";
 import {
   isFlowLayoutElement,
   layoutFlowChildren,
 } from "@/components/slide-editor/layout/flowLayout";
 import { deleteLayoutChildFromArray } from "@/components/slide-editor/layout/layoutResize";
 import type { TemplateV2SurfaceSelectedDetail } from "@/components/slide-editor/events/events";
+import { rawChartToEditorChart } from "@/components/slide-editor/model/chart-model";
+import {
+  alignmentOffset,
+  asRecord,
+  clamp,
+  DECORATIVE_LINE_LENGTH,
+  DECORATIVE_LINE_THICKNESS,
+  isRecord,
+  normalizeId,
+  readArray,
+  readBoolean,
+  readNumber,
+  readOptionalSize,
+  readPadding,
+  readPoint,
+  readSize,
+  readString,
+  ROOT_ELEMENTS_COMPONENT_INDEX,
+  STAGE_HEIGHT,
+  STAGE_WIDTH,
+  TEXT_AVERAGE_CHAR_EM,
+  type Box,
+  type ChildArrayInfo,
+  type ElementSelection,
+  type LaidOutChild,
+  type Point,
+  type RawComponent,
+  type RawElement,
+  type RawUi,
+  type SelectOptions,
+  type Selection,
+  type Size,
+  type UnknownRecord,
+} from "@/components/slide-editor/model/core";
 
-export const STAGE_WIDTH = 1280;
-export const STAGE_HEIGHT = 720;
-export const ROOT_ELEMENTS_COMPONENT_INDEX = -1;
-export const STAGE_BOX: Box = {
-  x: 0,
-  y: 0,
-  width: STAGE_WIDTH,
-  height: STAGE_HEIGHT,
-};
-export const EDITOR_SCALE = STAGE_WIDTH / SLIDE_W;
-export const EDITOR_SCALE_Y = STAGE_HEIGHT / SLIDE_H;
-export const TEXT_AVERAGE_CHAR_EM = 0.5;
-export const DECORATIVE_LINE_LENGTH = 80;
-export const DECORATIVE_LINE_THICKNESS = 4;
-export const MAX_HISTORY_ENTRIES = 50;
-export const SCROLL_DISMISS_THRESHOLD_PX = 300;
-
-export type UnknownRecord = Record<string, any>;
-export type RawUi = TemplateV2Layout & UnknownRecord;
-export type RawComponent = UnknownRecord;
-export type RawElement = UnknownRecord;
-export type Size = { width: number; height: number };
-export type Point = { x: number; y: number };
-export type Box = Point & Size;
-export type InsertedElementConversion = {
-  scaleX: number;
-  scaleY: number;
-  usesEditorUnits: boolean;
-  scaleTemplateText: boolean;
-};
-export type ChildArrayInfo = {
-  key: "children" | "elements" | "child";
-  items: unknown[];
-};
-export type LaidOutChild = {
-  child: RawElement;
-  index: number;
-  box: Box | null;
-  layoutManaged: boolean;
-};
-
-export type ComponentSelection = {
-  kind: "component";
-  componentIndex: number;
-};
-
-export type MultiComponentSelection = {
-  kind: "multi-component";
-  componentIndexes: number[];
-};
-
-export type ElementSelection = {
-  kind: "element";
-  componentIndex: number;
-  elementPath: number[];
-};
-
-export type Selection = ComponentSelection | MultiComponentSelection | ElementSelection | null;
-export type SelectOptions = {
-  additive?: boolean;
-};
-export type MultiComponentDragState = {
-  draggedComponentIndex: number;
-  draggedNodeStart: Point;
-  nodes: Array<{
-    componentIndex: number;
-    node: Konva.Node;
-    nodeStart: Point;
-    modelStart: Point;
-  }>;
-};
+export {
+  alignmentOffset,
+  asRecord,
+  clamp,
+  cloneJson,
+  DECORATIVE_LINE_LENGTH,
+  DECORATIVE_LINE_THICKNESS,
+  isEditableTarget,
+  isRecord,
+  MAX_HISTORY_ENTRIES,
+  normalizeId,
+  readArray,
+  readBoolean,
+  readNumber,
+  readOptionalSize,
+  readPadding,
+  readPoint,
+  readSize,
+  readString,
+  ROOT_ELEMENTS_COMPONENT_INDEX,
+  SCROLL_DISMISS_THRESHOLD_PX,
+  STAGE_BOX,
+  STAGE_HEIGHT,
+  STAGE_WIDTH,
+  TEXT_AVERAGE_CHAR_EM,
+  withHash,
+} from "@/components/slide-editor/model/core";
+export type {
+  Box,
+  ChildArrayInfo,
+  ComponentSelection,
+  ElementSelection,
+  LaidOutChild,
+  MultiComponentDragState,
+  MultiComponentSelection,
+  Point,
+  RawComponent,
+  RawElement,
+  RawUi,
+  SelectOptions,
+  Selection,
+  Size,
+  UnknownRecord,
+} from "@/components/slide-editor/model/core";
+export {
+  editorChartToRawChart,
+  rawChartToEditorChart,
+} from "@/components/slide-editor/model/chart-model";
+export {
+  appendInsertedContent,
+  convertInsertedChildArrays,
+  hasTemplateV2Metadata,
+  insertedComponentToRaw,
+  insertedElementToComponent,
+  normalizeInsertedBorderRadius,
+  normalizeInsertedElementGeometry,
+  normalizeInsertedTableCells,
+  normalizeInsertedTableRows,
+  normalizeInsertedTextCollections,
+  normalizeInsertedTextListItems,
+  normalizeInsertedTextRuns,
+  rawElementFromInsertedElement,
+  sourceElementBox,
+  sourceElementSize,
+} from "@/components/slide-editor/model/inserted-content";
+export {
+  backgroundColor,
+  borderRadius,
+  colorWithOpacity,
+  fillColor,
+  fillOpacity,
+  shadowProps,
+  strokeColor,
+  strokeOpacity,
+  strokeWidth,
+} from "@/components/slide-editor/model/render-style";
 
 export function updateComponentInUi(
   sourceUi: RawUi,
@@ -785,342 +814,6 @@ export function localElementBox(component: RawComponent, path: number[]) {
   return null;
 }
 
-export function appendInsertedContent(
-  sourceUi: RawUi,
-  elements: UnknownRecord[],
-  insertedComponents: UnknownRecord[],
-  label?: string,
-) {
-  const components = [...readArray(sourceUi.components)];
-  const start = components.length;
-  elements.forEach((element, offset) => {
-    components.push(insertedElementToComponent(element, label, start + offset));
-  });
-  insertedComponents.forEach((component, offset) => {
-    components.push(
-      insertedComponentToRaw(
-        component,
-        label,
-        start + elements.length + offset,
-      ),
-    );
-  });
-  return { ...sourceUi, components };
-}
-
-export function insertedComponentToRaw(
-  component: UnknownRecord,
-  label: string | undefined,
-  index: number,
-): RawComponent {
-  const conversion = sourceElementConversion(component);
-  const box = sourceElementBox(component, conversion);
-  const elements = readArray(component.elements)
-    .filter(isRecord)
-    .map((element) => rawElementFromInsertedElement(element, conversion));
-  return {
-    ...component,
-    id: `${normalizeId(
-      readString(component.id) ?? label ?? "inserted-component",
-    )}_${index + 1}`,
-    description:
-      readString(component.description) ?? label ?? "Inserted component",
-    position: { x: box.x, y: box.y },
-    size: { width: box.width, height: box.height },
-    elements,
-  };
-}
-
-export function insertedElementToComponent(
-  element: UnknownRecord,
-  label: string | undefined,
-  index: number,
-) {
-  const conversion = sourceElementConversion(element);
-  const box = sourceElementBox(element, conversion);
-  return {
-    id: `${normalizeId(label ?? readString(element.type) ?? "inserted")}_${index + 1}`,
-    description: label ?? "Inserted element",
-    position: { x: box.x, y: box.y },
-    size: { width: box.width, height: box.height },
-    elements: [
-      {
-        ...rawElementFromInsertedElement(element, conversion),
-        position: { x: 0, y: 0 },
-        size: { width: box.width, height: box.height },
-      },
-    ],
-  };
-}
-
-export function rawElementFromInsertedElement(
-  element: UnknownRecord,
-  conversion: InsertedElementConversion,
-): RawElement {
-  const type = readString(element.type) ?? "rectangle";
-  const rawElement = scaleInsertedElementGeometry(element, conversion);
-  const normalizedElement = {
-    ...rawElement,
-    font: rawFontToSource(rawElement.font),
-    border_radius: scaleInsertedBorderRadius(
-      rawElement.border_radius ?? rawElement.borderRadius,
-      conversion,
-    ),
-    line_height: rawElement.line_height ?? rawElement.lineHeight,
-  };
-  const textScaledElement = scaleInsertedTextCollections(
-    normalizedElement,
-    conversion.scaleTemplateText,
-  );
-
-  if (type === "chart") {
-    return editorChartToRawChart(textScaledElement, textScaledElement);
-  }
-
-  return textScaledElement;
-}
-
-export function sourceElementConversion(element: UnknownRecord): InsertedElementConversion {
-  const size = sourceElementSize(element);
-  const usesEditorUnits = size.width <= 20 && size.height <= 12;
-  return {
-    usesEditorUnits,
-    scaleX: usesEditorUnits ? EDITOR_SCALE : 1,
-    scaleY: usesEditorUnits ? EDITOR_SCALE_Y : 1,
-    scaleTemplateText: usesEditorUnits && hasTemplateV2Metadata(element),
-  };
-}
-
-export function sourceElementBox(
-  element: UnknownRecord,
-  conversion = sourceElementConversion(element),
-): Box {
-  const position = readPoint(element.position);
-  const size = sourceElementSize(element);
-  return {
-    x: position.x * conversion.scaleX,
-    y: position.y * conversion.scaleY,
-    width: Math.max(1, size.width * conversion.scaleX),
-    height: Math.max(1, size.height * conversion.scaleY),
-  };
-}
-
-export function sourceElementSize(element: UnknownRecord): Size {
-  const size = asRecord(element.size);
-  return {
-    width: Math.max(0.01, readNumber(size?.width) ?? 1),
-    height: Math.max(0.01, readNumber(size?.height) ?? 1),
-  };
-}
-
-export function scaleInsertedElementGeometry(
-  element: UnknownRecord,
-  conversion: InsertedElementConversion,
-): RawElement {
-  const convertedChildren = convertInsertedChildArrays(element, conversion);
-  if (!conversion.usesEditorUnits) {
-    return convertedChildren;
-  }
-
-  return stripUndefined({
-    ...convertedChildren,
-    position: scaleInsertedPoint(convertedChildren.position, conversion),
-    size: scaleInsertedSize(convertedChildren.size, conversion),
-    padding: scaleInsertedSpacing(convertedChildren.padding, conversion),
-    gap: scaleInsertedDistance(convertedChildren.gap, conversion.scaleX),
-    column_gap: scaleInsertedDistance(
-      convertedChildren.column_gap,
-      conversion.scaleX,
-    ),
-    row_gap: scaleInsertedDistance(convertedChildren.row_gap, conversion.scaleY),
-    layout: scaleInsertedLayout(convertedChildren.layout, conversion),
-  });
-}
-
-export function convertInsertedChildArrays(
-  element: UnknownRecord,
-  conversion: InsertedElementConversion,
-): RawElement {
-  const scaleChildText =
-    conversion.scaleTemplateText || hasTemplateV2Metadata(element);
-  const childConversion = {
-    ...conversion,
-    scaleTemplateText: scaleChildText,
-  };
-  const next: RawElement = { ...element };
-
-  if (Array.isArray(element.children)) {
-    next.children = element.children.map((child) =>
-      isRecord(child) ? rawElementFromInsertedElement(child, childConversion) : child,
-    );
-  }
-  if (Array.isArray(element.elements)) {
-    next.elements = element.elements.map((child) =>
-      isRecord(child) ? rawElementFromInsertedElement(child, childConversion) : child,
-    );
-  }
-  if (isRecord(element.child)) {
-    next.child = rawElementFromInsertedElement(element.child, childConversion);
-  }
-
-  return next;
-}
-
-export function scaleInsertedPoint(
-  value: unknown,
-  conversion: InsertedElementConversion,
-) {
-  const point = asRecord(value);
-  if (!point) return value;
-  return {
-    ...point,
-    x: scaleInsertedDistance(point.x, conversion.scaleX),
-    y: scaleInsertedDistance(point.y, conversion.scaleY),
-  };
-}
-
-export function scaleInsertedSize(
-  value: unknown,
-  conversion: InsertedElementConversion,
-) {
-  const size = asRecord(value);
-  if (!size) return value;
-  return {
-    ...size,
-    width: scaleInsertedDistance(size.width, conversion.scaleX),
-    height: scaleInsertedDistance(size.height, conversion.scaleY),
-  };
-}
-
-export function scaleInsertedSpacing(
-  value: unknown,
-  conversion: InsertedElementConversion,
-) {
-  const spacing = asRecord(value);
-  if (!spacing) return value;
-  return stripUndefined({
-    ...spacing,
-    top: scaleInsertedDistance(spacing.top, conversion.scaleY),
-    right: scaleInsertedDistance(spacing.right, conversion.scaleX),
-    bottom: scaleInsertedDistance(spacing.bottom, conversion.scaleY),
-    left: scaleInsertedDistance(spacing.left, conversion.scaleX),
-    x: scaleInsertedDistance(spacing.x, conversion.scaleX),
-    y: scaleInsertedDistance(spacing.y, conversion.scaleY),
-    horizontal: scaleInsertedDistance(spacing.horizontal, conversion.scaleX),
-    vertical: scaleInsertedDistance(spacing.vertical, conversion.scaleY),
-  });
-}
-
-export function scaleInsertedLayout(
-  value: unknown,
-  conversion: InsertedElementConversion,
-) {
-  const layout = asRecord(value);
-  if (!layout) return value;
-  return stripUndefined({
-    ...layout,
-    basis: scaleInsertedDistance(layout.basis, conversion.scaleX),
-    min_width: scaleInsertedDistance(layout.min_width, conversion.scaleX),
-    max_width: scaleInsertedDistance(layout.max_width, conversion.scaleX),
-    min_height: scaleInsertedDistance(layout.min_height, conversion.scaleY),
-    max_height: scaleInsertedDistance(layout.max_height, conversion.scaleY),
-  });
-}
-
-export function scaleInsertedBorderRadius(
-  value: unknown,
-  conversion: InsertedElementConversion,
-) {
-  if (!conversion.usesEditorUnits) return value;
-  if (typeof value === "number") return value * conversion.scaleX;
-  const radius = asRecord(value);
-  if (!radius) return value;
-  return stripUndefined({
-    ...radius,
-    radius: scaleInsertedDistance(radius.radius, conversion.scaleX),
-    tl: scaleInsertedDistance(radius.tl, conversion.scaleX),
-    tr: scaleInsertedDistance(radius.tr, conversion.scaleX),
-    bl: scaleInsertedDistance(radius.bl, conversion.scaleX),
-    br: scaleInsertedDistance(radius.br, conversion.scaleX),
-    topLeft: scaleInsertedDistance(radius.topLeft, conversion.scaleX),
-    topRight: scaleInsertedDistance(radius.topRight, conversion.scaleX),
-    bottomLeft: scaleInsertedDistance(radius.bottomLeft, conversion.scaleX),
-    bottomRight: scaleInsertedDistance(radius.bottomRight, conversion.scaleX),
-  });
-}
-
-export function scaleInsertedDistance(value: unknown, scale: number) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value * scale
-    : value;
-}
-
-export function hasTemplateV2Metadata(element: UnknownRecord) {
-  return Boolean(
-    element.component_id ||
-    element.component_instance_id ||
-    element.component_slot ||
-    element.component_description ||
-    (Array.isArray(element.design_variables) &&
-      element.design_variables.length > 0),
-  );
-}
-
-export function scaleInsertedTextCollections(
-  element: RawElement,
-  scaleTemplateText: boolean,
-): RawElement {
-  if (!scaleTemplateText) return element;
-  return stripUndefined({
-    ...element,
-    runs: scaleInsertedTextRuns(element.runs),
-    items: scaleInsertedTextListItems(element.items),
-    columns: scaleInsertedTableCells(element.columns),
-    rows: scaleInsertedTableRows(element.rows),
-  });
-}
-
-export function scaleInsertedTextRuns(value: unknown) {
-  if (!Array.isArray(value)) return value;
-  return value.map((run) => {
-    if (!isRecord(run)) return run;
-    return {
-      ...run,
-      font: rawFontToSource(run.font),
-    };
-  });
-}
-
-export function scaleInsertedTextListItems(value: unknown) {
-  if (!Array.isArray(value)) return value;
-  return value.map((item) =>
-    Array.isArray(item)
-      ? scaleInsertedTextRuns(item)
-      : item,
-  );
-}
-
-export function scaleInsertedTableRows(value: unknown) {
-  if (!Array.isArray(value)) return value;
-  return value.map((row) =>
-    Array.isArray(row)
-      ? scaleInsertedTableCells(row)
-      : row,
-  );
-}
-
-export function scaleInsertedTableCells(value: unknown) {
-  if (!Array.isArray(value)) return value;
-  return value.map((cell) => {
-    if (!isRecord(cell)) return cell;
-    return {
-      ...cell,
-      font: rawFontToSource(cell.font),
-      runs: scaleInsertedTextRuns(cell.runs),
-    };
-  });
-}
-
 export function eventTargetsThisSlide(
   detail: {
     slideId?: string | number | null;
@@ -1696,12 +1389,12 @@ export function rawElementForEditorToolbar(
     ...element,
     type,
     position: {
-      x: absoluteBox.x / EDITOR_SCALE,
-      y: absoluteBox.y / EDITOR_SCALE,
+      x: absoluteBox.x,
+      y: absoluteBox.y,
     },
     size: {
-      width: absoluteBox.width / EDITOR_SCALE,
-      height: absoluteBox.height / EDITOR_SCALE,
+      width: absoluteBox.width,
+      height: absoluteBox.height,
     },
     font: rawFontRecordForEditor(element.font),
     stroke: rawStrokeForEditor(element.stroke),
@@ -1733,12 +1426,12 @@ export function rawElementForEditorToolbar(
   } else if (type === "chart") {
     Object.assign(projected, rawChartToEditorChart(element));
     projected.position = {
-      x: absoluteBox.x / EDITOR_SCALE,
-      y: absoluteBox.y / EDITOR_SCALE,
+      x: absoluteBox.x,
+      y: absoluteBox.y,
     };
     projected.size = {
-      width: absoluteBox.width / EDITOR_SCALE,
-      height: absoluteBox.height / EDITOR_SCALE,
+      width: absoluteBox.width,
+      height: absoluteBox.height,
     };
   }
 
@@ -1761,21 +1454,19 @@ export function mergeEditorToolbarElement(
   const nextPosition = {
     x:
       currentPosition.x +
-      ((editorX ?? renderedBox.x / EDITOR_SCALE) * EDITOR_SCALE -
-        renderedBox.x),
+      ((editorX ?? renderedBox.x) - renderedBox.x),
     y:
       currentPosition.y +
-      ((editorY ?? renderedBox.y / EDITOR_SCALE) * EDITOR_SCALE -
-        renderedBox.y),
+      ((editorY ?? renderedBox.y) - renderedBox.y),
   };
   const nextSize = {
     width: Math.max(
       1,
-      (editorWidth ?? renderedBox.width / EDITOR_SCALE) * EDITOR_SCALE,
+      editorWidth ?? renderedBox.width,
     ),
     height: Math.max(
       1,
-      (editorHeight ?? renderedBox.height / EDITOR_SCALE) * EDITOR_SCALE,
+      editorHeight ?? renderedBox.height,
     ),
   };
   const merged: RawElement = {
@@ -1848,10 +1539,10 @@ export function rawBorderRadiusForEditor(value: unknown) {
   if (!radius && uniform == null) return value;
   const raw = radius ?? { tl: uniform, tr: uniform, bl: uniform, br: uniform };
   return {
-    tl: (readNumber(raw.tl) ?? 0) / EDITOR_SCALE,
-    tr: (readNumber(raw.tr) ?? 0) / EDITOR_SCALE,
-    bl: (readNumber(raw.bl) ?? 0) / EDITOR_SCALE,
-    br: (readNumber(raw.br) ?? 0) / EDITOR_SCALE,
+    tl: readNumber(raw.tl) ?? 0,
+    tr: readNumber(raw.tr) ?? 0,
+    bl: readNumber(raw.bl) ?? 0,
+    br: readNumber(raw.br) ?? 0,
   };
 }
 
@@ -1859,10 +1550,10 @@ export function editorBorderRadiusToRaw(value: unknown, fallback: unknown) {
   const radius = asRecord(value);
   if (!radius) return fallback;
   return {
-    tl: (readNumber(radius.tl) ?? 0) * EDITOR_SCALE,
-    tr: (readNumber(radius.tr) ?? 0) * EDITOR_SCALE,
-    bl: (readNumber(radius.bl) ?? 0) * EDITOR_SCALE,
-    br: (readNumber(radius.br) ?? 0) * EDITOR_SCALE,
+    tl: readNumber(radius.tl) ?? 0,
+    tr: readNumber(radius.tr) ?? 0,
+    bl: readNumber(radius.bl) ?? 0,
+    br: readNumber(radius.br) ?? 0,
   };
 }
 
@@ -1905,85 +1596,6 @@ export function editorTableCellToRaw(value: unknown, fallback: unknown) {
   };
 }
 
-export function rawChartToEditorChart(element: RawElement): ChartElement {
-  const categories = readArray(element.categories).map(String);
-  const series = readArray(element.series)
-    .map((value, index): ChartSeries | null => {
-      const record = asRecord(value);
-      if (!record) return null;
-      const values = readArray(record.values ?? record.data).map(
-        (item) => readNumber(item) ?? 0,
-      );
-      return {
-        name: readString(record.name) ?? `Series ${index + 1}`,
-        values,
-      };
-    })
-    .filter((value): value is ChartSeries => value != null);
-  const normalizedSeries =
-    series.length > 0 ? series : [{ name: "Series 1", values: [0] }];
-  const normalizedCategories =
-    categories.length > 0
-      ? categories
-      : normalizedSeries[0].values.map((_, index) => `Item ${index + 1}`);
-  const colors = readArray(
-    element.series_colors ?? element.seriesColors,
-  ).map(String);
-  const chartType = rawChartType(element.chart_type ?? element.chartType);
-  const usesUnifiedColor =
-    chartType === "bar" || chartType === "line" || chartType === "area";
-  const chartColors = usesUnifiedColor
-    ? [colors[0] ?? readString(element.color) ?? "7C51F8"]
-    : colors;
-  const firstSeries = normalizedSeries[0];
-  const data = normalizedCategories.slice(0, 8).map((label, index) => ({
-    label,
-    value: firstSeries.values[index] ?? 0,
-    color: usesUnifiedColor
-      ? chartColors[0]
-      : chartColors[index] ?? chartColors[0],
-  }));
-
-  return {
-    ...element,
-    type: "chart",
-    chart_type: chartType,
-    data: data.length > 0 ? data : [{ label: "Item 1", value: 0 }],
-    categories: normalizedCategories,
-    series: normalizedSeries,
-    series_colors: chartColors,
-    axis_color: element.axis_color ?? element.axisColor,
-    data_labels_color: element.data_labels_color ?? element.labelColor,
-    x_axis: element.x_axis ?? element.xAxis,
-    y_axis: element.y_axis ?? element.yAxis,
-    x_axis_title: element.x_axis_title ?? element.xAxisTitle,
-    y_axis_title: element.y_axis_title ?? element.yAxisTitle,
-    data_labels: element.data_labels ?? element.dataLabels,
-  };
-}
-
-export function editorChartToRawChart(source: RawElement, chart: UnknownRecord) {
-  return {
-    ...source,
-    ...chart,
-    type: "chart",
-    position: source.position,
-    size: source.size,
-    rotation: source.rotation,
-    layout: source.layout,
-    chart_type: chart.chartType ?? chart.chart_type ?? source.chart_type,
-    series_colors: chart.seriesColors ?? chart.series_colors ?? source.series_colors,
-    axis_color: chart.axisColor ?? chart.axis_color ?? source.axis_color,
-    data_labels_color:
-      chart.labelColor ?? chart.data_labels_color ?? source.data_labels_color,
-    x_axis: chart.xAxis ?? chart.x_axis ?? source.x_axis,
-    y_axis: chart.yAxis ?? chart.y_axis ?? source.y_axis,
-    x_axis_title: chart.xAxisTitle ?? chart.x_axis_title ?? source.x_axis_title,
-    y_axis_title: chart.yAxisTitle ?? chart.y_axis_title ?? source.y_axis_title,
-    data_labels: chart.dataLabels ?? chart.data_labels ?? source.data_labels,
-  };
-}
-
 export function linePoints(width: number, height: number, strokeWidthValue: number) {
   if (height <= Math.max(2, strokeWidthValue * 2)) {
     return [0, height / 2, width, height / 2];
@@ -2009,180 +1621,6 @@ export function pointOnCircle(x: number, y: number, radius: number, degrees: num
     x: x + Math.cos(radians) * radius,
     y: y + Math.sin(radians) * radius,
   };
-}
-
-export function backgroundColor(ui: RawUi) {
-  return withHash(readString(ui.background) ?? "#FFFFFF");
-}
-
-export function fillColor(fill: unknown) {
-  const value = asRecord(fill);
-  return withHash(readString(value?.color));
-}
-
-export function fillOpacity(fill: unknown) {
-  const value = asRecord(fill);
-  return readNumber(value?.opacity) ?? 1;
-}
-
-export function strokeColor(stroke: unknown) {
-  const value = asRecord(stroke);
-  return withHash(readString(value?.color));
-}
-
-export function strokeWidth(stroke: unknown) {
-  const value = asRecord(stroke);
-  return readNumber(value?.width) ?? 0;
-}
-
-export function strokeOpacity(stroke: unknown) {
-  const value = asRecord(stroke);
-  return readNumber(value?.opacity) ?? 1;
-}
-
-export function colorWithOpacity(color: string | undefined, opacity: number) {
-  if (!color) return undefined;
-  const alpha = clamp(opacity, 0, 1);
-  if (alpha >= 1) return color;
-  const hex = color.startsWith("#") ? color.slice(1) : color;
-  if (hex.length === 3) {
-    const [r, g, b] = hex.split("").map((part) => parseInt(part + part, 16));
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  if (hex.length === 6) {
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return color;
-}
-
-export function shadowProps(element: RawElement) {
-  const shadow = asRecord(element.shadow);
-  if (!shadow) return {};
-  const color = withHash(readString(shadow.color) ?? "#000000");
-  const opacity = readNumber(shadow.opacity) ?? 0.2;
-  const blur = readNumber(shadow.blur) ?? 0;
-  const offsetX = readNumber(shadow.offset_x) ?? readNumber(shadow.offsetX) ?? 0;
-  const offsetY = readNumber(shadow.offset_y) ?? readNumber(shadow.offsetY) ?? 0;
-  if (opacity <= 0 || (blur <= 0 && offsetX === 0 && offsetY === 0)) return {};
-  return {
-    shadowColor: color,
-    shadowOpacity: opacity,
-    shadowBlur: blur,
-    shadowOffsetX: offsetX,
-    shadowOffsetY: offsetY,
-  };
-}
-
-export function borderRadius(element: RawElement) {
-  const value = element.border_radius ?? element.borderRadius;
-  if (typeof value === "number") return value;
-  const record = asRecord(value);
-  const radius = readNumber(record?.radius);
-  if (radius != null) return radius;
-  const topLeft = readNumber(record?.tl) ?? readNumber(record?.topLeft) ?? 0;
-  const topRight = readNumber(record?.tr) ?? readNumber(record?.topRight) ?? topLeft;
-  const bottomRight =
-    readNumber(record?.br) ?? readNumber(record?.bottomRight) ?? topRight;
-  const bottomLeft =
-    readNumber(record?.bl) ?? readNumber(record?.bottomLeft) ?? bottomRight;
-  if (topLeft || topRight || bottomRight || bottomLeft) {
-    return [topLeft, topRight, bottomRight, bottomLeft];
-  }
-  return 0;
-}
-
-export function readPadding(value: unknown) {
-  if (typeof value === "number") {
-    return { top: value, right: value, bottom: value, left: value };
-  }
-  const record = asRecord(value);
-  const x = readNumber(record?.x) ?? readNumber(record?.horizontal);
-  const y = readNumber(record?.y) ?? readNumber(record?.vertical);
-  return {
-    top: readNumber(record?.top) ?? y ?? 0,
-    right: readNumber(record?.right) ?? x ?? 0,
-    bottom: readNumber(record?.bottom) ?? y ?? 0,
-    left: readNumber(record?.left) ?? x ?? 0,
-  };
-}
-
-export function alignmentOffset(alignment: string | null, available: number, used: number) {
-  const free = Math.max(0, available - used);
-  if (alignment === "center") return free / 2;
-  if (
-    alignment === "right" ||
-    alignment === "bottom" ||
-    alignment === "end" ||
-    alignment === "flex-end"
-  ) {
-    return free;
-  }
-  return 0;
-}
-
-export function readPoint(value: unknown): Point {
-  const record = asRecord(value);
-  return {
-    x: readNumber(record?.x) ?? 0,
-    y: readNumber(record?.y) ?? 0,
-  };
-}
-
-export function readSize(
-  value: unknown,
-  fallback: Size = { width: 1, height: 1 },
-): Size {
-  const record = asRecord(value);
-  return {
-    width: Math.max(1, readNumber(record?.width) ?? fallback.width),
-    height: Math.max(1, readNumber(record?.height) ?? fallback.height),
-  };
-}
-
-export function readOptionalSize(value: unknown): Size | null {
-  const record = asRecord(value);
-  const width = readNumber(record?.width);
-  const height = readNumber(record?.height);
-  if (width == null || height == null) return null;
-  return {
-    width: Math.max(1, width),
-    height: Math.max(1, height),
-  };
-}
-
-export function readArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-export function stripUndefined<T extends UnknownRecord>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as T;
-}
-
-export function asRecord(value: unknown): UnknownRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as UnknownRecord)
-    : null;
-}
-
-export function isRecord(value: unknown): value is UnknownRecord {
-  return Boolean(asRecord(value));
-}
-
-export function readString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-export function readNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-export function readBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
 }
 
 export function rawIconQuery(element: RawElement): string {
@@ -2211,34 +1649,4 @@ export function isStaticSvgIconSource(source: string, baseUrl: string): boolean 
   } catch {
     return false;
   }
-}
-
-export function withHash(value: string | null | undefined) {
-  if (!value) return undefined;
-  return value.startsWith("#") || value.startsWith("rgb") ? value : `#${value}`;
-}
-
-export function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-export function normalizeId(value: string) {
-  const normalized = value
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  return normalized || "component";
-}
-
-export function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
-}
-
-export function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return false;
-  return Boolean(
-    target.closest(
-      "button,input,textarea,select,[contenteditable='true'],[role='dialog'],[data-inline-edit-ignore='true']",
-    ),
-  );
 }

@@ -6,7 +6,7 @@ import {
   Minus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SLIDE_H, SLIDE_W } from "@/components/slide-editor/schema/slide-schema";
+import { EDITOR_STAGE_HEIGHT, EDITOR_STAGE_WIDTH } from "@/components/slide-editor/types";
 import type { LineSlideElement } from "@/components/slide-editor/state/state";
 import { OpacitySwatchIcon } from "@/components/slide-editor/toolbar/OpacitySwatchIcon";
 import { withHash } from "@/components/slide-editor/utils/color";
@@ -61,14 +61,14 @@ export function LineToolbar({
 }) {
   const [openPanel, setOpenPanel] = useState<LinePanel>(null);
   const position = element.position ?? { x: 0, y: 0 };
-  const size = element.size ?? { width: 0.1, height: 0.01 };
+  const size = element.size ?? { width: 1, height: 1 };
   const stroke = element.stroke;
   const shadow = element.shadow ?? DEFAULT_LINE_SHADOW;
   const shadowEnabled = element.shadow != null;
   const currentStyle = lineStyleFromDash(stroke.dash);
   const toolbarLeft = Math.max(
     8,
-    Math.min(position.x * scale, SLIDE_W * scale - 430),
+    Math.min(position.x * scale, EDITOR_STAGE_WIDTH * scale - 430),
   );
 
   const update = (changes: Partial<LineSlideElement>) => {
@@ -225,7 +225,7 @@ export function LineToolbar({
                 label="W"
                 value={size.width}
                 min={0.01}
-                max={SLIDE_W}
+                max={EDITOR_STAGE_WIDTH}
                 step={0.01}
                 onCommit={(width) => update({ size: { ...size, width } })}
               />
@@ -233,7 +233,7 @@ export function LineToolbar({
                 label="H"
                 value={size.height}
                 min={0.01}
-                max={SLIDE_H}
+                max={EDITOR_STAGE_HEIGHT}
                 step={0.01}
                 onCommit={(height) => update({ size: { ...size, height } })}
               />

@@ -1,4 +1,4 @@
-import type { SlideElement } from "@/components/slide-editor/schema/slide-schema";
+import type { SlideElement } from "@/components/slide-editor/types";
 
 export type ExportMode = "native" | "keynote" | "raster";
 export type TextSlideElement = Extract<SlideElement, { type: "text" }>;

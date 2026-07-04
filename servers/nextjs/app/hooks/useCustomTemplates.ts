@@ -6,7 +6,7 @@ import { compileCustomLayout, CompiledLayout } from "./compileLayout";
 import TemplateService from "../(presentation-generator)/services/api/template";
 import { useFontLoader as loadFontAssets } from "../(presentation-generator)/hooks/useFontLoad";
 import type { TemplateV2Layout } from "@/app/(presentation-generator)/custom-template/types";
-import { normalizeTemplateV2Fonts } from "@/components/slide-editor/schema/template-v2-import";
+import { normalizeTemplateV2Fonts } from "@/components/slide-editor/importing/template-v2-import";
 import { normalizeBackendAssetUrls, resolveBackendAssetUrl } from "@/utils/api";
 
 /**

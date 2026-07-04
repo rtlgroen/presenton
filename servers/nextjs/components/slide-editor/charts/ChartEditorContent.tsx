@@ -26,12 +26,12 @@ import {
   updateChartColorTarget,
 } from "@/components/slide-editor/charts/chart-data";
 import {
-  SLIDE_H,
-  SLIDE_W,
+  EDITOR_STAGE_HEIGHT,
+  EDITOR_STAGE_WIDTH,
   type ChartElement,
   type ChartSeries,
   type ChartType,
-} from "@/components/slide-editor/schema/slide-schema";
+} from "@/components/slide-editor/types";
 import { ChartColorPaletteCard } from "@/components/slide-editor/charts/ChartColorPalette";
 import { TemplateV2ChartElement } from "@/components/slide-editor/charts/TemplateV2ChartElement";
 
@@ -44,7 +44,7 @@ const CHART_TYPES: Array<{ label: string; value: ChartType }> = [
 ];
 const DATA_MODAL_CHART_PREVIEW_WIDTH = 274;
 const DATA_MODAL_CHART_PREVIEW_HEIGHT =
-  (DATA_MODAL_CHART_PREVIEW_WIDTH / SLIDE_W) * SLIDE_H;
+  (DATA_MODAL_CHART_PREVIEW_WIDTH / EDITOR_STAGE_WIDTH) * EDITOR_STAGE_HEIGHT;
 const DATA_MODAL_TOP_OFFSET = 88;
 const DATA_MODAL_VIEWPORT_PADDING = 24;
 const DATA_MODAL_MAX_HEIGHT = `calc(100dvh - ${DATA_MODAL_TOP_OFFSET + DATA_MODAL_VIEWPORT_PADDING * 2}px)`;
@@ -1036,9 +1036,12 @@ function chartPreviewElement(chart: ChartElement): ChartElement {
   return {
     ...chart,
     opacity: 1,
-    position: { x: 0.35, y: 0.35 },
+    position: { x: 45, y: 45 },
     rotation: 0,
-    size: { width: SLIDE_W - 0.7, height: SLIDE_H - 0.7 },
+    size: {
+      width: EDITOR_STAGE_WIDTH - 90,
+      height: EDITOR_STAGE_HEIGHT - 90,
+    },
   };
 }
 

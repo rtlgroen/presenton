@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { SlideElement } from "@/components/slide-editor/schema/slide-schema";
+import type { SlideElement } from "@/components/slide-editor/types";
 import type { TemplateFontOption } from "@/components/slide-editor/text/google-fonts";
 import type { TextSelectionRange } from "@/components/slide-editor/text/text-runs";
 import type { TableCellSelection } from "@/components/slide-editor/state/state";

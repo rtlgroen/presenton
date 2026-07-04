@@ -1,6 +1,6 @@
 import { Group, Line, Rect, Text } from "react-konva";
 import { renderMarkdownTextRuns } from "@/components/slide-editor/text/markdown-text";
-import type { TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { TextRun } from "@/components/slide-editor/types";
 import { layoutRichText } from "@/components/slide-editor/text/template-v2-text";
 import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-height";
 

@@ -1,4 +1,4 @@
-import type { Font, TextElement, TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { Font, TextElement, TextRun } from "@/components/slide-editor/types";
 
 export type TextSelectionRange = {
   start: number;

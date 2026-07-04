@@ -12,7 +12,7 @@ import {
   elementBox,
   uniformBorderRadius,
 } from "@/components/slide-editor/model/element-model";
-import { SLIDE_H, SLIDE_W } from "@/components/slide-editor/schema/slide-schema";
+import { EDITOR_STAGE_HEIGHT, EDITOR_STAGE_WIDTH } from "@/components/slide-editor/types";
 import type { ShapeSlideElement } from "@/components/slide-editor/state/state";
 import { DeferredColorInput } from "@/components/slide-editor/toolbar/DeferredColorInput";
 import { OpacitySwatchIcon } from "@/components/slide-editor/toolbar/OpacitySwatchIcon";
@@ -66,15 +66,15 @@ export function ShapeToolbar({
   const shadowEnabled = element.shadow != null;
   const isRectangle = element.type === "rectangle";
   const maxRadius = Math.max(
-    0.01,
-    Math.min(0.5, box.w / 2, box.h / 2),
+    1,
+    Math.min(128, box.w / 2, box.h / 2),
   );
   const radius = isRectangle
     ? Math.min(maxRadius, averageBorderRadius(element.border_radius))
     : 0;
   const toolbarLeft = Math.max(
     8,
-    Math.min(box.x * scale, SLIDE_W * scale - 380),
+    Math.min(box.x * scale, EDITOR_STAGE_WIDTH * scale - 380),
   );
 
   const update = (changes: Partial<ShapeSlideElement>) => {
@@ -237,7 +237,7 @@ export function ShapeToolbar({
                 label="W"
                 value={box.w}
                 min={0.01}
-                max={SLIDE_W}
+                max={EDITOR_STAGE_WIDTH}
                 step={0.01}
                 onCommit={(width) =>
                   update({ size: { width, height: element.size?.height ?? box.h } })
@@ -247,7 +247,7 @@ export function ShapeToolbar({
                 label="H"
                 value={box.h}
                 min={0.01}
-                max={SLIDE_H}
+                max={EDITOR_STAGE_HEIGHT}
                 step={0.01}
                 onCommit={(height) =>
                   update({ size: { width: element.size?.width ?? box.w, height } })

@@ -9,7 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { withHash } from "@/components/slide-editor/utils/color";
-import type { Font, TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { Font, TextRun } from "@/components/slide-editor/types";
 import {
   type TemplateV2InlineEditBox,
   type TemplateV2InlineEditKind,

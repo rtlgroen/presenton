@@ -1,4 +1,4 @@
-import type { SlideElement } from "@/components/slide-editor/schema/slide-schema";
+import type { SlideElement } from "@/components/slide-editor/types";
 import {
   applyDesignVariableOption,
   designVariableNameLabel,

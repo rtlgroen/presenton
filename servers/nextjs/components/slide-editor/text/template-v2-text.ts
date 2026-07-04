@@ -1,5 +1,5 @@
 import { renderMarkdownTextRuns } from "@/components/slide-editor/text/markdown-text";
-import type { Font, TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { Font, TextRun } from "@/components/slide-editor/types";
 import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-height";
 import { textRunsContent } from "@/components/slide-editor/text/text-runs";
 import type { TemplateV2TextEditStyle } from "@/components/slide-editor/text/template-v2-text-editing";

@@ -3,7 +3,7 @@ import React from "react";
 import {
   type TemplateV2Layout as EditorTemplateV2Layout,
   withEqualTemplateV2FlowChildSizes,
-} from "@/components/slide-editor/schema/template-v2-import";
+} from "@/components/slide-editor/importing/template-v2-import";
 import { resolveBackendAssetUrl } from "@/utils/api";
 import { TemplateV2KonvaSlide } from "@/components/slide-editor/surface/TemplateV2KonvaSlide";
 import {

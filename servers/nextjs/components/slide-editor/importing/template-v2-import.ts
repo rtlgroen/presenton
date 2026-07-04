@@ -2,9 +2,8 @@ import { resolveBackendAssetUrl } from "@/utils/api";
 import { chartDataFromSeries } from "@/components/slide-editor/charts/chart-data";
 import { renderMarkdownTextRuns } from "@/components/slide-editor/text/markdown-text";
 import {
-  DeckSchema,
-  SLIDE_H,
-  SLIDE_W,
+  EDITOR_STAGE_HEIGHT,
+  EDITOR_STAGE_WIDTH,
   type Alignment,
   type BorderRadius,
   type ChartSeries,
@@ -24,12 +23,10 @@ import {
   type TextElement,
   type TextListItem,
   type TextRun,
-} from "@/components/slide-editor/schema/slide-schema";
+} from "@/components/slide-editor/types";
 
-const SOURCE_W = 1280;
-const SOURCE_H = 720;
-const X_SCALE = SLIDE_W / SOURCE_W;
-const Y_SCALE = SLIDE_H / SOURCE_H;
+const MIN_ELEMENT_SIZE = 1;
+const MAX_BORDER_RADIUS = 128;
 type UnknownRecord = Record<string, unknown>;
 type AdaptedPosition = { x: number; y: number };
 type AdaptedSize = { width: number; height: number };
@@ -99,16 +96,7 @@ export function adaptTemplateV2ResponseToDeck(
     slides,
   } satisfies Deck;
 
-  const parsed = DeckSchema.safeParse(deck);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const path = issue?.path.length ? issue.path.join(".") : "deck";
-    throw new Error(
-      `Backend template response could not be rendered in the editor (${path}: ${issue?.message ?? "invalid deck"}).`,
-    );
-  }
-
-  return parsed.data;
+  return deck;
 }
 
 export function normalizeTemplateV2Fonts(
@@ -186,16 +174,7 @@ export function adaptGeneratedTemplateV2PresentationToDeck(
     slides,
   } satisfies Deck;
 
-  const parsed = DeckSchema.safeParse(deck);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const path = issue?.path.length ? issue.path.join(".") : "deck";
-    throw new Error(
-      `Generated presentation could not be rendered in the editor (${path}: ${issue?.message ?? "invalid deck"}).`,
-    );
-  }
-
-  return parsed.data;
+  return deck;
 }
 
 function readGeneratedSlideUiLayout(slide: UnknownRecord): TemplateV2Layout | null {
@@ -248,13 +227,13 @@ export function withEqualTemplateV2FlowChildSizes(
 
   const padding = readRecord(element, "padding");
   const contentWidth = Math.max(
-    0.01,
+    MIN_ELEMENT_SIZE,
     width -
       (readNumber(padding ?? {}, "left") ?? 0) -
       (readNumber(padding ?? {}, "right") ?? 0),
   );
   const contentHeight = Math.max(
-    0.01,
+    MIN_ELEMENT_SIZE,
     height -
       (readNumber(padding ?? {}, "top") ?? 0) -
       (readNumber(padding ?? {}, "bottom") ?? 0),
@@ -280,7 +259,7 @@ export function withEqualTemplateV2FlowChildSizes(
           readNumber(element, "gap") ??
           0;
     const availableMain = Math.max(
-      0.01,
+      MIN_ELEMENT_SIZE,
       (direction === "row" ? contentWidth : contentHeight) -
         gap * Math.max(0, children.length - 1),
     );
@@ -312,11 +291,11 @@ export function withEqualTemplateV2FlowChildSizes(
       readNumber(element, "gap") ??
       0;
     const cellWidth = Math.max(
-      0.01,
+      MIN_ELEMENT_SIZE,
       (contentWidth - columnGap * Math.max(0, columns - 1)) / columns,
     );
     const cellHeight = Math.max(
-      0.01,
+      MIN_ELEMENT_SIZE,
       (contentHeight - rowGap * Math.max(0, rows - 1)) / rows,
     );
     return children.map((child) =>
@@ -339,8 +318,8 @@ function withTemplateV2ChildSize(
     ...record,
     size: {
       ...size,
-      width: readNumber(size, "width") ?? sourceNumber(width),
-      height: readNumber(size, "height") ?? sourceNumber(height),
+      width: readNumber(size, "width") ?? round(width),
+      height: readNumber(size, "height") ?? round(height),
     },
   };
 }
@@ -398,15 +377,18 @@ function normalizeAuthorInfoCardGroup(group: GroupElement): GroupElement {
       return child;
     }
 
-    const availableWidth = Math.max(0.1, cardRight - child.position.x - 0.18);
-    if (availableWidth <= child.size.width + 0.01) return child;
+    const availableWidth = Math.max(
+      MIN_ELEMENT_SIZE,
+      cardRight - child.position.x - 24,
+    );
+    if (availableWidth <= child.size.width + 1) return child;
 
     changed = true;
     return {
       ...child,
       size: {
         ...child.size,
-        width: Math.min(SLIDE_W, availableWidth),
+        width: Math.min(EDITOR_STAGE_WIDTH, availableWidth),
       },
     };
   });
@@ -748,13 +730,13 @@ function paddedChildSize(
   return {
     width: clamp(
       round(size.width + (padding?.left ?? 0) + (padding?.right ?? 0)),
-      0.01,
-      SLIDE_W,
+      MIN_ELEMENT_SIZE,
+      EDITOR_STAGE_WIDTH,
     ),
     height: clamp(
       round(size.height + (padding?.top ?? 0) + (padding?.bottom ?? 0)),
-      0.01,
-      SLIDE_H,
+      MIN_ELEMENT_SIZE,
+      EDITOR_STAGE_HEIGHT,
     ),
   };
 }
@@ -939,9 +921,9 @@ function adaptFlex(raw: UnknownRecord): SlideElement {
     align_items: readLayoutAlignment(raw, "align_items"),
     justify_content: readLayoutAlignment(raw, "justify_content"),
     padding: adaptPadding(readRecord(raw, "padding")),
-    gap: scaleDistance(readNumber(raw, "gap"), X_SCALE),
-    column_gap: scaleDistance(readNumber(raw, "column_gap"), X_SCALE),
-    row_gap: scaleDistance(readNumber(raw, "row_gap"), Y_SCALE),
+    gap: readNumber(raw, "gap"),
+    column_gap: readNumber(raw, "column_gap"),
+    row_gap: readNumber(raw, "row_gap"),
     children: withEqualTemplateV2FlowChildSizes(raw)
       .map(adaptElement)
       .filter(Boolean) as SlideElement[],
@@ -956,9 +938,9 @@ function adaptGrid(raw: UnknownRecord): SlideElement {
     type: "grid",
     columns: positiveInteger(readNumber(raw, "columns"), 1),
     rows: positiveIntegerOrNull(readNumber(raw, "rows")),
-    gap: scaleDistance(readNumber(raw, "gap"), X_SCALE),
-    column_gap: scaleDistance(readNumber(raw, "column_gap"), X_SCALE),
-    row_gap: scaleDistance(readNumber(raw, "row_gap"), Y_SCALE),
+    gap: readNumber(raw, "gap"),
+    column_gap: readNumber(raw, "column_gap"),
+    row_gap: readNumber(raw, "row_gap"),
     align_items: readLayoutAlignment(raw, "align_items"),
     justify_items: readLayoutAlignment(raw, "justify_items"),
     padding: adaptPadding(readRecord(raw, "padding")),
@@ -1000,25 +982,27 @@ function groupFrame(
 }
 
 function childrenBounds(children: SlideElement[]): AdaptedSize {
-  if (children.length === 0) return { width: 0.1, height: 0.1 };
+  if (children.length === 0) {
+    return { width: MIN_ELEMENT_SIZE, height: MIN_ELEMENT_SIZE };
+  }
 
   const bounds = children.reduce(
     (acc, child) => {
       const x = child.position?.x ?? 0;
       const y = child.position?.y ?? 0;
-      const width = child.size?.width ?? 0.1;
-      const height = child.size?.height ?? 0.1;
+      const width = child.size?.width ?? MIN_ELEMENT_SIZE;
+      const height = child.size?.height ?? MIN_ELEMENT_SIZE;
       return {
         width: Math.max(acc.width, x + width),
         height: Math.max(acc.height, y + height),
       };
     },
-    { width: 0.1, height: 0.1 },
+    { width: MIN_ELEMENT_SIZE, height: MIN_ELEMENT_SIZE },
   );
 
   return {
-    width: clamp(round(bounds.width), 0.01, SLIDE_W),
-    height: clamp(round(bounds.height), 0.01, SLIDE_H),
+    width: clamp(round(bounds.width), MIN_ELEMENT_SIZE, EDITOR_STAGE_WIDTH),
+    height: clamp(round(bounds.height), MIN_ELEMENT_SIZE, EDITOR_STAGE_HEIGHT),
   };
 }
 
@@ -1038,7 +1022,7 @@ function baseElement(
   if (position) base.position = position;
   if (size) base.size = size;
   if (options.requireFrame && !position) base.position = { x: 0, y: 0 };
-  if (options.requireFrame && !size) base.size = { width: SLIDE_W, height: SLIDE_H };
+  if (options.requireFrame && !size) base.size = { width: EDITOR_STAGE_WIDTH, height: EDITOR_STAGE_HEIGHT };
   if (options.requireFrame && !readRecord(raw, "layout")) {
     base.layout = { grow: 1, shrink: 1 };
   }
@@ -1099,15 +1083,15 @@ function adaptDesignVariables(values: unknown[]): DesignVariable[] {
       const effect = readArray(raw, "effect")
         .map((item) => {
           const rawEffect = asRecord(item);
-	          if (!rawEffect) return null;
-	          const path = truncateString(
-	            readString(readValue(rawEffect, "path")) ?? "",
-	            240,
-	          );
-	          const expression = truncateString(
-	            readString(readValue(rawEffect, "effect")) ?? "",
-	            120,
-	          );
+          if (!rawEffect) return null;
+          const path = truncateString(
+            readString(readValue(rawEffect, "path")) ?? "",
+            240,
+          );
+          const expression = truncateString(
+            readString(readValue(rawEffect, "effect")) ?? "",
+            120,
+          );
           return path && expression ? { path, effect: expression } : null;
         })
         .filter((item): item is DesignVariable["effect"][number] =>
@@ -1153,16 +1137,16 @@ function toJsonValue(value: unknown): unknown {
 function adaptPosition(value: UnknownRecord | null): { x: number; y: number } | null {
   if (!value) return null;
   return {
-    x: round((readNumber(value, "x") ?? 0) * X_SCALE),
-    y: round((readNumber(value, "y") ?? 0) * Y_SCALE),
+    x: round(readNumber(value, "x") ?? 0),
+    y: round(readNumber(value, "y") ?? 0),
   };
 }
 
 function adaptSize(value: UnknownRecord | null): { width: number; height: number } | null {
   if (!value) return null;
   return {
-    width: clamp(round((readNumber(value, "width") ?? 1) * X_SCALE), 0.01, SLIDE_W),
-    height: clamp(round((readNumber(value, "height") ?? 1) * Y_SCALE), 0.01, SLIDE_H),
+    width: clamp(round(readNumber(value, "width") ?? MIN_ELEMENT_SIZE), MIN_ELEMENT_SIZE, EDITOR_STAGE_WIDTH),
+    height: clamp(round(readNumber(value, "height") ?? MIN_ELEMENT_SIZE), MIN_ELEMENT_SIZE, EDITOR_STAGE_HEIGHT),
   };
 }
 
@@ -1171,11 +1155,11 @@ function adaptLayoutItem(value: UnknownRecord | null): LayoutItem | null {
   return stripNullish({
     grow: clampOptional(readNumber(value, "grow"), 0, 12),
     shrink: clampOptional(readNumber(value, "shrink"), 0, 12),
-    basis: scaleDistance(readNumber(value, "basis"), X_SCALE),
-    min_width: scaleDistance(readNumber(value, "min_width"), X_SCALE),
-    max_width: scaleDistance(readNumber(value, "max_width"), X_SCALE),
-    min_height: scaleDistance(readNumber(value, "min_height"), Y_SCALE),
-    max_height: scaleDistance(readNumber(value, "max_height"), Y_SCALE),
+    basis: readNumber(value, "basis"),
+    min_width: readNumber(value, "min_width"),
+    max_width: readNumber(value, "max_width"),
+    min_height: readNumber(value, "min_height"),
+    max_height: readNumber(value, "max_height"),
     column_span: clampInteger(readNumber(value, "column_span"), 1, 12),
     row_span: clampInteger(readNumber(value, "row_span"), 1, 12),
     align_self: readLayoutAlignment(value, "align_self"),
@@ -1252,20 +1236,20 @@ function hasVisiblePaint(
 function adaptBorderRadius(value: UnknownRecord | null): BorderRadius | null {
   if (!value) return null;
   return {
-    tl: clamp(round((readNumber(value, "tl") ?? 0) * X_SCALE), 0, 0.5),
-    tr: clamp(round((readNumber(value, "tr") ?? 0) * X_SCALE), 0, 0.5),
-    bl: clamp(round((readNumber(value, "bl") ?? 0) * X_SCALE), 0, 0.5),
-    br: clamp(round((readNumber(value, "br") ?? 0) * X_SCALE), 0, 0.5),
+    tl: clamp(round(readNumber(value, "tl") ?? 0), 0, MAX_BORDER_RADIUS),
+    tr: clamp(round(readNumber(value, "tr") ?? 0), 0, MAX_BORDER_RADIUS),
+    bl: clamp(round(readNumber(value, "bl") ?? 0), 0, MAX_BORDER_RADIUS),
+    br: clamp(round(readNumber(value, "br") ?? 0), 0, MAX_BORDER_RADIUS),
   };
 }
 
 function adaptPadding(value: UnknownRecord | null): Padding | null {
   if (!value) return null;
   return {
-    top: Math.max(0, round((readNumber(value, "top") ?? 0) * Y_SCALE)),
-    right: Math.max(0, round((readNumber(value, "right") ?? 0) * X_SCALE)),
-    bottom: Math.max(0, round((readNumber(value, "bottom") ?? 0) * Y_SCALE)),
-    left: Math.max(0, round((readNumber(value, "left") ?? 0) * X_SCALE)),
+    top: Math.max(0, round(readNumber(value, "top") ?? 0)),
+    right: Math.max(0, round(readNumber(value, "right") ?? 0)),
+    bottom: Math.max(0, round(readNumber(value, "bottom") ?? 0)),
+    left: Math.max(0, round(readNumber(value, "left") ?? 0)),
   };
 }
 
@@ -1273,10 +1257,10 @@ function adaptShadow(value: UnknownRecord | null): Shadow | null {
   if (!value) return null;
   return stripNullish({
     color: readColor(value.color),
-    blur: clamp(round((readNumber(value, "blur") ?? 0) * X_SCALE), 0, 100),
+    blur: clamp(round(readNumber(value, "blur") ?? 0), 0, 100),
     opacity: clamp(readNumber(value, "opacity") ?? 0.2, 0, 1),
-    offset_x: clamp(round((readNumber(value, "offset_x") ?? 0) * X_SCALE), -2, 2),
-    offset_y: clamp(round((readNumber(value, "offset_y") ?? 0) * Y_SCALE), -2, 2),
+    offset_x: clamp(round(readNumber(value, "offset_x") ?? 0), -256, 256),
+    offset_y: clamp(round(readNumber(value, "offset_y") ?? 0), -256, 256),
   });
 }
 
@@ -1312,21 +1296,21 @@ function widenSingleLineTextElement(element: TextElement): TextElement {
   }
 
   const wrap = element.font?.wrap;
-  const oneLineBox = (element.size.height ?? 0) <= 0.55;
+  const oneLineBox = (element.size.height ?? 0) <= 70;
   if (wrap != null && wrap !== "none") return element;
   if (wrap == null && !oneLineBox) return element;
 
   const fontSize = element.font?.size ?? 18;
   const averageGlyphWidth = element.font?.bold ? 0.6 : 0.54;
-  const estimatedWidth = fontSize * X_SCALE * averageGlyphWidth * displayText.length;
-  const requiredWidth = round(Math.min(SLIDE_W - element.position.x, estimatedWidth + 0.12));
-  if (requiredWidth <= element.size.width + 0.01) return element;
+  const estimatedWidth = fontSize * averageGlyphWidth * displayText.length;
+  const requiredWidth = round(Math.min(EDITOR_STAGE_WIDTH - element.position.x, estimatedWidth + 16));
+  if (requiredWidth <= element.size.width + 1) return element;
 
   return {
     ...element,
     size: {
       ...element.size,
-      width: clamp(requiredWidth, element.size.width, SLIDE_W),
+      width: clamp(requiredWidth, element.size.width, EDITOR_STAGE_WIDTH),
     },
   };
 }
@@ -1433,7 +1417,7 @@ function invisibleFallbackElement(): SlideElement {
   return {
     type: "rectangle",
     position: { x: 0, y: 0 },
-    size: { width: 0.1, height: 0.1 },
+    size: { width: MIN_ELEMENT_SIZE, height: MIN_ELEMENT_SIZE },
     fill: { color: "FFFFFF" },
     opacity: 0,
   };
@@ -1459,8 +1443,8 @@ function findBackgroundRectangle(
       element.type === "rectangle" &&
       x === 0 &&
       y === 0 &&
-      element.size?.width === SLIDE_W &&
-      element.size?.height === SLIDE_H &&
+      element.size?.width === EDITOR_STAGE_WIDTH &&
+      element.size?.height === EDITOR_STAGE_HEIGHT &&
       element.fill?.color
     ) {
       return element;
@@ -1488,10 +1472,6 @@ function titleFromLayout(layout: TemplateV2Layout, index: number) {
   const id = readString(layout.id);
   const slideNumber = id?.match(/\d+/)?.[0] ?? `${index + 1}`;
   return truncateString(`Slide ${slideNumber}`, 60);
-}
-
-function sourceNumber(value: number) {
-  return Math.round(value * 10000) / 10000;
 }
 
 function readValue(record: UnknownRecord, key: string) {
@@ -1580,10 +1560,6 @@ function stripNullish<T extends UnknownRecord>(value: T): T {
         (!Array.isArray(item) || item.length > 0),
     ),
   ) as T;
-}
-
-function scaleDistance(value: number | null, scale: number) {
-  return value == null ? null : Math.max(0, round(value * scale));
 }
 
 function positiveInteger(value: number | null, fallback: number) {

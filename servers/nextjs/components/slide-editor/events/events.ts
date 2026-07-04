@@ -1,7 +1,7 @@
 import type {
   ChartElement,
   SlideElement,
-} from "@/components/slide-editor/schema/slide-schema";
+} from "@/components/slide-editor/types";
 
 export const TEMPLATE_V2_INSERT_ELEMENTS_EVENT =
   "presenton:template-v2-insert-elements";

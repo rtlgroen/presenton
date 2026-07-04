@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { TextRun } from "@/components/slide-editor/types";
 import type { TemplateV2InlineEdit } from "@/components/slide-editor/text/template-v2-text-editing";
 import {
   textRunsContent,

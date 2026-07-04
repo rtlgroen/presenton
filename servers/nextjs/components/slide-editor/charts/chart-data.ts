@@ -3,7 +3,7 @@ import type {
   ChartElement,
   ChartSeries,
   ChartType,
-} from "@/components/slide-editor/schema/slide-schema";
+} from "@/components/slide-editor/types";
 
 export type ResolvedChartDataset = {
   name: string;

@@ -1,4 +1,4 @@
-import type { Font, TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { Font, TextRun } from "@/components/slide-editor/types";
 
 type MarkdownStyle = {
   bold?: boolean;

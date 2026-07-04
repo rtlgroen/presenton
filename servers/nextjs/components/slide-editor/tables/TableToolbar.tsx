@@ -18,7 +18,7 @@ import {
   setTableRowsFromStrings,
   tableRowsAsStrings,
 } from "@/components/slide-editor/model/element-model";
-import type { TableCell } from "@/components/slide-editor/schema/slide-schema";
+import type { TableCell } from "@/components/slide-editor/types";
 import { DeferredColorInput } from "@/components/slide-editor/toolbar/DeferredColorInput";
 
 type TableCellAlignment = NonNullable<TableCell["alignment"]>;
