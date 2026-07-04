@@ -26,23 +26,24 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notify } from "@/components/ui/sonner";
-import type {
-  ChartElement,
-  ChartType,
-  SlideElement,
-} from "@/components/slide-editor/lib/slide-schema";
+import {
+  SLIDE_W,
+  type TableCell,
+  type Font,
+  type Fill,
+  type ChartElement,
+  type ChartType,
+  type SlideElement,
+} from "@/components/slide-editor/schema/slide-schema";
 
-import { ChartEditorContent } from "@/components/slide-editor/workspace/ChartEditorContent";
+import { ChartEditorContent } from "@/components/slide-editor/charts/ChartEditorContent";
 import {
   adaptTemplateV2ComponentToElement,
   extractTemplateV2Layouts,
   extractTemplateV2MergedComponents,
   type TemplateV2Layout,
   type TemplateV2ImportResponse,
-} from "@/components/slide-editor/lib/template-v2-import";
-import Chat from "./Chat";
-import TemplateService from "../../services/api/template";
-import { TemplateV2KonvaSlide } from "../../components/TemplateV2KonvaSlide";
+} from "@/components/slide-editor/schema/template-v2-import";
 import {
   TEMPLATE_V2_CHART_EDITOR_EVENT,
   TEMPLATE_V2_INSERT_ELEMENTS_EVENT,
@@ -53,7 +54,10 @@ import {
   type TemplateV2InsertComponent,
   type TemplateV2InsertElementsDetail,
   type TemplateV2SurfaceSelectedDetail,
-} from "../../components/templateV2Events";
+} from "@/components/slide-editor/events/events";
+import Chat from "./Chat";
+import TemplateService from "../../services/api/template";
+import { TemplateV2KonvaSlide } from "@/components/slide-editor/surface/TemplateV2KonvaSlide";
 
 type PresentationActionsProps = React.ComponentProps<typeof Chat> & {
   presentationData?: unknown;
@@ -232,12 +236,23 @@ const elementItems = [
 const templateBlocksCache = new Map<string, TemplateBlockGroup[]>();
 const BLOCK_PREVIEW_WIDTH = 1280;
 const BLOCK_PREVIEW_HEIGHT = 720;
-const TEMPLATE_V2_EDITOR_PX_PER_IN = 128;
+const TEMPLATE_V2_EDITOR_PX_PER_UNIT = BLOCK_PREVIEW_WIDTH / SLIDE_W;
 const DEFAULT_BAR_CHART_SOURCE = "presenton-default-bar-chart";
 const DEFAULT_LINE_CHART_SOURCE = "presenton-default-line-chart";
 const DEFAULT_AREA_CHART_SOURCE = "presenton-default-area-chart";
 const DEFAULT_PIE_CHART_SOURCE = "presenton-default-pie-chart";
-const DEFAULT_CHART_INSERT_SIZE = { width: 2.5, height: 2.5 };
+const DEFAULT_CHART_INSERT_POSITION = { x: 1.0, y: 0.9 };
+const DEFAULT_CHART_INSERT_SIZE = { width: 5.6, height: 3.2 };
+const TEXT_INSERT_VERTICAL_PADDING_PX = 14;
+
+function fittedTextHeight(
+  lineCount: number,
+  fontSize: number,
+  lineHeight: number,
+) {
+  const px = lineCount * fontSize * lineHeight + TEXT_INSERT_VERTICAL_PADDING_PX;
+  return Number((px / TEMPLATE_V2_EDITOR_PX_PER_UNIT).toFixed(2));
+}
 
 const makeTextElement = ({
   text,
@@ -279,8 +294,23 @@ const makeTextElement = ({
   },
 });
 
+const makeTableCell = ({
+  text,
+  font,
+  color,
+  alignment = "left",
+}: {
+  text: string;
+  font: Font;
+  color?: Fill;
+  alignment?: TableCell["alignment"];
+}): TableCell => ({
+  alignment,
+  color,
+  runs: [{ text, font }],
+});
+
 const makeBulletListElement = (): SlideElement => {
-  const px = (value: number) => value / TEMPLATE_V2_EDITOR_PX_PER_IN;
   const baseFont = {
     size: 18,
     family: "Inter",
@@ -295,25 +325,26 @@ const makeBulletListElement = (): SlideElement => {
   const firstFont = { ...baseFont, bold: true };
   const secondFont = { ...baseFont };
   const thirdFont = { ...baseFont, italic: true };
+  const items = [
+    [{ text: "Clarify the goal and audience", font: firstFont }],
+    [{ text: "Show the strongest supporting point", font: secondFont }],
+    [{ text: "Close with the next action", font: thirdFont }],
+  ];
 
   return {
     type: "text-list",
     position: {
-      x: px(120),
-      y: px(80),
+      x: 0.95,
+      y: 1.0,
     },
     size: {
-      width: px(420),
-      height: px(260),
+      width: 5.4,
+      height: fittedTextHeight(items.length, baseFont.size, baseFont.line_height),
     },
     rotation: 0,
     font: baseFont,
     marker: "bullet",
-    items: [
-      [{ text: "Gather requirements", font: firstFont }],
-      [{ text: "Design architecture", font: secondFont }],
-      [{ text: "Implement API", font: thirdFont }],
-    ],
+    items,
     decorative: false,
     name: "Project task list",
     max_items: 6,
@@ -328,11 +359,11 @@ const createTextInsertElements = (kind?: string): SlideElement[] => {
     case "title-block":
       return [
         makeTextElement({
-          text: "Add a title",
+          text: "Add a clear slide title",
           x: 0.85,
           y: 0.85,
-          width: 7.1,
-          height: 0.72,
+          width: 7.7,
+          height: fittedTextHeight(1, 38, 1.1),
           size: 38,
           bold: true,
         }),
@@ -340,11 +371,11 @@ const createTextInsertElements = (kind?: string): SlideElement[] => {
     case "subtitle":
       return [
         makeTextElement({
-          text: "Add a subtitle",
+          text: "Add a concise supporting subtitle",
           x: 0.95,
           y: 1.2,
-          width: 6.2,
-          height: 0.5,
+          width: 6.8,
+          height: fittedTextHeight(1, 24, 1.2),
           size: 24,
           color: "344054",
           lineHeight: 1.2,
@@ -358,8 +389,8 @@ const createTextInsertElements = (kind?: string): SlideElement[] => {
           text: '"Add a memorable quote or customer insight here."',
           x: 0.95,
           y: 1.15,
-          width: 6.2,
-          height: 0.9,
+          width: 6.7,
+          height: fittedTextHeight(2, 24, 1.25),
           size: 24,
           color: "101323",
           italic: true,
@@ -372,8 +403,8 @@ const createTextInsertElements = (kind?: string): SlideElement[] => {
           text: "Add body text here. Use this space for a short paragraph or supporting detail.",
           x: 0.95,
           y: 1.2,
-          width: 6.1,
-          height: 0.9,
+          width: 6.7,
+          height: fittedTextHeight(2, 18, 1.28),
           size: 18,
           color: "344054",
           lineHeight: 1.28,
@@ -405,7 +436,7 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 
     return {
       type: "chart",
-      position: { x: 0.78, y: 0.55 },
+      position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "bar",
       title: "Weekly Report\nJun 10-12",
@@ -435,7 +466,7 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 
     return {
       type: "chart",
-      position: { x: 0.78, y: 0.55 },
+      position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "line",
       title: "Enrollment Over Years\n2021-2026",
@@ -465,7 +496,7 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 
     return {
       type: "chart",
-      position: { x: 0.78, y: 0.55 },
+      position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "area",
       title: "Enrollment Over Years\n2021-2026",
@@ -495,7 +526,7 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 
     return {
       type: "chart",
-      position: { x: 0.78, y: 0.55 },
+      position: { ...DEFAULT_CHART_INSERT_POSITION },
       size: { ...DEFAULT_CHART_INSERT_SIZE },
       chart_type: "pie",
       title: "Weekly Report\nJun 10-12",
@@ -523,8 +554,8 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 
   return {
     type: "chart",
-    position: { x: 1.05, y: 1.05 },
-    size: { width: isCircular ? 4.4 : 5.2, height: 2.6 },
+    position: { ...DEFAULT_CHART_INSERT_POSITION },
+    size: { width: isCircular ? 4.2 : 5.6, height: 3.2 },
     chart_type: chartType,
     title: label,
     color: "7F22FE",
@@ -545,6 +576,60 @@ const makeChartElement = (chartType: ChartType): SlideElement => {
 const createChartInsertElements = (kind?: string): SlideElement[] => {
   const chartType = chartTypeFromPaletteId(kind);
   return chartType ? [makeChartElement(chartType)] : [];
+};
+
+const makeSimpleTableElement = (): SlideElement => {
+  const baseFont: Font = {
+    family: "Inter",
+    size: 14,
+    color: "#344054",
+    line_height: 1.2,
+    wrap: "word",
+  };
+  const headerFont: Font = {
+    ...baseFont,
+    color: "#101323",
+    bold: true,
+    wrap: "none",
+  };
+  const headerFill: Fill = { color: "#F2F4F7", opacity: 1 };
+
+  return {
+    type: "table",
+    position: { x: 0.95, y: 1.0 },
+    size: { width: 6.4, height: 1.45 },
+    font: baseFont,
+    columns: [
+      makeTableCell({ text: "Metric", font: headerFont, color: headerFill }),
+      makeTableCell({ text: "Current", font: headerFont, color: headerFill }),
+      makeTableCell({ text: "Target", font: headerFont, color: headerFill }),
+    ],
+    rows: [
+      [
+        makeTableCell({ text: "Activation", font: baseFont }),
+        makeTableCell({ text: "68%", font: baseFont }),
+        makeTableCell({ text: "75%", font: baseFont }),
+      ],
+      [
+        makeTableCell({ text: "Retention", font: baseFont }),
+        makeTableCell({ text: "42%", font: baseFont }),
+        makeTableCell({ text: "50%", font: baseFont }),
+      ],
+    ],
+    min_columns: 2,
+    max_columns: 6,
+    min_rows: 2,
+    max_rows: 8,
+  };
+};
+
+const createTableInsertElements = (kind?: string): SlideElement[] => {
+  switch (kind) {
+    case "simple-table":
+      return [makeSimpleTableElement()];
+    default:
+      return [];
+  }
 };
 
 
@@ -585,8 +670,8 @@ const createImageInsertContent = (kind?: string): EditorInsertContent => {
           makeImageElement({
             x: 1.05,
             y: 1.0,
-            width: 4.2,
-            height: 2.7,
+            width: 5.2,
+            height: 3.1,
           }),
         ],
       };
@@ -597,29 +682,29 @@ const createImageInsertContent = (kind?: string): EditorInsertContent => {
             id: "image_text",
             description: "Image with heading and supporting text",
             position: { x: 0.95, y: 1.0 },
-            size: { width: 7.5, height: 2.55 },
+            size: { width: 7.7, height: 2.9 },
             elements: [
               makeImageElement({
                 x: 0,
                 y: 0,
-                width: 3.9,
-                height: 2.55,
+                width: 3.8,
+                height: 2.9,
               }),
               makeTextElement({
                 text: "Add a heading",
-                x: 4.15,
+                x: 4.1,
                 y: 0.12,
-                width: 3.3,
-                height: 0.5,
+                width: 3.45,
+                height: 0.58,
                 size: 24,
                 bold: true,
               }),
               makeTextElement({
-                text: "Add supporting text for this image.",
-                x: 4.15,
-                y: 0.76,
-                width: 3.35,
-                height: 0.85,
+                text: "Add supporting text that explains why this visual matters.",
+                x: 4.1,
+                y: 0.84,
+                width: 3.45,
+                height: 1.05,
                 size: 16,
                 color: "475467",
                 lineHeight: 1.3,
@@ -635,34 +720,34 @@ const createImageInsertContent = (kind?: string): EditorInsertContent => {
             id: "image_grid",
             description: "Two-by-two image grid",
             position: { x: 1.0, y: 0.95 },
-            size: { width: 4.9, height: 3.3 },
+            size: { width: 5.6, height: 3.55 },
             elements: [
               makeImageElement({
                 x: 0,
                 y: 0,
-                width: 2.35,
-                height: 1.55,
+                width: 2.7,
+                height: 1.65,
                 name: "Image 1",
               }),
               makeImageElement({
-                x: 2.55,
+                x: 2.9,
                 y: 0,
-                width: 2.35,
-                height: 1.55,
+                width: 2.7,
+                height: 1.65,
                 name: "Image 2",
               }),
               makeImageElement({
                 x: 0,
-                y: 1.75,
-                width: 2.35,
-                height: 1.55,
+                y: 1.9,
+                width: 2.7,
+                height: 1.65,
                 name: "Image 3",
               }),
               makeImageElement({
-                x: 2.55,
-                y: 1.75,
-                width: 2.35,
-                height: 1.55,
+                x: 2.9,
+                y: 1.9,
+                width: 2.7,
+                height: 1.65,
                 name: "Image 4",
               }),
             ],
@@ -681,7 +766,7 @@ const createElementInsertElements = (kind?: string): SlideElement[] => {
         {
           type: "rectangle",
           position: { x: 1.05, y: 1.05 },
-          size: { width: 2.6, height: 1.35 },
+          size: { width: 3.0, height: 1.5 },
           fill: { color: "F4F3FF", opacity: 1 },
           stroke: { color: "7A5AF8", width: 1.5 },
           border_radius: { tl: 0.08, tr: 0.08, bl: 0.08, br: 0.08 },
@@ -692,7 +777,7 @@ const createElementInsertElements = (kind?: string): SlideElement[] => {
         {
           type: "ellipse",
           position: { x: 1.05, y: 1.05 },
-          size: { width: 2.2, height: 1.35 },
+          size: { width: 2.7, height: 1.55 },
           fill: { color: "F4F3FF", opacity: 1 },
           stroke: { color: "7A5AF8", width: 1.5 },
         },
@@ -701,8 +786,8 @@ const createElementInsertElements = (kind?: string): SlideElement[] => {
       return [
         {
           type: "line",
-          position: { x: 1.05, y: 1.55 },
-          size: { width: 2.8, height: 0.01 },
+          position: { x: 1.05, y: 1.7 },
+          size: { width: 3.4, height: 0.01 },
           stroke: { color: "101323", width: 2 },
         },
       ];
@@ -842,6 +927,13 @@ function readRecordString(record: UnknownRecord, key: string): string | null {
 function readRecordArray(record: UnknownRecord, key: string): unknown[] {
   const value = record[key];
   return Array.isArray(value) ? value : [];
+}
+
+function hasUsableComponentSize(record: UnknownRecord) {
+  const size = isRecord(record.size) ? record.size : null;
+  const width = typeof size?.width === "number" ? size.width : null;
+  const height = typeof size?.height === "number" ? size.height : null;
+  return Boolean(width && height && width > 0 && height > 0);
 }
 
 function humanizeIdentifier(value: string) {
@@ -1841,7 +1933,7 @@ const PresentationActions = (props: PresentationActionsProps) => {
   };
 
   const handleTableItemSelect = (item: PaletteItem) => {
-    // insertEditorElements(createTableInsertElementsContent(item.id), item.label);
+    insertEditorElements(createTableInsertElements(item.id), item.label);
   };
 
   const handleImageItemSelect = (item: PaletteItem) => {
@@ -1853,6 +1945,18 @@ const PresentationActions = (props: PresentationActionsProps) => {
   };
 
   const handleBlockSelect = (block: TemplateBlock) => {
+    if (
+      isRecord(block.raw) &&
+      hasUsableComponentSize(block.raw) &&
+      readRecordArray(block.raw, "elements").length > 0
+    ) {
+      insertEditorContent(
+        { components: [block.raw as TemplateV2InsertComponent] },
+        block.title,
+      );
+      return;
+    }
+
     const element = adaptTemplateV2ComponentToElement(block.raw, block.index);
     if (!element) {
       notify.warning(

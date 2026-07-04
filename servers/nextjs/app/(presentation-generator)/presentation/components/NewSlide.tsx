@@ -20,7 +20,7 @@ import { TemplateV2LayoutPreview } from "../../custom-template/components/EachSl
 import {
   extractTemplateV2Layouts,
   type TemplateV2Layout,
-} from "@/components/slide-editor/lib/template-v2-import";
+} from "@/components/slide-editor/schema/template-v2-import";
 import {
   BLANK_SLIDE_LAYOUT_ID,
   BLANK_TEMPLATE_V2_LAYOUT,

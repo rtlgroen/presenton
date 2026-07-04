@@ -4,7 +4,7 @@ import React, { ReactNode, useRef, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { updateSlideImage, updateSlideIcon, updateImageProperties } from '@/store/slices/presentationGeneration';
 import ImageEditor from './ImageEditor';
-import IconsEditor from './IconsEditor';
+import IconsEditor from '@/components/slide-editor/images/IconsEditor';
 
 interface EditableLayoutWrapperProps {
     children: ReactNode;

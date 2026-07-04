@@ -34,7 +34,7 @@ import {
   TEMPLATE_V2_SURFACE_SELECTED_EVENT,
   type TemplateV2ActivateSurfaceDetail,
   type TemplateV2SurfaceSelectedDetail,
-} from "../../components/templateV2Events";
+} from "@/components/slide-editor/events/events";
 
 function hasTemplateV2Layouts(layout: unknown): boolean {
   if (!layout || typeof layout !== "object") return false;

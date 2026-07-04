@@ -13,7 +13,7 @@ import { notify } from "@/components/ui/sonner";
 import { CustomTemplateLayout, useCustomTemplateDetails, useTemplateV2Details } from "@/app/hooks/useCustomTemplates";
 import { templates as templateGroups, getTemplatesByTemplateName } from "@/app/presentation-templates";
 import { setupImageUrlConverter } from "@/utils/image-url-converter";
-import { normalizeTemplateV2Fonts } from "@/components/slide-editor/lib/template-v2-import";
+import { normalizeTemplateV2Fonts } from "@/components/slide-editor/schema/template-v2-import";
 import { TemplateV2LayoutPreview } from "../../custom-template/components/EachSlide/TemplateV2LayoutPreview";
 import { useFontLoader as loadFontAssets } from "../../hooks/useFontLoad";
 

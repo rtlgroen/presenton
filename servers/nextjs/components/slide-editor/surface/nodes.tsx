@@ -1,0 +1,1109 @@
+"use client";
+
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type Konva from "konva";
+import {
+  Arc,
+  Circle,
+  Ellipse,
+  Group,
+  Image as KonvaImage,
+  Line,
+  Rect,
+  Text,
+} from "react-konva";
+import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-height";
+import { textRunsContent } from "@/components/slide-editor/text/text-runs";
+import { measureWrappedRenderTextHeight } from "@/components/slide-editor/text/template-v2-text-editing";
+import {
+  displayText,
+  layoutRenderTextRuns,
+  layoutRichText,
+  lineRenderHeight,
+  lineStartX,
+  measureNoWrapTextHeight,
+  measureNoWrapTextWidth,
+  fontScaleFromResize,
+  rawFont,
+  rawRenderTextRuns,
+  rawTextContent,
+  rawTextListRenderTextRuns,
+  textRunsHaveMixedStyle,
+  verticalTextStartY,
+  type RenderTextRun,
+} from "@/components/slide-editor/text/template-v2-text";
+import type { TableCellSelection } from "@/components/slide-editor/state/state";
+import { loadKonvaImage } from "@/components/slide-editor/surface/exportAssets";
+import { TemplateV2ChartElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartElement";
+import { TemplateV2TableElement as RawTableElement } from "@/components/slide-editor/tables/TemplateV2TableElement";
+import { buildSvgUpdateUrl } from "@/lib/svg-color";
+import {
+  asRecord,
+  borderRadius,
+  childArrayInfo,
+  clamp,
+  colorWithOpacity,
+  componentBox,
+  elementBox,
+  fillColor,
+  fillOpacity,
+  boxEqual,
+  isBoxVisualType,
+  isManualPositioned,
+  isRawIconElement,
+  isStaticSvgIconSource,
+  isRecord,
+  keyForSelection,
+  layoutChildren,
+  linePoints,
+  nullableBoxEqual,
+  numberPathEqual,
+  positionFromNodeInParent,
+  rawElementKey,
+  readArray,
+  readBoolean,
+  readNumber,
+  readString,
+  ROOT_ELEMENTS_COMPONENT_INDEX,
+  resizeComponent,
+  scaleRawElementTextMetrics,
+  selectionTouchesComponent,
+  selectionTouchesElement,
+  shadowProps,
+  shouldClipElementChildren,
+  shouldUseCenterOrigin,
+  strokeColor,
+  strokeOpacity,
+  strokeWidth,
+  valueProgress,
+  pointOnCircle,
+  withHash,
+  type Box,
+  type ComponentSelection,
+  type ElementSelection,
+  type RawComponent,
+  type RawElement,
+  type SelectOptions,
+  type Selection,
+} from "@/components/slide-editor/model/model";
+
+
+export function RawComponentNode({
+  component,
+  componentIndex,
+  isEditMode,
+  isMultiSelectedComponent,
+  editingKey,
+  selectedTableCell,
+  setNodeRef,
+  onSelect,
+  onTableCellSelect,
+  onTableCellEdit,
+  onOpenElementEditor,
+  onComponentChange,
+  onComponentDragStart,
+  onComponentDragMove,
+  onComponentDragEnd,
+  onElementChange,
+}: {
+  component: RawComponent;
+  componentIndex: number;
+  isEditMode: boolean;
+  isMultiSelectedComponent: boolean;
+  editingKey: string | null;
+  selectedTableCell: TableCellSelection | null;
+  setNodeRef: (key: string, node: Konva.Node | null) => void;
+  onSelect: (selection: Selection, options?: SelectOptions) => void;
+  onTableCellSelect: (
+    selection: ElementSelection,
+    rowIndex: number,
+    colIndex: number,
+  ) => void;
+  onTableCellEdit: (
+    selection: ElementSelection,
+    rowIndex: number,
+    colIndex: number,
+  ) => void;
+  onOpenElementEditor: (selection: ElementSelection) => void;
+  onComponentChange: (
+    componentIndex: number,
+    updater: (component: RawComponent) => RawComponent,
+  ) => void;
+  onComponentDragStart: (componentIndex: number, node: Konva.Node) => void;
+  onComponentDragMove: (componentIndex: number, node: Konva.Node) => void;
+  onComponentDragEnd: (componentIndex: number, node: Konva.Node) => void;
+  onElementChange: (
+    selection: ElementSelection,
+    updater: (element: RawElement) => RawElement,
+  ) => void;
+}) {
+  const groupRef = useRef<Konva.Group | null>(null);
+  const box = componentBox(component);
+  const selection: ComponentSelection = { kind: "component", componentIndex };
+  const key = keyForSelection(selection);
+  const elements = readArray(component.elements).filter(isRecord) as RawElement[];
+
+  return (
+    <Group
+      ref={(node) => {
+        groupRef.current = node;
+        setNodeRef(key, node);
+      }}
+      x={box.x}
+      y={box.y}
+      width={box.width}
+      height={box.height}
+      rotation={readNumber(component.rotation) ?? 0}
+      clipX={isEditMode ? undefined : 0}
+      clipY={isEditMode ? undefined : 0}
+      clipWidth={isEditMode ? undefined : box.width}
+      clipHeight={isEditMode ? undefined : box.height}
+      draggable={isEditMode}
+      onMouseDown={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        if (isMultiSelectedComponent && !event.evt.shiftKey) return;
+        onSelect(selection, { additive: event.evt.shiftKey });
+      }}
+      onTouchStart={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        if (isMultiSelectedComponent) return;
+        onSelect(selection);
+      }}
+      onDragStart={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        const node = groupRef.current;
+        if (!node) return;
+        if (!isMultiSelectedComponent && !event.evt.shiftKey) {
+          onSelect(selection);
+        }
+        onComponentDragStart(componentIndex, node);
+      }}
+      onDragMove={(event) => {
+        event.cancelBubble = true;
+        const node = groupRef.current;
+        if (!node) return;
+        onComponentDragMove(componentIndex, node);
+      }}
+      onDragEnd={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        const node = groupRef.current;
+        if (!node) return;
+        onComponentDragEnd(componentIndex, node);
+      }}
+      onTransformEnd={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        const node = groupRef.current;
+        if (!node) return;
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        node.scaleX(1);
+        node.scaleY(1);
+        const nextBox = {
+          ...box,
+          width: Math.max(1, box.width * scaleX),
+          height: Math.max(1, box.height * scaleY),
+        };
+        onComponentChange(componentIndex, (current) =>
+          resizeComponent(current, {
+            ...node.position(),
+            width: nextBox.width,
+            height: nextBox.height,
+            scaleX,
+            scaleY,
+            rotation: node.rotation(),
+          }),
+        );
+      }}
+    >
+      {isEditMode ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}
+      {elements.map((element, elementIndex) => (
+        <MemoizedRawElementNode
+          key={rawElementKey(element, elementIndex)}
+          element={element}
+          componentIndex={componentIndex}
+          elementPath={[elementIndex]}
+          isEditMode={isEditMode}
+          editingKey={editingKey}
+          selectedTableCell={selectedTableCell}
+          setNodeRef={setNodeRef}
+          onSelect={onSelect}
+          onTableCellSelect={onTableCellSelect}
+          onTableCellEdit={onTableCellEdit}
+          onOpenEditor={onOpenElementEditor}
+          onElementChange={onElementChange}
+          parentBox={box}
+          layoutManaged={false}
+        />
+      ))}
+    </Group>
+  );
+}
+
+export const MemoizedRawComponentNode = memo(
+  RawComponentNode,
+  (previous, next) => {
+    if (
+      previous.component !== next.component ||
+      previous.componentIndex !== next.componentIndex ||
+      previous.isEditMode !== next.isEditMode ||
+      previous.isMultiSelectedComponent !== next.isMultiSelectedComponent ||
+      previous.setNodeRef !== next.setNodeRef ||
+      previous.onSelect !== next.onSelect ||
+      previous.onTableCellSelect !== next.onTableCellSelect ||
+      previous.onTableCellEdit !== next.onTableCellEdit ||
+      previous.onOpenElementEditor !== next.onOpenElementEditor ||
+      previous.onComponentChange !== next.onComponentChange ||
+      previous.onComponentDragStart !== next.onComponentDragStart ||
+      previous.onComponentDragMove !== next.onComponentDragMove ||
+      previous.onComponentDragEnd !== next.onComponentDragEnd ||
+      previous.onElementChange !== next.onElementChange ||
+      previous.selectedTableCell !== next.selectedTableCell
+    ) {
+      return false;
+    }
+    return !(
+      previous.editingKey !== next.editingKey &&
+      (selectionTouchesComponent(
+        previous.editingKey,
+        previous.componentIndex,
+      ) ||
+        selectionTouchesComponent(next.editingKey, next.componentIndex))
+    );
+  },
+);
+
+function RawElementNode({
+  element,
+  componentIndex,
+  elementPath,
+  isEditMode,
+  editingKey,
+  selectedTableCell,
+  setNodeRef,
+  onSelect,
+  onTableCellSelect,
+  onTableCellEdit,
+  onOpenEditor,
+  onElementChange,
+  parentBox,
+  renderBox,
+  layoutManaged = false,
+}: {
+  element: RawElement;
+  componentIndex: number;
+  elementPath: number[];
+  isEditMode: boolean;
+  editingKey: string | null;
+  selectedTableCell: TableCellSelection | null;
+  setNodeRef: (key: string, node: Konva.Node | null) => void;
+  onSelect: (selection: Selection, options?: SelectOptions) => void;
+  onTableCellSelect: (
+    selection: ElementSelection,
+    rowIndex: number,
+    colIndex: number,
+  ) => void;
+  onTableCellEdit: (
+    selection: ElementSelection,
+    rowIndex: number,
+    colIndex: number,
+  ) => void;
+  onOpenEditor: (selection: ElementSelection) => void;
+  onElementChange: (
+    selection: ElementSelection,
+    updater: (element: RawElement) => RawElement,
+  ) => void;
+  parentBox: Box;
+  renderBox?: Box | null;
+  layoutManaged?: boolean;
+}) {
+  const groupRef = useRef<Konva.Group | null>(null);
+  const box = renderBox ?? elementBox(element);
+  const selection = useMemo<ElementSelection>(
+    () => ({
+      kind: "element",
+      componentIndex,
+      elementPath,
+    }),
+    [componentIndex, elementPath],
+  );
+  const key = keyForSelection(selection);
+  const selectedCell =
+    selectedTableCell?.elementPath === key ? selectedTableCell : null;
+  const editing = editingKey === key;
+  const childInfo = childArrayInfo(element);
+  const children = childInfo?.items ?? [];
+  const laidOutChildren = layoutChildren(element, children, box);
+  const clipChildren = shouldClipElementChildren(element, childInfo);
+  const centerOrigin = shouldUseCenterOrigin(element);
+  const handleTableCellSelect = useCallback(
+    (rowIndex: number, colIndex: number) => {
+      onTableCellSelect(selection, rowIndex, colIndex);
+    },
+    [onTableCellSelect, selection],
+  );
+  const handleTableCellEdit = useCallback(
+    (rowIndex: number, colIndex: number) => {
+      onTableCellEdit(selection, rowIndex, colIndex);
+    },
+    [onTableCellEdit, selection],
+  );
+
+  return (
+    <Group
+      ref={(node) => {
+        groupRef.current = node;
+        setNodeRef(key, node);
+      }}
+      x={centerOrigin ? box.x + box.width / 2 : box.x}
+      y={centerOrigin ? box.y + box.height / 2 : box.y}
+      width={box.width}
+      height={box.height}
+      offsetX={centerOrigin ? box.width / 2 : 0}
+      offsetY={centerOrigin ? box.height / 2 : 0}
+      clipX={clipChildren ? 0 : undefined}
+      clipY={clipChildren ? 0 : undefined}
+      clipWidth={clipChildren ? box.width : undefined}
+      clipHeight={clipChildren ? box.height : undefined}
+      rotation={readNumber(element.rotation) ?? 0}
+      opacity={readNumber(element.opacity) ?? 1}
+      onMouseDown={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = false;
+      }}
+      onTouchStart={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = false;
+      }}
+      onClick={(event) => {
+        if (!isEditMode) return;
+        if (componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+          event.cancelBubble = true;
+          onSelect(selection);
+        }
+      }}
+      onTap={(event) => {
+        if (!isEditMode) return;
+        if (componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) {
+          event.cancelBubble = true;
+          onSelect(selection);
+        }
+      }}
+      onDblClick={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        onSelect(selection);
+        onOpenEditor(selection);
+      }}
+      onDblTap={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        onSelect(selection);
+        onOpenEditor(selection);
+      }}
+      onTransformEnd={(event) => {
+        if (!isEditMode) return;
+        event.cancelBubble = true;
+        const node = groupRef.current;
+        if (!node) return;
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        const nextSize = {
+          width: Math.max(1, box.width * scaleX),
+          height: Math.max(1, box.height * scaleY),
+        };
+        node.scaleX(1);
+        node.scaleY(1);
+        const fontScale = fontScaleFromResize(scaleX, scaleY);
+        onElementChange(selection, (current) => ({
+          ...scaleRawElementTextMetrics(current, fontScale),
+          position: positionFromNodeInParent(
+            node,
+            parentBox,
+            { ...box, ...nextSize },
+          ),
+          size: nextSize,
+          rotation: node.rotation(),
+          ...(layoutManaged || isManualPositioned(current)
+            ? { __presenton_manual_position: true }
+            : {}),
+        }));
+      }}
+    >
+      {editing ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}
+      {editing ? null : (
+        <MemoizedRawElementVisual
+          element={element}
+          width={box.width}
+          height={box.height}
+          interactive={isEditMode}
+          selectedTableCell={selectedCell}
+          onTableCellSelect={handleTableCellSelect}
+          onTableCellEdit={handleTableCellEdit}
+        />
+      )}
+      {laidOutChildren.map(({ child, index, box: childBox, layoutManaged }) => (
+        <MemoizedRawElementNode
+          key={rawElementKey(child, index)}
+          element={child}
+          componentIndex={componentIndex}
+          elementPath={[...elementPath, index]}
+          isEditMode={isEditMode}
+          editingKey={editingKey}
+          selectedTableCell={selectedTableCell}
+          setNodeRef={setNodeRef}
+          onSelect={onSelect}
+          onTableCellSelect={onTableCellSelect}
+          onTableCellEdit={onTableCellEdit}
+          onOpenEditor={onOpenEditor}
+          onElementChange={onElementChange}
+          parentBox={{
+            x: parentBox.x + box.x,
+            y: parentBox.y + box.y,
+            width: box.width,
+            height: box.height,
+          }}
+          renderBox={childBox}
+          layoutManaged={layoutManaged}
+        />
+      ))}
+    </Group>
+  );
+}
+
+export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
+  if (
+    previous.element !== next.element ||
+    previous.componentIndex !== next.componentIndex ||
+    previous.isEditMode !== next.isEditMode ||
+    previous.layoutManaged !== next.layoutManaged ||
+    previous.selectedTableCell !== next.selectedTableCell ||
+    previous.setNodeRef !== next.setNodeRef ||
+    previous.onSelect !== next.onSelect ||
+    previous.onTableCellSelect !== next.onTableCellSelect ||
+    previous.onTableCellEdit !== next.onTableCellEdit ||
+    previous.onOpenEditor !== next.onOpenEditor ||
+    previous.onElementChange !== next.onElementChange ||
+    !numberPathEqual(previous.elementPath, next.elementPath) ||
+    !boxEqual(previous.parentBox, next.parentBox) ||
+    !nullableBoxEqual(previous.renderBox, next.renderBox)
+  ) {
+    return false;
+  }
+  return !(
+    previous.editingKey !== next.editingKey &&
+    (selectionTouchesElement(
+      previous.editingKey,
+      previous.componentIndex,
+      previous.elementPath,
+    ) ||
+      selectionTouchesElement(
+        next.editingKey,
+        next.componentIndex,
+        next.elementPath,
+      ))
+  );
+});
+
+function SelectionBoundsRect({
+  width,
+  height,
+}: {
+  width: number;
+  height: number;
+}) {
+  return (
+    <Rect
+      width={width}
+      height={height}
+      fill="rgba(0,0,0,0)"
+      listening={false}
+      perfectDrawEnabled={false}
+      shadowForStrokeEnabled={false}
+    />
+  );
+}
+
+function RawElementVisual({
+  element,
+  width,
+  height,
+  interactive,
+  selectedTableCell,
+  onTableCellSelect,
+  onTableCellEdit,
+}: {
+  element: RawElement;
+  width: number;
+  height: number;
+  interactive: boolean;
+  selectedTableCell: TableCellSelection | null;
+  onTableCellSelect: (rowIndex: number, colIndex: number) => void;
+  onTableCellEdit: (rowIndex: number, colIndex: number) => void;
+}) {
+  const type = readString(element.type);
+  if (isBoxVisualType(type)) {
+    const fill = colorWithOpacity(
+      fillColor(element.fill),
+      fillOpacity(element.fill),
+    );
+    const stroke = colorWithOpacity(
+      strokeColor(element.stroke),
+      strokeOpacity(element.stroke),
+    );
+    if (!fill && !(stroke && strokeWidth(element.stroke) > 0)) return null;
+    return (
+      <Rect
+        width={width}
+        height={height}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth(element.stroke)}
+        cornerRadius={borderRadius(element)}
+        {...shadowProps(element)}
+        listening={interactive}
+      />
+    );
+  }
+  if (type === "ellipse") {
+    return (
+      <Ellipse
+        x={width / 2}
+        y={height / 2}
+        radiusX={width / 2}
+        radiusY={height / 2}
+        fill={
+          colorWithOpacity(fillColor(element.fill), fillOpacity(element.fill)) ??
+          "transparent"
+        }
+        stroke={colorWithOpacity(
+          strokeColor(element.stroke),
+          strokeOpacity(element.stroke),
+        )}
+        strokeWidth={strokeWidth(element.stroke)}
+        {...shadowProps(element)}
+        listening={interactive}
+      />
+    );
+  }
+  if (type === "line") {
+    const stroke = colorWithOpacity(
+      strokeColor(element.stroke),
+      strokeOpacity(element.stroke),
+    );
+    const lineWidth = strokeWidth(element.stroke);
+    const lineDash = readArray(asRecord(element.stroke)?.dash)
+      .map(readNumber)
+      .filter((value): value is number => value != null && value >= 0);
+    if (!stroke || lineWidth <= 0) return null;
+    return (
+      <Line
+        points={linePoints(width, height, lineWidth)}
+        stroke={stroke}
+        strokeWidth={lineWidth}
+        dash={lineDash.length ? lineDash : undefined}
+        hitStrokeWidth={Math.max(20, lineWidth)}
+        {...shadowProps(element)}
+        listening={interactive}
+      />
+    );
+  }
+  if (type === "text") {
+    return (
+      <RawRichTextElement
+        element={element}
+        width={width}
+        height={height}
+        interactive={interactive}
+      />
+    );
+  }
+  if (type === "text-list") {
+    return (
+      <RawRichTextElement
+        element={element}
+        width={width}
+        height={height}
+        runs={rawTextListRenderTextRuns(element)}
+        interactive={interactive}
+      />
+    );
+  }
+  if (type === "image") {
+    return <RawImageElement element={element} width={width} height={height} interactive={interactive} />;
+  }
+  if (type === "table") {
+    return (
+      <RawTableElement
+        element={element}
+        width={width}
+        height={height}
+        interactive={interactive}
+        selectedCell={selectedTableCell}
+        onCellSelect={onTableCellSelect}
+        onCellEdit={onTableCellEdit}
+      />
+    );
+  }
+  if (type === "chart") {
+    return <RawChartElement element={element} width={width} height={height} interactive={interactive} />;
+  }
+  if (type === "infographic") {
+    return <RawInfographicElement element={element} width={width} height={height} interactive={interactive} />;
+  }
+  return null;
+}
+
+const MemoizedRawElementVisual = memo(
+  RawElementVisual,
+  (previous, next) =>
+    previous.element === next.element &&
+    previous.width === next.width &&
+    previous.height === next.height &&
+    previous.interactive === next.interactive &&
+    previous.selectedTableCell === next.selectedTableCell &&
+    previous.onTableCellSelect === next.onTableCellSelect &&
+    previous.onTableCellEdit === next.onTableCellEdit,
+);
+
+function RawRichTextElement({
+  element,
+  width,
+  height,
+  text,
+  runs: runsOverride,
+  interactive,
+}: {
+  element: RawElement;
+  width: number;
+  height: number;
+  text?: string;
+  runs?: RenderTextRun[];
+  interactive: boolean;
+}) {
+  const font = rawFont(element);
+  const renderRuns =
+    runsOverride ?? (text == null ? rawRenderTextRuns(element) : []);
+  const content =
+    text ??
+    (runsOverride ? textRunsContent(runsOverride) : rawTextContent(element));
+  const displayContent = displayText(content);
+  const renderRunsDifferFromElement =
+    renderRuns.length > 0 &&
+    textRunsHaveMixedStyle([{ text: "", font }, ...renderRuns]);
+  const align = readString(element.alignment?.horizontal) ?? "left";
+  const verticalAlign = readString(element.alignment?.vertical) ?? "top";
+  const textLineHeight = effectiveLineHeight({
+    text: displayContent,
+    width,
+    fontSize: font.size,
+    lineHeight: font.lineHeight,
+    fallback: 1.15,
+    wrap: font.wrap,
+  });
+
+  if (renderRunsDifferFromElement) {
+    const lines = layoutRenderTextRuns(renderRuns, width, font.wrap);
+    const lineMetrics = lines.map((line) => ({
+      height: lineRenderHeight(line, textLineHeight),
+      width: line.reduce((sum, segment) => sum + segment.width, 0),
+    }));
+    const totalHeight = lineMetrics.reduce(
+      (sum, metric) => sum + metric.height,
+      0,
+    );
+    const startY =
+      verticalAlign === "middle"
+        ? Math.max(0, (height - totalHeight) / 2)
+        : verticalAlign === "bottom"
+          ? Math.max(0, height - totalHeight)
+          : 0;
+    let y = startY;
+
+    return (
+      <Group listening={interactive}>
+        {lines.map((line, lineIndex) => {
+          const lineMetric = lineMetrics[lineIndex] ?? {
+            height: font.size * textLineHeight,
+            width: 0,
+          };
+          const startX = lineStartX(
+            align,
+            width,
+            lineMetric.width,
+            font.wrap === "none",
+          );
+          let x = startX;
+          const lineY = y;
+          y += lineMetric.height;
+          return line.map((segment, segmentIndex) => {
+            const segmentX = x;
+            x += segment.width;
+            return (
+              <Text
+                key={`${lineIndex}:${segmentIndex}`}
+                x={segmentX}
+                y={lineY}
+                width={segment.width}
+                height={lineMetric.height}
+                text={segment.text}
+                fill={withHash(segment.font.color)}
+                fontFamily={`${segment.font.family}, Helvetica, sans-serif`}
+                fontSize={segment.font.size}
+                fontStyle={`${segment.font.bold ? "bold" : "normal"} ${segment.font.italic ? "italic" : ""
+                  }`}
+                textDecoration={segment.font.underline ? "underline" : ""}
+                verticalAlign="middle"
+                lineHeight={segment.font.lineHeight ?? textLineHeight}
+                letterSpacing={segment.font.letterSpacing}
+                wrap="none"
+                {...shadowProps(element)}
+                listening={interactive}
+              />
+            );
+          });
+        })}
+      </Group>
+    );
+  }
+
+  // Multi-run text is laid out per-run so each segment keeps its own font.
+  // Single-run text still uses Konva's native Text node.
+  const runs = typeof text === "string" && !runsOverride ? null : renderRuns;
+  if (runs && runs.length > 1) {
+    const { tokens } = layoutRichText(
+      runs,
+      width,
+      font,
+      align,
+      verticalAlign,
+      height,
+      font.wrap,
+    );
+    return (
+      <Group listening={interactive} {...shadowProps(element)}>
+        {tokens.map((tok, index) => (
+          <Text
+            key={index}
+            x={tok.x}
+            y={tok.y}
+            text={tok.text}
+            fill={withHash(tok.font.color)}
+            fontFamily={`${tok.font.family}, Helvetica, sans-serif`}
+            fontSize={tok.font.size}
+            fontStyle={`${tok.font.bold ? "bold" : "normal"} ${tok.font.italic ? "italic" : ""}`}
+            textDecoration={tok.font.underline ? "underline" : ""}
+            lineHeight={tok.font.lineHeight}
+            letterSpacing={tok.font.letterSpacing}
+            wrap="none"
+            listening={interactive}
+          />
+        ))}
+      </Group>
+    );
+  }
+
+  const noWrap = font.wrap === "none";
+  const textNodeWidth = noWrap
+    ? Math.max(width, measureNoWrapTextWidth(displayContent, font))
+    : width;
+  const textNodeRuns =
+    renderRuns.length > 0 ? renderRuns : [{ text: displayContent, font }];
+  const wrappedTextHeight = measureWrappedRenderTextHeight(
+    textNodeRuns,
+    width,
+    font.wrap,
+    textLineHeight,
+  );
+  const textNodeHeight = noWrap
+    ? Math.max(
+      height,
+      measureNoWrapTextHeight(displayContent, font, textLineHeight),
+    )
+    : Math.max(height, wrappedTextHeight);
+
+  return (
+    <Text
+      x={noWrap ? lineStartX(align, width, textNodeWidth, true) : 0}
+      y={verticalTextStartY(verticalAlign, height, textNodeHeight, true)}
+      width={textNodeWidth}
+      height={textNodeHeight}
+      text={displayContent}
+      fill={withHash(font.color)}
+      fontFamily={`${font.family}, Helvetica, sans-serif`}
+      fontSize={font.size}
+      fontStyle={`${font.bold ? "bold" : "normal"} ${font.italic ? "italic" : ""}`}
+      textDecoration={font.underline ? "underline" : ""}
+      align={align}
+      verticalAlign={verticalAlign}
+      lineHeight={textLineHeight}
+      letterSpacing={font.letterSpacing}
+      wrap={font.wrap === "none" ? "none" : "word"}
+      {...shadowProps(element)}
+      listening={interactive}
+    />
+  );
+}
+
+function RawImageElement({
+  element,
+  width,
+  height,
+  interactive,
+}: {
+  element: RawElement;
+  width: number;
+  height: number;
+  interactive: boolean;
+}) {
+  const src = readString(element.data);
+  const color = readString(element.color);
+  const isIcon = isRawIconElement(element);
+  const renderSrc = useMemo(() => {
+    if (!src || !color || !isIcon || typeof window === "undefined") return src;
+    const baseUrl = window.location.href;
+    if (!isStaticSvgIconSource(src, baseUrl)) return src;
+    return buildSvgUpdateUrl(src, baseUrl, { color }) ?? src;
+  }, [color, isIcon, src]);
+  const loaded = useLoadedKonvaImage(renderSrc);
+
+  if (!loaded) {
+    return (
+      <Rect
+        width={width}
+        height={height}
+        fill="#EEF1F5"
+        stroke="#CBD2D9"
+        strokeWidth={1}
+        listening={interactive}
+      />
+    );
+  }
+
+  const fit = readString(element.fit) ?? "contain";
+  const focusX = clamp(readNumber(element.focus_x) ?? 50, 0, 100) / 100;
+  const focusY = clamp(readNumber(element.focus_y) ?? 50, 0, 100) / 100;
+  const flipH = readBoolean(element.flip_h) === true;
+  const flipV = readBoolean(element.flip_v) === true;
+  const cornerRadii = imageCornerRadii(element, width, height);
+  const naturalRatio = loaded.width / loaded.height || 1;
+  const boxRatio = width / height || 1;
+  let drawW = width;
+  let drawH = height;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (fit === "cover") {
+    if (naturalRatio > boxRatio) {
+      drawW = height * naturalRatio;
+      offsetX = -(drawW - width) * focusX;
+    } else {
+      drawH = width / naturalRatio;
+      offsetY = -(drawH - height) * focusY;
+    }
+  } else if (fit === "contain") {
+    if (naturalRatio > boxRatio) {
+      drawH = width / naturalRatio;
+      offsetY = (height - drawH) * focusY;
+    } else {
+      drawW = height * naturalRatio;
+      offsetX = (width - drawW) * focusX;
+    }
+  }
+
+  return (
+    <Group
+      clipFunc={(context) =>
+        drawRoundedImageClip(context, width, height, cornerRadii)
+      }
+      listening={interactive}
+    >
+      <KonvaImage
+        image={loaded}
+        x={offsetX + (flipH ? drawW : 0)}
+        y={offsetY + (flipV ? drawH : 0)}
+        width={drawW}
+        height={drawH}
+        scaleX={flipH ? -1 : 1}
+        scaleY={flipV ? -1 : 1}
+        listening={interactive}
+      />
+    </Group>
+  );
+}
+
+function useLoadedKonvaImage(src: string | null): HTMLImageElement | null {
+  const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!src) {
+      setLoaded(null);
+      return;
+    }
+
+    let cancelled = false;
+    void loadKonvaImage(src).then((image) => {
+      if (!cancelled) setLoaded(image);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  return loaded;
+}
+
+function imageCornerRadii(
+  element: RawElement,
+  width: number,
+  height: number,
+): [number, number, number, number] {
+  const rawRadius = borderRadius(element);
+  const values = Array.isArray(rawRadius)
+    ? rawRadius
+    : [rawRadius, rawRadius, rawRadius, rawRadius];
+  const maxRadius = Math.max(0, Math.min(width, height) / 2);
+  return [
+    clamp(values[0] ?? 0, 0, maxRadius),
+    clamp(values[1] ?? 0, 0, maxRadius),
+    clamp(values[2] ?? 0, 0, maxRadius),
+    clamp(values[3] ?? 0, 0, maxRadius),
+  ];
+}
+
+function drawRoundedImageClip(
+  context: Konva.Context,
+  width: number,
+  height: number,
+  [topLeft, topRight, bottomRight, bottomLeft]: [
+    number,
+    number,
+    number,
+    number,
+  ],
+) {
+  context.beginPath();
+  context.moveTo(topLeft, 0);
+  context.lineTo(width - topRight, 0);
+  context.quadraticCurveTo(width, 0, width, topRight);
+  context.lineTo(width, height - bottomRight);
+  context.quadraticCurveTo(width, height, width - bottomRight, height);
+  context.lineTo(bottomLeft, height);
+  context.quadraticCurveTo(0, height, 0, height - bottomLeft);
+  context.lineTo(0, topLeft);
+  context.quadraticCurveTo(0, 0, topLeft, 0);
+  context.closePath();
+}
+
+
+
+function RawInfographicElement({
+  element,
+  width,
+  height,
+  interactive,
+}: {
+  element: RawElement;
+  width: number;
+  height: number;
+  interactive: boolean;
+}) {
+  const infographicType =
+    readString(element.infographic_type) ??
+    readString(element.infographicType) ??
+    "gauge";
+  const progress = valueProgress(element);
+  const baseColor =
+    withHash(readString(element.base_color) ?? readString(element.baseColor)) ??
+    "#E5E7EB";
+  const highlightColor =
+    withHash(
+      readString(element.highlight_color) ?? readString(element.highlightColor),
+    ) ?? "#2563EB";
+
+  if (infographicType === "progress_bar") {
+    const radius = Math.min(height / 2, 8);
+    return (
+      <Group listening={interactive} {...shadowProps(element)}>
+        <Rect width={width} height={height} cornerRadius={radius} fill={baseColor} />
+        <Rect
+          width={width * progress}
+          height={height}
+          cornerRadius={radius}
+          fill={highlightColor}
+        />
+      </Group>
+    );
+  }
+
+  const valueAngle = 180 * progress;
+  const thickness = Math.max(6, Math.min(width, height) * 0.18);
+  const outerRadius = Math.max(1, Math.min(width * 0.43, height * 0.86));
+  const innerRadius = Math.max(1, outerRadius - thickness);
+  const middleRadius = (outerRadius + innerRadius) / 2;
+  const capRadius = thickness / 2;
+  const centerX = width / 2;
+  const centerY = Math.min(height - capRadius, height * 0.86);
+  const start = pointOnCircle(centerX, centerY, middleRadius, 180);
+  const end = pointOnCircle(centerX, centerY, middleRadius, 180 + valueAngle);
+  return (
+    <Group listening={interactive} {...shadowProps(element)}>
+      <Arc
+        x={centerX}
+        y={centerY}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius}
+        angle={180}
+        rotation={180}
+        fill={baseColor}
+      />
+      <Circle x={start.x} y={start.y} radius={capRadius} fill={baseColor} />
+      <Circle
+        x={pointOnCircle(centerX, centerY, middleRadius, 360).x}
+        y={pointOnCircle(centerX, centerY, middleRadius, 360).y}
+        radius={capRadius}
+        fill={baseColor}
+      />
+      {valueAngle > 0 ? (
+        <>
+          <Arc
+            x={centerX}
+            y={centerY}
+            innerRadius={innerRadius}
+            outerRadius={outerRadius}
+            angle={valueAngle}
+            rotation={180}
+            fill={highlightColor}
+          />
+          <Circle x={start.x} y={start.y} radius={capRadius} fill={highlightColor} />
+          <Circle x={end.x} y={end.y} radius={capRadius} fill={highlightColor} />
+        </>
+      ) : null}
+      <Text
+        x={0}
+        y={height * 0.5}
+        width={width}
+        height={height * 0.3}
+        text={String(Math.round(readNumber(element.value) ?? 0))}
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontSize={Math.max(10, Math.min(width, height) * 0.22)}
+        fontStyle="bold"
+        align="center"
+        verticalAlign="middle"
+        fill="#172033"
+      />
+    </Group>
+  );
+}

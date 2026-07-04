@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
-import type { TextRun } from "../lib/slide-schema";
-import type { TemplateV2InlineEdit } from "../lib/template-v2-text-editing";
+import type { TextRun } from "@/components/slide-editor/schema/slide-schema";
+import type { TemplateV2InlineEdit } from "@/components/slide-editor/text/template-v2-text-editing";
 import {
   textRunsContent,
   type TextSelectionRange,
-} from "../lib/text-runs";
+} from "@/components/slide-editor/text/text-runs";
 
 export function useTemplateV2InlineEditing<Selection>({
   keyForSelection,

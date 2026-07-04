@@ -12,8 +12,8 @@ import { useDispatch } from "react-redux";
 import { Loader2 } from "lucide-react";
 import {
     type TemplateV2Layout,
-} from "@/components/slide-editor/lib/template-v2-import";
-import { TemplateV2KonvaSlide } from "./TemplateV2KonvaSlide";
+} from "@/components/slide-editor/schema/template-v2-import";
+import { TemplateV2KonvaSlide } from "@/components/slide-editor/surface/TemplateV2KonvaSlide";
 import { BLANK_TEMPLATE_V2_LAYOUT, isBlankPresentationSlide } from "../_shared/blank-slide";
 
 

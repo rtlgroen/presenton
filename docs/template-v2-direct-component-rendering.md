@@ -54,9 +54,9 @@ state, layout resolution, and reverse serialization from the render/edit path.
 
 | File | Responsibility |
 | --- | --- |
-| [`TemplateV2KonvaSlide.tsx`](../servers/nextjs/app/(presentation-generator)/components/TemplateV2KonvaSlide.tsx) | The preserved Dipesh component, now responsible for raw UI rendering, selection, transforms, existing element toolbars, inline editing, insertions, chart/image integration, history, and UI commits. |
+| [`TemplateV2KonvaSlide.tsx`](../servers/nextjs/components/slide-editor/surface/TemplateV2KonvaSlide.tsx) | The preserved Dipesh component, now responsible for raw UI rendering, selection, transforms, existing element toolbars, inline editing, insertions, chart/image integration, history, and UI commits. |
 | [`V1ContentRender.tsx`](../servers/nextjs/app/(presentation-generator)/components/V1ContentRender.tsx) | Routes Template V2 presentation slides directly to the raw renderer. |
-| [`templateV2Events.ts`](../servers/nextjs/app/(presentation-generator)/components/templateV2Events.ts) | Shared insert, chart, and active-surface event contracts. |
+| [`events.ts`](../servers/nextjs/components/slide-editor/events/events.ts) | Shared insert, chart, and active-surface event contracts. |
 | [`presentationGeneration.ts`](../servers/nextjs/store/slices/presentationGeneration.ts) | Owns `updateSlideUi`, which updates only the selected slide's `ui`. |
 | [`NewSlide.tsx`](../servers/nextjs/app/(presentation-generator)/presentation/components/NewSlide.tsx) | Writes a selected Template V2 layout directly into a new slide's `ui`. |
 | [`blank-slide.ts`](../servers/nextjs/app/(presentation-generator)/_shared/blank-slide.ts) | Supplies an empty raw UI with `components: []`. |
