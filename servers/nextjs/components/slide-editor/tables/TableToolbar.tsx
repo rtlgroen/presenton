@@ -53,10 +53,6 @@ export function TableToolbar({
     columnCount - 1,
     Math.max(0, selectedCell?.colIndex ?? 0),
   );
-  const activeLabel =
-    rows[activeRow]?.[activeColumn]?.trim() ||
-    rows[0]?.[activeColumn]?.trim() ||
-    "Table";
   const activeCell =
     activeRow === 0
       ? element.columns[activeColumn]
@@ -228,15 +224,6 @@ export function TableToolbar({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div style={toolbarShellStyle}>
-          <button
-            type="button"
-            style={labelButtonStyle}
-            title={activeLabel}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {truncateLabel(activeLabel).toUpperCase()}
-          </button>
-          <Divider />
           <button
             type="button"
             aria-label="Cell background color"
@@ -493,10 +480,6 @@ function Divider() {
   return <span aria-hidden="true" style={dividerStyle} />;
 }
 
-function truncateLabel(label: string) {
-  return label.length > 12 ? `${label.slice(0, 11)}…` : label;
-}
-
 function nextAlignmentLabel(alignment: TableCellAlignment) {
   const activeIndex = TABLE_CELL_ALIGNMENTS.indexOf(alignment);
   return (
@@ -525,21 +508,6 @@ const toolbarPositionStyle: CSSProperties = {
   position: "absolute",
   zIndex: 10,
   transform: "translateX(-50%)",
-};
-
-const labelButtonStyle: CSSProperties = {
-  minWidth: 76,
-  maxWidth: 130,
-  height: 34,
-  border: 0,
-  background: "transparent",
-  color: "#191919",
-  padding: "0 8px",
-  fontSize: 15,
-  fontWeight: 600,
-  letterSpacing: 0,
-  textAlign: "left",
-  cursor: "pointer",
 };
 
 const iconButtonStyle: CSSProperties = {

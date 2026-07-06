@@ -88,6 +88,8 @@ const TIPTAP_EXTENSIONS = [
 export function TiptapInlineTextEditor({
   autoFocus = true,
   baseFont,
+  contentClassName,
+  contentStyle,
   editorStyle,
   runs,
   onBlurOutside,
@@ -98,6 +100,8 @@ export function TiptapInlineTextEditor({
 }: {
   autoFocus?: boolean;
   baseFont: Font;
+  contentClassName?: string;
+  contentStyle?: CSSProperties;
   editorStyle: CSSProperties;
   runs: TextRun[];
   onBlurOutside: () => void;
@@ -340,7 +344,11 @@ export function TiptapInlineTextEditor({
       onPointerDown={(event) => event.stopPropagation()}
       style={editorStyle}
     >
-      <EditorContent editor={editor} />
+      <EditorContent
+        className={contentClassName}
+        editor={editor}
+        style={contentStyle}
+      />
       <style>{TIPTAP_INLINE_EDITOR_CSS}</style>
     </div>
   );
@@ -637,5 +645,12 @@ const TIPTAP_INLINE_EDITOR_CSS = `
 }
 .template-v2-tiptap-inline-prosemirror * {
   box-sizing: border-box;
+}
+.template-v2-table-cell-editor-content {
+  width: 100%;
+}
+.template-v2-table-cell-editor-content .template-v2-tiptap-inline-prosemirror {
+  height: auto !important;
+  min-height: 0 !important;
 }
 `;

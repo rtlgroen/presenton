@@ -20,11 +20,7 @@ import type { TemplateFontOption } from "@/components/slide-editor/text/google-f
 import { inlineStyles } from "@/components/slide-editor/toolbar/inlineStyles";
 import { TextToolbar } from "@/components/slide-editor/text/TextToolbar";
 import { TiptapInlineTextEditor } from "@/components/slide-editor/text/TiptapInlineTextEditor";
-import {
-  layoutRichText,
-  type RenderTextFont,
-  type RenderTextRun,
-} from "@/components/slide-editor/text/template-v2-text";
+import { readableTableTextColor } from "@/components/slide-editor/tables/table-colors";
 
 const DEFAULT_TABLE_NAME = "Default Table";
 const DEFAULT_TABLE_HEADERS = ["Name", "Title", "Status", "Position"];
@@ -67,7 +63,11 @@ export function TableInlineEditor({
   const tableFont = elementFont(element);
   const isHeader = rowIndex === 0;
   const cell = rows[rowIndex]?.[colIndex] ?? { runs: [] };
-  const font = tableCellFont(cell, tableFont, isHeader);
+  const cellBackground = tableCellBackground(cell, isHeader);
+  const font = readableTableCellFont(
+    tableCellFont(cell, tableFont, isHeader),
+    cellBackground,
+  );
   const tableWidth = box.w * scale;
   const tableHeight = box.h * scale;
   const isDefaultTable = isDefaultTableElement(element, stringRows);
@@ -104,7 +104,9 @@ export function TableInlineEditor({
       horizontal: cell.alignment ?? "left",
       vertical: "middle",
     },
-    runs: normalizedTextRuns(cell, font),
+    runs: normalizedTextRuns(cell, font).map((run) =>
+      readableTableCellRun(run, font, cellBackground),
+    ),
   };
   const textFont = elementFont(textElement);
   const cellText = textRunsContent(textElement.runs);
@@ -118,27 +120,6 @@ export function TableInlineEditor({
     fallback: 1.12,
     wrap: textFont.wrap,
   });
-  const editorRenderFont = resolvedFontToRenderFont(
-    textFont,
-    scale,
-    editorLineHeight,
-  );
-  const editorRenderRuns = textElement.runs.map((run) =>
-    textRunToRenderRun(run, textElement.font ?? font, scale, editorLineHeight),
-  );
-  const editorContentHeight = layoutRichText(
-    editorRenderRuns,
-    editorTextWidth,
-    editorRenderFont,
-    textElement.alignment?.horizontal ?? "left",
-    "top",
-    cellHeight,
-    textFont.wrap,
-  ).contentHeight;
-  const editorPaddingTop = Math.max(
-    paddingY,
-    (cellHeight - editorContentHeight) / 2,
-  );
   const closeAfterBlur = useCallback(() => {
     window.setTimeout(() => {
       const active = document.activeElement;
@@ -224,6 +205,8 @@ export function TableInlineEditor({
         onEscape={onClose}
         onRunsChange={updateCellRuns}
         onSelectionChange={setTextSelectionRange}
+        contentClassName="template-v2-table-cell-editor-content"
+        contentStyle={{ width: "100%" }}
         editorStyle={{
           ...inlineStyles.textEditor,
           ...cellEditorStyle,
@@ -232,10 +215,10 @@ export function TableInlineEditor({
           width: cellWidth,
           height: cellHeight,
           pointerEvents: "auto",
-          padding: `${editorPaddingTop}px ${paddingX}px ${paddingY}px`,
-          background: withHash(
-            cell.color?.color ?? (isHeader ? "F7F7FA" : "FFFFFF"),
-          ),
+          display: "flex",
+          alignItems: "center",
+          padding: `${paddingY}px ${paddingX}px`,
+          background: cellBackground,
           color: withHash(textFont.color),
           caretColor: withHash(textFont.color),
           fontFamily: `${textFont.family}, Helvetica, sans-serif`,
@@ -287,38 +270,38 @@ function tableCellFont(
   };
 }
 
-function resolvedFontToRenderFont(
-  font: ReturnType<typeof elementFont>,
-  scale: number,
-  fallbackLineHeight: number,
-): RenderTextFont {
+function readableTableCellFont(font: Font, background: string): Font {
   return {
-    family: font.family,
-    size: font.size * (scale / TEMPLATE_V2_PX_PER_IN),
-    color: font.color,
-    bold: Boolean(font.bold),
-    italic: Boolean(font.italic),
-    underline: Boolean(font.underline),
-    lineHeight: font.lineHeight ?? fallbackLineHeight,
-    letterSpacing: (font.letterSpacing ?? 0) * (scale / TEMPLATE_V2_PX_PER_IN),
-    wrap: font.wrap ?? "word",
+    ...font,
+    color: readableTableTextColor(font.color, background),
   };
 }
 
-function textRunToRenderRun(
+function readableTableCellRun(
   run: TextRun,
   fallbackFont: Font,
-  scale: number,
-  fallbackLineHeight: number,
-): RenderTextRun {
+  background: string,
+): TextRun {
+  const runFont = run.font ?? fallbackFont;
   return {
-    text: run.text || " ",
-    font: resolvedFontToRenderFont(
-      elementFont({ font: { ...fallbackFont, ...(run.font ?? {}) } }),
-      scale,
-      fallbackLineHeight,
-    ),
+    ...run,
+    font: {
+      ...runFont,
+      color: readableTableTextColor(
+        runFont.color ?? fallbackFont.color,
+        background,
+      ),
+    },
   };
+}
+
+function tableCellBackground(cell: TableCell, isHeader: boolean) {
+  const fill =
+    cell.color?.color ??
+    (cell as TableCell & { fill?: { color?: string | null } | null }).fill
+      ?.color ??
+    (isHeader ? "F7F7FA" : "FFFFFF");
+  return withHash(fill) ?? (isHeader ? "#F7F7FA" : "#FFFFFF");
 }
 
 function normalizedTextRuns(
