@@ -179,10 +179,7 @@ async def _merge_generated_components(layouts: SlideLayouts) -> MergedComponents
         LOGGER.exception(
             "[templates.v2.create] component de-duplication produced invalid output"
         )
-        raise HTTPException(
-            status_code=500,
-            detail="Component de-duplication produced invalid output",
-        ) from exc
+        return MergedComponents(components=[])
 
     LOGGER.info(
         "[templates.v2.create] component de-duplication complete merged_components=%d",
@@ -383,7 +380,17 @@ async def create_template_v2(
         len(raw_layouts.layouts),
     )
 
-    if len(request.slide_image_urls) != len(raw_layouts.layouts):
+    if len(raw_layouts.layouts) > len(request.slide_image_urls):
+        LOGGER.info(
+            "[templates.v2.create] capping raw layouts to preview images "
+            "raw_slides=%d slide_images=%d",
+            len(raw_layouts.layouts),
+            len(request.slide_image_urls),
+        )
+        raw_layouts = RawSlideLayouts(
+            layouts=raw_layouts.layouts[: len(request.slide_image_urls)]
+        )
+    elif len(request.slide_image_urls) > len(raw_layouts.layouts):
         raise HTTPException(
             status_code=400,
             detail="Exactly one slide image is required for each slide layout",
@@ -397,7 +404,7 @@ async def create_template_v2(
     )
     generated_layouts = _with_randomized_layout_ids(generated_layouts)
     merged_components = await _merge_generated_components(generated_layouts)
-    raw_layouts_json = pptx_json.model_dump(mode="json", exclude_none=True)
+    raw_layouts_json = raw_layouts.model_dump(mode="json", exclude_none=True)
     template = TemplateV2(
         name=(request.name or "").strip() or _derive_template_name(
             request.pptx_url, pptx_path
