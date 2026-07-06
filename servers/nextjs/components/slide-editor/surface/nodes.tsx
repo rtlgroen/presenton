@@ -72,6 +72,7 @@ import {
   readNumber,
   readString,
   ROOT_ELEMENTS_COMPONENT_INDEX,
+  STAGE_BOX,
   resizeComponent,
   scaleRawElementTextMetrics,
   selectionTouchesComponent,
@@ -157,10 +158,12 @@ export function RawComponentNode({
         groupRef.current = node;
         setNodeRef(key, node);
       }}
-      x={box.x}
-      y={box.y}
+      x={box.x + box.width / 2}
+      y={box.y + box.height / 2}
       width={box.width}
       height={box.height}
+      offsetX={box.width / 2}
+      offsetY={box.height / 2}
       rotation={readNumber(component.rotation) ?? 0}
       clipX={isEditMode ? undefined : 0}
       clipY={isEditMode ? undefined : 0}
@@ -216,9 +219,13 @@ export function RawComponentNode({
           width: Math.max(1, box.width * scaleX),
           height: Math.max(1, box.height * scaleY),
         };
+        const position = positionFromNodeInParent(node, STAGE_BOX, {
+          ...box,
+          ...nextBox,
+        });
         onComponentChange(componentIndex, (current) =>
           resizeComponent(current, {
-            ...node.position(),
+            ...position,
             width: nextBox.width,
             height: nextBox.height,
             scaleX,

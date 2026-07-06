@@ -478,8 +478,7 @@ export function elementWithNormalizedLayoutChildren(
 }
 
 export function shouldUseCenterOrigin(element: RawElement) {
-  const type = readString(element.type);
-  return type === "image";
+  return Boolean(element);
 }
 
 export function layoutContainerChildren(
