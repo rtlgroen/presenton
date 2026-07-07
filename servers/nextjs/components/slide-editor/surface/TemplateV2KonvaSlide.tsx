@@ -66,6 +66,7 @@ import {
 import { TemplateV2SelectionToolbar } from "@/components/slide-editor/selection/SelectionToolbar";
 import {
   getTemplateV2SelectionToolbarAnchorBox,
+  getTemplateV2SelectionToolbarBounds,
   getTemplateV2SelectionToolbarPosition,
   hasTemplateV2SelectionToolbar,
 } from "@/components/slide-editor/selection/toolbarPosition";
@@ -369,6 +370,8 @@ function TemplateV2KonvaSlideComponent({
     layoutTarget: layoutToolbarTarget,
     root: rootElement,
   });
+  const selectionToolbarBounds =
+    getTemplateV2SelectionToolbarBounds(rootElement);
   const inlineEditBox = inlineEdit
     ? absoluteInlineEditBox(uiDraft, inlineEdit.selection, inlineEdit.frame)
     : null;
@@ -1538,6 +1541,7 @@ function TemplateV2KonvaSlideComponent({
         position={selectionToolbarPosition}
         selection={selection}
         selectionKey={keyForSelection(selection)}
+        toolbarBounds={selectionToolbarBounds}
         onDeleteSelection={deleteSelection}
         onDuplicateSelection={duplicateSelection}
         onLayoutChange={applyLayoutElementChange}
@@ -1551,15 +1555,16 @@ function TemplateV2KonvaSlideComponent({
         selectedBox &&
         toolbarElement &&
         !isTemplateV2LayoutElement(selectedElement) &&
-        !isRawIconElement(selectedElement) &&
-        !(editingTableCell && readString(selectedElement.type) === "table") ? (
-        <ElementToolbar
-          element={toolbarElement}
-          index={selection.componentIndex}
-          path={keyForSelection(selection)}
-          scale={1}
-          selectedTableCell={selectedTableCell}
-          templateFonts={templateFonts}
+	        !isRawIconElement(selectedElement) &&
+	        !(editingTableCell && readString(selectedElement.type) === "table") ? (
+	        <ElementToolbar
+	          element={toolbarElement}
+	          index={selection.componentIndex}
+	          anchorBox={selectedBox}
+	          path={keyForSelection(selection)}
+	          scale={1}
+	          selectedTableCell={selectedTableCell}
+	          templateFonts={templateFonts}
           textSelectionRange={
             inlineEdit &&
               (inlineEdit.kind === "text" || inlineEdit.kind === "text-list") &&

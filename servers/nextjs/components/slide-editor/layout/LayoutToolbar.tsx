@@ -37,6 +37,7 @@ import {
   TemplateV2LineToolbarControls,
   type TemplateV2LineToolbarElement,
 } from "@/components/slide-editor/layout/LineToolbarControls";
+import { FloatingToolbarBoundsProvider } from "@/components/slide-editor/toolbar/FloatingToolbar";
 import {
   numericInputMode,
   preventInvalidNumberInput,
@@ -97,6 +98,12 @@ type TemplateV2UngroupAction = {
 
 type TemplateV2LayoutToolbarProps = {
   box: TemplateV2LayoutToolbarBox;
+  bounds?: {
+    bottom: number;
+    left: number;
+    right: number;
+    top: number;
+  } | null;
   element?: TemplateV2ToolbarElement | null;
   onChange?: (changes: RawRecord) => void;
   position?: { left: number; top: number };
@@ -437,6 +444,7 @@ function ToolbarMenuItem({
 
 export function TemplateV2LayoutToolbar({
   box,
+  bounds,
   element,
   onChange,
   position,
@@ -474,59 +482,61 @@ export function TemplateV2LayoutToolbar({
   };
 
   const toolbar = (
-    <div
-      data-template-v2-floating-toolbar="true"
-      style={{ top: position?.top, left: position?.left }}
-      onMouseDown={(event) => event.stopPropagation()}
-      onPointerDown={(event) => event.stopPropagation()}
-      className="fixed z-[10000] inline-flex items-center gap-[6px] rounded-[6px] bg-[#FFF] p-[6px] font-manrope text-[14px] font-medium leading-4 text-[#191919] shadow-[0_0_4px_rgba(0,0,0,0.15)]"
-    >
-      {ungroupAction ? (
-        <>
-          <div
-            className="inline-flex h-7 items-center gap-1 rounded-[6px] px-2 hover:bg-[#F6F6F9] cursor-pointer text-[14px] font-manrope font-medium leading-4 text-[#191919]"
-            title="Ungroup"
-            onClick={ungroupAction.onUngroup}
-          >
-            <span>Ungroup</span>
-          </div>
-          <ToolbarDivider />
-        </>
-      ) : null}
-      {hasFlowControls && element && onChange ? (
-        <FlowControls
-          element={element}
-          onChange={onChange}
-          openPanel={openPanel}
-          onToggle={togglePanel}
-        />
-      ) : hasContainerControls && element && onChange ? (
-        <TemplateV2ContainerToolbarControls
-          box={box}
-          element={element}
-          onChange={onChange}
-          openPanel={openPanel}
-          onToggle={togglePanel}
-        />
-      ) : hasLineControls && element && onChange && isTemplateV2LineToolbarElement(element) ? (
-        <TemplateV2LineToolbarControls
-          element={element}
-          onChange={onChange}
-          openPanel={openPanel}
-          onToggle={togglePanel}
-        />
-      ) : null}
-      {componentActions ? (
-        <>
-          {hasLayoutControls ? <ToolbarDivider /> : null}
-          <ComponentMoreMenu
-            actions={componentActions}
+    <FloatingToolbarBoundsProvider bounds={bounds ?? null}>
+      <div
+        data-template-v2-floating-toolbar="true"
+        style={{ top: position?.top, left: position?.left }}
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        className="fixed z-[10000] inline-flex items-center gap-[6px] rounded-[6px] bg-[#FFF] p-[6px] font-manrope text-[14px] font-medium leading-4 text-[#191919] shadow-[0_0_4px_rgba(0,0,0,0.15)]"
+      >
+        {ungroupAction ? (
+          <>
+            <div
+              className="inline-flex h-7 items-center gap-1 rounded-[6px] px-2 hover:bg-[#F6F6F9] cursor-pointer text-[14px] font-manrope font-medium leading-4 text-[#191919]"
+              title="Ungroup"
+              onClick={ungroupAction.onUngroup}
+            >
+              <span>Ungroup</span>
+            </div>
+            <ToolbarDivider />
+          </>
+        ) : null}
+        {hasFlowControls && element && onChange ? (
+          <FlowControls
+            element={element}
+            onChange={onChange}
             openPanel={openPanel}
-            onOpenChange={(open) => setPanelOpen("component-menu", open)}
+            onToggle={togglePanel}
           />
-        </>
-      ) : null}
-    </div>
+        ) : hasContainerControls && element && onChange ? (
+          <TemplateV2ContainerToolbarControls
+            box={box}
+            element={element}
+            onChange={onChange}
+            openPanel={openPanel}
+            onToggle={togglePanel}
+          />
+        ) : hasLineControls && element && onChange && isTemplateV2LineToolbarElement(element) ? (
+          <TemplateV2LineToolbarControls
+            element={element}
+            onChange={onChange}
+            openPanel={openPanel}
+            onToggle={togglePanel}
+          />
+        ) : null}
+        {componentActions ? (
+          <>
+            {hasLayoutControls ? <ToolbarDivider /> : null}
+            <ComponentMoreMenu
+              actions={componentActions}
+              openPanel={openPanel}
+              onOpenChange={(open) => setPanelOpen("component-menu", open)}
+            />
+          </>
+        ) : null}
+      </div>
+    </FloatingToolbarBoundsProvider>
   );
 
   return position && typeof document !== "undefined"
