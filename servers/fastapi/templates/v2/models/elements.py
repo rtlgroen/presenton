@@ -310,6 +310,16 @@ class Chart(BaseModel):
     name: str
 
     @model_validator(mode="after")
+    def _pie_and_donut_use_only_first_series(self) -> "Chart":
+        if (
+            self.chart_type in {ChartType.PIE, ChartType.DONUT}
+            and self.series
+            and len(self.series) > 1
+        ):
+            self.series = self.series[:1]
+        return self
+
+    @model_validator(mode="after")
     def _size_must_be_visible_when_explicit(self) -> "Chart":
         if self.size is None:
             return self

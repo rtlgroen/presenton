@@ -842,18 +842,6 @@ function adaptChart(raw: UnknownRecord): SlideElement {
   const series = readArray(raw, "series")
     .map(adaptChartSeries)
     .filter((item): item is ChartSeries => item != null);
-  const colors = readArray(raw, "colors")
-    .map(readColor)
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 12);
-  const color = colors[0] ?? null;
-  const data = chartDataFromSeriesWithColors(
-    categories,
-    series,
-    colors,
-    series.length <= 1,
-  ).slice(0, 8);
-  const dataLabels = readBoolean(raw, "data_labels");
   const chartType =
     readEnum(
       raw,
@@ -874,6 +862,22 @@ function adaptChart(raw: UnknownRecord): SlideElement {
       "chart_type",
     ) ??
     "bar";
+  const supportedSeries =
+    chartType === "pie" || chartType === "donut"
+      ? series.slice(0, 1)
+      : series;
+  const colors = readArray(raw, "colors")
+    .map(readColor)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 12);
+  const color = colors[0] ?? null;
+  const data = chartDataFromSeriesWithColors(
+    categories,
+    supportedSeries,
+    colors,
+    supportedSeries.length <= 1,
+  ).slice(0, 8);
+  const dataLabels = readBoolean(raw, "data_labels");
 
   return {
     ...baseElement(raw),
@@ -901,7 +905,7 @@ function adaptChart(raw: UnknownRecord): SlideElement {
         80,
       ) || null,
     categories,
-    series,
+    series: supportedSeries,
     source: truncateString(readString(raw.source) ?? "", 120) || null,
   };
 }
