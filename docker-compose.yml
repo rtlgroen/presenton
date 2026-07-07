@@ -17,7 +17,7 @@ services:
       - ./servers/fastapi/templates:/app/servers/fastapi/templates:ro
       - ./servers/fastapi/utils/internal_http.py:/app/servers/fastapi/utils/internal_http.py:ro
     environment:
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      - PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/google-chrome-for-testing
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HOST_HTTP_PORT:-5001}
       - MIGRATE_DATABASE_ON_STARTUP=true
       - USE_SLIDE_EDITOR_IMPORT=${USE_SLIDE_EDITOR_IMPORT:-false}
@@ -141,7 +141,7 @@ services:
     volumes:
       - ./app_data:/app_data
     environment:
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      - PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/google-chrome-for-testing
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HOST_HTTP_PORT:-5000}
       - MIGRATE_DATABASE_ON_STARTUP=true
       - USE_SLIDE_EDITOR_IMPORT=${USE_SLIDE_EDITOR_IMPORT:-false}
@@ -257,8 +257,8 @@ services:
       - presenton_document_extraction_liteparse:/app/document-extraction-liteparse
       - ./app_data:/app_data
     environment:
-      # Bundled PPTX/PDF export (Puppeteer); matches CI and production image.
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      # Bundled PPTX/PDF export (Puppeteer); installed in the development image.
+      - PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/google-chrome-for-testing
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HOST_HTTP_PORT:-5001}
       # Ollama is not baked into the image; set START_OLLAMA=true for runtime install, or use OLLAMA_URL.
       - START_OLLAMA=${START_OLLAMA:-false}
@@ -382,7 +382,7 @@ services:
       - presenton_document_extraction_liteparse:/app/document-extraction-liteparse
       - ./app_data:/app_data
     environment:
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      - PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/google-chrome-for-testing
       - PRESENTON_HOST_HTTP_PORT=${PRESENTON_HOST_HTTP_PORT:-5000}
       - START_OLLAMA=${START_OLLAMA:-false}
       - MIGRATE_DATABASE_ON_STARTUP=true

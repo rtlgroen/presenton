@@ -80,6 +80,7 @@ WORKDIR /app
 
 ARG INSTALL_TESSERACT=true
 ARG TARGETARCH
+ARG CHROME_FOR_TESTING_VERSION=127.0.6533.88
 
 # LiteParse uses Node + @llamaindex/liteparse (same runner as Electron); OCR uses Tesseract.
 ENV APP_DATA_DIRECTORY=/app_data \
@@ -93,10 +94,13 @@ ENV APP_DATA_DIRECTORY=/app_data \
     PATH="/opt/venv/bin:${PATH}" \
     NODE_ENV=production \
     START_OLLAMA=false \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/google-chrome-for-testing \
+    CHROME_FOR_TESTING_VERSION=${CHROME_FOR_TESTING_VERSION}
+
+COPY scripts/install-chrome-for-testing.sh /tmp/install-chrome-for-testing.sh
 
 RUN set -eux; \
-    packages="ca-certificates curl nginx fontconfig imagemagick zstd chromium \
+    packages="ca-certificates curl unzip nginx fontconfig imagemagick zstd \
     fonts-liberation fonts-noto-core xdg-utils \
     libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
     libcairo2 libcups2t64 libdbus-1-3 libdrm2 libexpat1 libgbm1 \
@@ -108,6 +112,8 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends $packages; \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
     apt-get install -y --no-install-recommends nodejs; \
+    sh /tmp/install-chrome-for-testing.sh "${TARGETARCH:-}"; \
+    rm -f /tmp/install-chrome-for-testing.sh; \
     rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/scripts /app/servers/fastapi /app/servers/nextjs
