@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import { Check, Plus } from "lucide-react";
 import {
   CHART_SYSTEM_COLORS,
@@ -9,7 +9,6 @@ import { DeferredColorInput } from "@/components/slide-editor/toolbar/DeferredCo
 
 type ChartColorPaletteCardProps = {
   className?: string;
-  header?: ReactNode;
   onChange: (color: string) => void;
   onClose?: () => void;
   style?: CSSProperties;
@@ -18,7 +17,6 @@ type ChartColorPaletteCardProps = {
 
 export function ChartColorPaletteCard({
   className,
-  header,
   onChange,
   onClose,
   style,
@@ -37,7 +35,6 @@ export function ChartColorPaletteCard({
       style={{ ...styles.card, ...style }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      {header ? <div style={styles.header}>{header}</div> : null}
       <div style={styles.heading}>Theme</div>
       <div style={styles.themeGrid}>
         {CHART_THEME_COLORS.map((color) => (
@@ -150,9 +147,6 @@ const styles = {
     fontWeight: 600,
     lineHeight: "18px",
     marginBottom: 10,
-  },
-  header: {
-    marginBottom: 12,
   },
   hiddenColorInput: {
     cursor: "pointer",

@@ -1194,9 +1194,9 @@ def _apply_template_v2_chart_content(
         updated["categories"] = value["categories"]
     if isinstance(value.get("series"), list) and value["series"]:
         updated["series"] = value["series"]
-    series_colors = value.get("seriesColors", value.get("series_colors"))
-    if isinstance(series_colors, list) and series_colors:
-        updated["series_colors"] = series_colors
+    colors = value.get("colors")
+    if isinstance(colors, list) and colors:
+        updated["colors"] = colors
     for source_key, target_key in (
         ("axisColor", "axis_color"),
         ("axis_color", "axis_color"),

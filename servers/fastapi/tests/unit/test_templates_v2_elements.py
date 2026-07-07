@@ -251,13 +251,14 @@ def test_raw_layout_accepts_reference_converter_element_models():
                     "name": "revenue_chart",
                     "chart_type": "bar",
                     "title": "Revenue",
-                    "series_colors": ["#445566"],
+                    "colors": ["#445566", "#778899"],
                     "x_axis": False,
                     "y_axis": False,
                     "categories": ["Q1", "Q2"],
                     "series": [{"name": "Revenue", "values": [10.0, 12.0]}],
                     "data_labels": True,
-                    "grid": True,
+                    "x_axis_grid": True,
+                    "y_axis_grid": False,
                 },
             ],
         }
@@ -266,7 +267,9 @@ def test_raw_layout_accepts_reference_converter_element_models():
     image, table, chart = layout.elements
     assert image.opacity == 0.42
     assert [cell.runs[0].text for cell in table.columns] == ["Metric", "Value"]
-    assert chart.grid is True
+    assert chart.colors == ["#445566", "#778899"]
+    assert chart.x_axis_grid is True
+    assert chart.y_axis_grid is False
     assert chart.series[0].values == [10.0, 12.0]
 
 

@@ -11,7 +11,7 @@ export type ResolvedChartDataset = {
   color: string;
 };
 
-export type ChartColorTargetMode = "point" | "series";
+export type ChartColorTargetMode = "category" | "series";
 
 export type ChartColorTarget = {
   color: string;
@@ -109,7 +109,7 @@ export function primaryChartData(element: ChartElement): ChartDatum[] {
   return categories.slice(0, Math.max(1, first.values.length)).map((label, index) => ({
     label,
     value: first.values[index] ?? 0,
-    color: chartUsesPointColors(element.chart_type)
+    color: chartColorTargetMode(element) === "category"
       ? chartSeriesColor(element, index)
       : chartSeriesColor(element, 0),
   }));
@@ -117,7 +117,7 @@ export function primaryChartData(element: ChartElement): ChartDatum[] {
 
 export function chartSeriesColor(element: ChartElement, index: number) {
   return (
-    element.series_colors?.[index] ??
+    element.colors?.[index] ??
     (index === 0 ? element.color : null) ??
     DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length]
   );
@@ -142,18 +142,7 @@ export function normalizeChartColor(
 export function chartColorTargetMode(
   element: ChartElement,
 ): ChartColorTargetMode {
-  if (chartUsesPointColors(element.chart_type)) {
-    return "point";
-  }
-  return "series";
-}
-
-export function chartUsesPointColors(chartType: ChartType) {
-  return (
-    chartType === "pie" ||
-    chartType === "donut" ||
-    chartType === "polar_area"
-  );
+  return (element.series?.length ?? 0) > 1 ? "series" : "category";
 }
 
 export function resolvedChartColorTargets(
@@ -173,7 +162,7 @@ export function resolvedChartColorTargets(
     }));
   }
 
-  if (mode === "point") {
+  if (mode === "category") {
     const categories = resolvedChartCategories(element);
     const pointCount = Math.min(
       12,
@@ -198,30 +187,11 @@ export function resolvedChartColorTargets(
   return [];
 }
 
-export function chartDataFromSeries(
-  categories: string[],
-  series: ChartSeries[],
-  fallbackColor?: string | null,
-): ChartDatum[] {
-  const first = series[0];
-  if (!first) return [];
-  const labels =
-    categories.length > 0
-      ? categories
-      : first.values.map((_, index) => `Item ${index + 1}`);
-
-  return labels.slice(0, 8).map((label, index) => ({
-    label,
-    value: first.values[index] ?? 0,
-    color: fallbackColor ?? undefined,
-  }));
-}
-
 export function chartDataFromSeriesWithColors(
   categories: string[],
   series: ChartSeries[],
   colors: string[],
-  pointColors = false,
+  categoryColors = false,
 ): ChartDatum[] {
   const first = series[0];
   if (!first) return [];
@@ -234,7 +204,7 @@ export function chartDataFromSeriesWithColors(
   return labels.slice(0, 8).map((label, index) => ({
     label,
     value: first.values[index] ?? 0,
-    color: pointColors ? colors[index] ?? fallbackColor : fallbackColor,
+    color: categoryColors ? colors[index] ?? fallbackColor : fallbackColor,
   }));
 }
 
@@ -250,21 +220,21 @@ export function updateChartColorTarget(
   const mode = chartColorTargetMode(element);
   const targets = resolvedChartColorTargets(element);
   const colorCount = Math.min(12, Math.max(targetIndex + 1, targets.length));
-  const seriesColors = Array.from({ length: colorCount }, (_, index) =>
+  const colors = Array.from({ length: colorCount }, (_, index) =>
     normalizeChartColor(
-      element.series_colors?.[index] ??
+      element.colors?.[index] ??
         (index === 0 ? element.color : null) ??
         DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
     ),
   );
-  seriesColors[targetIndex] = normalizeChartColor(color);
+  colors[targetIndex] = normalizeChartColor(color);
 
-  const primaryColor = seriesColors[0] ?? normalizeChartColor(color);
+  const primaryColor = colors[0] ?? normalizeChartColor(color);
   const data = chartDataFromSeriesWithColors(
     resolvedChartCategories(element),
     element.series ?? [],
-    seriesColors,
-    mode === "point",
+    colors,
+    mode === "category",
   );
   const nextData =
     data.length > 0
@@ -272,8 +242,8 @@ export function updateChartColorTarget(
       : element.data.map((datum, index) => ({
           ...datum,
           color:
-            mode === "point"
-              ? seriesColors[index] ?? primaryColor
+            mode === "category"
+              ? colors[index] ?? primaryColor
               : primaryColor,
         }));
 
@@ -281,7 +251,7 @@ export function updateChartColorTarget(
     ...element,
     color: primaryColor,
     data: nextData,
-    series_colors: seriesColors,
+    colors,
   };
 }
 

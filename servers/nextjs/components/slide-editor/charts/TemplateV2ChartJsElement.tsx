@@ -28,9 +28,9 @@ type RawChartPoint = {
 };
 
 type RawChartDataset = {
+  categoryColors?: string[];
   color: string;
   name: string;
-  pointColors?: string[];
   points: RawChartPoint[];
   values: number[];
 };
@@ -148,9 +148,9 @@ function createChartJsConfig(
     readString(element.color),
     DEFAULT_CHART_COLORS[0],
   );
-  const sourceColors = readArray(
-    element.series_colors ?? element.seriesColors,
-  ).map((value) => safeChartColor(String(value)));
+  const sourceColors = readArray(element.colors).map((value) =>
+    safeChartColor(String(value)),
+  );
   const rawColors = sourceColors.length > 0 ? sourceColors : [primaryColor];
   const categories = rawChartCategories(element);
   const datasets = rawChartDatasets(element, categories, rawColors);
@@ -278,47 +278,56 @@ function createChartJsDatasets(
   datasets: RawChartDataset[],
 ): ChartDataset[] {
   if (kind.chartJsType === "pie" || kind.chartJsType === "doughnut") {
-    const first = datasets[0] ?? emptyDataset();
-    return [
-      {
-        backgroundColor: pointColors(first),
-        borderColor: "#FFFFFF",
-        borderWidth: 1,
-        data: first.values,
-        hoverOffset: 0,
-        label: first.name,
-      },
-    ];
+    const sourceDatasets = datasets.length > 0 ? datasets : [emptyDataset()];
+    return sourceDatasets.map((dataset) => ({
+      backgroundColor:
+        sourceDatasets.length === 1
+          ? categoryColors(dataset)
+          : dataset.values.map(() => dataset.color),
+      borderColor: "#FFFFFF",
+      borderWidth: 1,
+      data: dataset.values,
+      hoverOffset: 0,
+      label: dataset.name,
+    }));
   }
 
   if (kind.chartJsType === "polarArea") {
-    const first = datasets[0] ?? emptyDataset();
-    return [
-      {
-        backgroundColor: pointColors(first).map((color) =>
-          withAlpha(color, 0.78),
-        ),
-        borderColor: pointColors(first),
+    const sourceDatasets = datasets.length > 0 ? datasets : [emptyDataset()];
+    return sourceDatasets.map((dataset) => {
+      const colors =
+        sourceDatasets.length === 1
+          ? categoryColors(dataset)
+          : dataset.values.map(() => dataset.color);
+      return {
+        backgroundColor: colors.map((color) => withAlpha(color, 0.78)),
+        borderColor: colors,
         borderWidth: 1,
-        data: first.values,
-        label: first.name,
-      },
-    ];
+        data: dataset.values,
+        label: dataset.name,
+      };
+    });
   }
 
   if (kind.chartJsType === "scatter" || kind.chartJsType === "bubble") {
-    return datasets.map((dataset) => ({
-      backgroundColor: withAlpha(withHash(dataset.color) ?? "#7F22FE", 0.78),
-      borderColor: withHash(dataset.color) ?? "#7F22FE",
-      borderWidth: 2,
-      data:
-        kind.chartJsType === "bubble"
-          ? dataset.points.map((point) => ({ ...point, r: point.r ?? 6 }))
-          : dataset.points.map(({ x, y }) => ({ x, y })),
-      label: dataset.name,
-      pointRadius: kind.chartJsType === "scatter" ? 4 : undefined,
-      pointHoverRadius: 4,
-    }));
+    return datasets.map((dataset) => {
+      const colors =
+        datasets.length === 1
+          ? categoryColors(dataset)
+          : [withHash(dataset.color) ?? "#7F22FE"];
+      return {
+        backgroundColor: colors.map((color) => withAlpha(color, 0.78)),
+        borderColor: colors,
+        borderWidth: 2,
+        data:
+          kind.chartJsType === "bubble"
+            ? dataset.points.map((point) => ({ ...point, r: point.r ?? 6 }))
+            : dataset.points.map(({ x, y }) => ({ x, y })),
+        label: dataset.name,
+        pointRadius: kind.chartJsType === "scatter" ? 4 : undefined,
+        pointHoverRadius: 4,
+      };
+    });
   }
 
   return datasets.map((dataset, index) => {
@@ -326,14 +335,18 @@ function createChartJsDatasets(
       withHash(dataset.color) ??
       DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length];
     const isLineLike = kind.chartJsType === "line";
+    const datasetCategoryColors =
+      datasets.length === 1 && dataset.categoryColors?.length
+        ? categoryColors(dataset)
+        : null;
 
     return {
       backgroundColor: kind.area
         ? withAlpha(color, 0.24)
         : isLineLike
           ? color
-          : datasets.length === 1 && dataset.pointColors?.length
-            ? pointColors(dataset)
+          : datasetCategoryColors
+            ? datasetCategoryColors
             : color,
       borderColor: color,
       borderRadius:
@@ -341,7 +354,7 @@ function createChartJsDatasets(
           ? kind.stacked
             ? 7
             : (context: { raw: unknown }) =>
-              barBorderRadius(context.raw, kind.horizontal)
+                barBorderRadius(context.raw, kind.horizontal)
           : undefined,
       borderSkipped:
         kind.chartJsType === "bar" && kind.stacked ? "start" : false,
@@ -350,7 +363,7 @@ function createChartJsDatasets(
       fill: kind.area,
       label: dataset.name,
       maxBarThickness: 62,
-      pointBackgroundColor: color,
+      pointBackgroundColor: datasetCategoryColors ?? color,
       pointBorderColor: "#FFFFFF",
       pointBorderWidth: isLineLike ? 1.5 : 0,
       pointRadius: isLineLike ? 3.5 : 0,
@@ -668,7 +681,7 @@ function rawChartDatasets(
           colors[index] ??
           DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
         name: readString(item.name) ?? `Series ${index + 1}`,
-        pointColors: rawSeries.length === 1 ? colors : undefined,
+        categoryColors: rawSeries.length === 1 ? colors : undefined,
         points,
         values,
       };
@@ -686,8 +699,8 @@ function rawChartDatasets(
         colors[0] ??
         safeChartColor(readString(element.color), DEFAULT_CHART_COLORS[0]),
       name: readString(element.title) ?? "Series 1",
-      pointColors: rawData.map((item, index) =>
-        safeChartColor(readString(item.color), colors[index] ?? colors[0]),
+      categoryColors: rawData.map((_, index) =>
+        safeChartColor(colors[index], colors[0]),
       ),
       points: normalizePoints(
         rawData.map((value, valueIndex) => chartPoint(value, valueIndex)),
@@ -755,10 +768,10 @@ function emptyDataset(): RawChartDataset {
   };
 }
 
-function pointColors(dataset: RawChartDataset) {
+function categoryColors(dataset: RawChartDataset) {
   return dataset.values.map(
     (_, index) =>
-      withHash(dataset.pointColors?.[index]) ??
+      withHash(dataset.categoryColors?.[index]) ??
       withHash(dataset.color) ??
       DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
   );

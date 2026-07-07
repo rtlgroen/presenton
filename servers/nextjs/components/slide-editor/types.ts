@@ -275,7 +275,7 @@ export type ChartElement = ElementBase & {
   color?: string | null;
   axis_color?: string | null;
   grid_color?: string | null;
-  series_colors?: string[] | null;
+  colors?: string[] | null;
   x_axis?: boolean | null;
   y_axis?: boolean | null;
   x_axis_grid?: boolean | null;

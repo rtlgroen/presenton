@@ -1,5 +1,5 @@
 import { resolveBackendAssetUrl } from "@/utils/api";
-import { chartDataFromSeries } from "@/components/slide-editor/charts/chart-data";
+import { chartDataFromSeriesWithColors } from "@/components/slide-editor/charts/chart-data";
 import { renderMarkdownTextRuns } from "@/components/slide-editor/text/markdown-text";
 import {
   EDITOR_STAGE_HEIGHT,
@@ -842,12 +842,17 @@ function adaptChart(raw: UnknownRecord): SlideElement {
   const series = readArray(raw, "series")
     .map(adaptChartSeries)
     .filter((item): item is ChartSeries => item != null);
-  const seriesColors = readArray(raw, "series_colors")
+  const colors = readArray(raw, "colors")
     .map(readColor)
     .filter((item): item is string => Boolean(item))
     .slice(0, 12);
-  const color = seriesColors[0] ?? null;
-  const data = chartDataFromSeries(categories, series, color).slice(0, 8);
+  const color = colors[0] ?? null;
+  const data = chartDataFromSeriesWithColors(
+    categories,
+    series,
+    colors,
+    series.length <= 1,
+  ).slice(0, 8);
   const dataLabels = readBoolean(raw, "data_labels");
   const chartType =
     readEnum(
@@ -880,7 +885,7 @@ function adaptChart(raw: UnknownRecord): SlideElement {
     axis_color: readColor(readValue(raw, "axis_color")),
     grid_color: readColor(readValue(raw, "grid_color")),
     data_labels: dataLabels,
-    series_colors: seriesColors,
+    colors,
     x_axis: readBoolean(raw, "x_axis"),
     y_axis: readBoolean(raw, "y_axis"),
     x_axis_grid: readBoolean(raw, "x_axis_grid"),

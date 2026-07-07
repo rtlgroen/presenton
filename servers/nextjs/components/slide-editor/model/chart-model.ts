@@ -2,10 +2,7 @@ import type {
   ChartElement,
   ChartSeries,
 } from "@/components/slide-editor/types";
-import {
-  chartUsesPointColors,
-  rawChartType,
-} from "@/components/slide-editor/charts/chart-data";
+import { rawChartType } from "@/components/slide-editor/charts/chart-data";
 import {
   readArray,
   readNumber,
@@ -45,18 +42,15 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
           (_, index) => categories[index] ?? `Item ${index + 1}`,
         )
       : Array.from({ length: categoryLength }, (_, index) => `Item ${index + 1}`);
-  const colors = readArray(
-    element.series_colors ?? element.seriesColors,
-  ).map(String);
+  const colors = readArray(element.colors).map(String);
   const chartType = rawChartType(element.chart_type ?? element.chartType);
-  const usesPointColors = chartUsesPointColors(chartType);
   const chartColors =
     colors.length > 0 ? colors : [readString(element.color) ?? "7C51F8"];
   const firstSeries = normalizedSeries[0];
   const data = normalizedCategories.slice(0, 8).map((label, index) => ({
     label,
     value: firstSeries.values[index] ?? 0,
-    color: usesPointColors
+    color: normalizedSeries.length === 1
       ? chartColors[index] ?? chartColors[0]
       : chartColors[0],
   }));
@@ -68,7 +62,7 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
     data: data.length > 0 ? data : [{ label: "Item 1", value: 0 }],
     categories: normalizedCategories,
     series: normalizedSeries,
-    series_colors: chartColors,
+    colors: chartColors,
     axis_color: element.axis_color ?? element.axisColor,
     grid_color: element.grid_color ?? element.gridColor,
     x_axis: element.x_axis ?? element.xAxis,
@@ -91,7 +85,7 @@ export function editorChartToRawChart(source: RawElement, chart: UnknownRecord) 
     rotation: source.rotation,
     layout: source.layout,
     chart_type: chart.chartType ?? chart.chart_type ?? source.chart_type,
-    series_colors: chart.seriesColors ?? chart.series_colors ?? source.series_colors,
+    colors: chart.colors ?? source.colors,
     axis_color: chart.axisColor ?? chart.axis_color ?? source.axis_color,
     grid_color: chart.gridColor ?? chart.grid_color ?? source.grid_color,
     x_axis: chart.xAxis ?? chart.x_axis ?? source.x_axis,

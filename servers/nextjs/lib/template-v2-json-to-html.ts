@@ -23,9 +23,8 @@ interface ChartSeriesData {
 
 interface NormalizedChartData {
   categories: string[];
-  pointColors: string[];
+  colors: string[];
   series: ChartSeriesData[];
-  seriesColors: string[];
 }
 
 interface Box {
@@ -863,14 +862,18 @@ function chartConfig(item: JsonRecord): JsonRecord {
 
 function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRecord[] {
   if (chartKind === "pie" || chartKind === "donut") {
-    return data.series.map((series) => ({
+    return data.series.map((series, seriesIndex) => ({
       label: series.name,
       data: series.values.map((value) => Math.max(0, value)),
       backgroundColor: series.values.map(
         (_, index) =>
-          data.pointColors[index] ??
-          data.seriesColors[index] ??
-          DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length]
+          (data.series.length === 1
+            ? data.colors[index]
+            : data.colors[seriesIndex]) ??
+          DEFAULT_CHART_COLORS[
+            (data.series.length === 1 ? index : seriesIndex) %
+              DEFAULT_CHART_COLORS.length
+          ]
       ),
       borderColor: "#FFFFFF",
       borderWidth: 2,
@@ -882,17 +885,21 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
 
   return data.series.map((series, index) => {
     const color =
-      data.seriesColors[index] ??
-      data.pointColors[index] ??
+      data.colors[data.series.length === 1 ? 0 : index] ??
       DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length];
+    const categoryColors = series.values.map(
+      (_, categoryIndex) =>
+        data.colors[categoryIndex] ??
+        DEFAULT_CHART_COLORS[categoryIndex % DEFAULT_CHART_COLORS.length]
+    );
     const dataset: JsonRecord = {
       label: series.name,
       data: series.values,
       backgroundColor:
-        data.series.length === 1 && data.pointColors.length
-          ? data.pointColors
-          : lineLike
-            ? colorWithOpacity(color, 0.16)
+        lineLike
+          ? colorWithOpacity(color, 0.16)
+          : data.series.length === 1 && categoryColors.length
+            ? categoryColors
             : color,
       borderColor: color,
       borderWidth: lineLike ? 3 : 0,
@@ -900,6 +907,8 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
 
     if (lineLike) {
       dataset.fill = chartKind === "area";
+      dataset.pointBackgroundColor =
+        data.series.length === 1 ? categoryColors : color;
       dataset.pointRadius = 3;
       dataset.pointHoverRadius = 3;
       dataset.tension = 0.35;
@@ -918,13 +927,12 @@ function normalizeChartData(item: JsonRecord): NormalizedChartData {
       return {
         label: readString(point.label) ?? `Value ${index + 1}`,
         value,
-        color: normalizeChartColor(readString(point.color)),
       };
     })
     .filter(
       (
         point
-      ): point is { label: string; value: number; color: string | null } =>
+      ): point is { label: string; value: number } =>
         Boolean(point)
     );
   const series = readArray(item.series)
@@ -948,21 +956,18 @@ function normalizeChartData(item: JsonRecord): NormalizedChartData {
     categoryValues.length ? categoryValues : points.map((point) => point.label),
     maxLength
   );
-  const seriesColors = readColorArray(item.seriesColors ?? item.series_colors);
+  const colors = readColorArray(item.colors);
 
   return {
     categories,
-    pointColors: points
-      .map((point) => point.color)
-      .filter((color): color is string => Boolean(color)),
+    colors:
+      colors.length > 0
+        ? colors
+        : [normalizeChartColor(readString(item.color)) ?? DEFAULT_CHART_COLORS[0]],
     series: series.map((item) => ({
       ...item,
       values: padValues(item.values, categories.length),
     })),
-    seriesColors:
-      seriesColors.length > 0
-        ? seriesColors
-        : [normalizeChartColor(readString(item.color)) ?? DEFAULT_CHART_COLORS[0]],
   };
 }
 

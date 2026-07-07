@@ -291,7 +291,7 @@ class Chart(BaseModel):
     title: Optional[str] = None
 
     # PPTX chart model emitted by the template-v2 converter.
-    series_colors: Optional[list[str]] = None
+    colors: Optional[list[str]] = None
     x_axis: Optional[bool] = None
     y_axis: Optional[bool] = None
     x_axis_title: Optional[str] = None

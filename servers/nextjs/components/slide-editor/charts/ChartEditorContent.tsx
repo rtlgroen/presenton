@@ -23,7 +23,6 @@ import {
 import {
   DEFAULT_CHART_COLORS,
   chartColorTargetMode,
-  chartDataFromSeries,
   chartDataFromSeriesWithColors,
   chartDataToCsv,
   resolvedChartColorTargets,
@@ -409,8 +408,8 @@ function ChartSeriesColorControls({
   const targets = resolvedChartColorTargets(chart);
   const label =
     targets.length > 1
-      ? chartColorTargetMode(chart) === "point"
-        ? "Slice colors"
+      ? chartColorTargetMode(chart) === "category"
+        ? "Category colors"
         : "Series colors"
       : "Chart color";
   const openTarget = paletteAnchor
@@ -589,7 +588,7 @@ function ChartDataModal({
   const updateData = (
     nextCategories: string[],
     nextSeries: ChartSeries[],
-    nextSeriesColors = chart.series_colors ?? [],
+    nextColors = chart.colors ?? [],
   ) => {
     const normalizedCategories = nextCategories.slice(0, 24);
     const normalized = nextSeries
@@ -604,15 +603,15 @@ function ChartDataModal({
       series: normalized,
     });
     const colorCount =
-      colorMode === "point"
+      colorMode === "category"
         ? Math.min(
           12,
           Math.max(1, normalizedCategories.length, normalized[0]?.values.length ?? 0),
         )
         : Math.min(12, Math.max(1, normalized.length));
-    const seriesColors = Array.from({ length: colorCount }, (_, index) =>
-      nextSeriesColors[index] ??
-      chart.series_colors?.[index] ??
+    const colors = Array.from({ length: colorCount }, (_, index) =>
+      nextColors[index] ??
+      chart.colors?.[index] ??
       (index === 0 ? chart.color : null) ??
       DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
     );
@@ -620,14 +619,14 @@ function ChartDataModal({
     onChange({
       ...chart,
       categories: normalizedCategories,
-      color: seriesColors[0] ?? chart.color,
+      color: colors[0] ?? chart.color,
       series: normalized,
-      series_colors: seriesColors,
+      colors,
       data: chartDataFromSeriesWithColors(
         normalizedCategories,
         normalized,
-        seriesColors,
-        colorMode === "point",
+        colors,
+        colorMode === "category",
       ),
     });
   };
@@ -740,7 +739,7 @@ function ChartDataModal({
               chartPath={chartPath}
               colorMode={chartColorTargetMode(chart)}
               series={series}
-              seriesColors={chart.series_colors ?? []}
+              colors={chart.colors ?? []}
               onClear={() => onChange(clearChartData(chart))}
               onUpdate={updateData}
             />
@@ -758,19 +757,19 @@ function EditableDataTable({
   onClear,
   onUpdate,
   series,
-  seriesColors,
+  colors,
 }: {
   categories: string[];
   chartPath: string;
-  colorMode: "point" | "series";
+  colorMode: "category" | "series";
   onClear: () => void;
   onUpdate: (
     categories: string[],
     series: ChartSeries[],
-    seriesColors?: string[],
+    colors?: string[],
   ) => void;
   series: ChartSeries[];
-  seriesColors: string[];
+  colors: string[];
 }) {
   const safeCategories = categories.length > 0 ? categories : ["Item 1"];
   const safeSeries =
@@ -782,7 +781,7 @@ function EditableDataTable({
           values: normalizeValues([], safeCategories.length),
         },
       ];
-  const usesPointColors = colorMode === "point";
+  const usesCategoryColors = colorMode === "category";
   const [activeSeriesIndex, setActiveSeriesIndex] = useState(0);
   const selectedSeriesIndex = Math.min(activeSeriesIndex, safeSeries.length - 1);
   const selectedSeries = safeSeries[selectedSeriesIndex];
@@ -797,7 +796,7 @@ function EditableDataTable({
         index === rowIndex ? value : category,
       ),
       safeSeries,
-      seriesColors,
+      colors,
     );
   };
   const updateSeriesName = (seriesIndex: number, name: string) => {
@@ -806,7 +805,7 @@ function EditableDataTable({
       safeSeries.map((item, index) =>
         index === seriesIndex ? { ...item, name } : item,
       ),
-      seriesColors,
+      colors,
     );
   };
   const updateValue = (
@@ -829,7 +828,7 @@ function EditableDataTable({
           }
           : item,
       ),
-      seriesColors,
+      colors,
     );
   };
   const addRow = () => {
@@ -843,12 +842,12 @@ function EditableDataTable({
         ...item,
         values: [...item.values, 0],
       })),
-      usesPointColors
+      usesCategoryColors
         ? [
-          ...seriesColors,
+          ...colors,
           DEFAULT_CHART_COLORS[safeCategories.length % DEFAULT_CHART_COLORS.length],
         ]
-        : seriesColors,
+        : colors,
     );
   };
   const deleteRow = (rowIndex: number) => {
@@ -860,9 +859,9 @@ function EditableDataTable({
         ...item,
         values: item.values.filter((_, index) => index !== rowIndex),
       })),
-      usesPointColors
-        ? seriesColors.filter((_, index) => index !== rowIndex)
-        : seriesColors,
+      usesCategoryColors
+        ? colors.filter((_, index) => index !== rowIndex)
+        : colors,
     );
   };
   const addSeries = () => {
@@ -875,9 +874,7 @@ function EditableDataTable({
           values: normalizeValues([], safeCategories.length),
         },
       ],
-      usesPointColors
-        ? seriesColors
-        : seriesColors,
+      colors,
     );
   };
   const deleteSeries = (seriesIndex: number) => {
@@ -885,9 +882,7 @@ function EditableDataTable({
     onUpdate(
       safeCategories,
       safeSeries.filter((_, index) => index !== seriesIndex),
-      usesPointColors
-        ? seriesColors
-        : seriesColors,
+      colors,
     );
     setActiveSeriesIndex((current) =>
       Math.max(0, Math.min(current, safeSeries.length - 2)),
@@ -1089,8 +1084,13 @@ function clearChartData(chart: ChartElement): ChartElement {
     ...chart,
     categories,
     series,
-    series_colors: [color],
-    data: chartDataFromSeries(categories, series, color),
+    colors: [color],
+    data: chartDataFromSeriesWithColors(
+      categories,
+      series,
+      [color],
+      true,
+    ),
   };
 }
 

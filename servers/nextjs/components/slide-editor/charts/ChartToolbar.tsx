@@ -1,10 +1,7 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { BarChart3, Palette } from "lucide-react";
 import type { ChartSlideElement } from "@/components/slide-editor/state/state";
-import {
-  resolvedChartColorTargets,
-  updateChartColorTarget,
-} from "@/components/slide-editor/charts/chart-data";
+import { updateChartColorTarget } from "@/components/slide-editor/charts/chart-data";
 import { ChartColorPaletteCard } from "@/components/slide-editor/charts/ChartColorPalette";
 import {
   FloatingToolbar,
@@ -29,11 +26,7 @@ export function ChartToolbar({
   onChange: (index: number, element: ChartSlideElement) => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [activeColorIndex, setActiveColorIndex] = useState(0);
-  const colorTargets = resolvedChartColorTargets(element);
-  const activeTarget =
-    colorTargets.find((target) => target.index === activeColorIndex) ??
-    colorTargets[0];
+  const chartColor = element.colors?.[0] ?? element.color ?? "7F22FE";
 
   return (
     <FloatingToolbar
@@ -104,45 +97,12 @@ export function ChartToolbar({
         >
           <Palette size={16} strokeWidth={2} />
         </button>
-        {paletteOpen && activeTarget ? (
+        {paletteOpen ? (
           <FloatingToolbarPanel>
             <ChartColorPaletteCard
-              value={activeTarget.color}
-              header={
-                colorTargets.length > 1 ? (
-                  <div style={toolbarPaletteStyles.targetList}>
-                    {colorTargets.map((target) => (
-                      <button
-                        key={`${target.mode}-${target.index}`}
-                        type="button"
-                        title={target.label}
-                        style={{
-                          ...toolbarPaletteStyles.targetButton,
-                          ...(target.index === activeTarget.index
-                            ? toolbarPaletteStyles.targetButtonActive
-                            : {}),
-                        }}
-                        onClick={() => setActiveColorIndex(target.index)}
-                      >
-                        <span
-                          style={{
-                            ...toolbarPaletteStyles.targetDot,
-                            background: `#${target.color}`,
-                          }}
-                        />
-                        <span style={toolbarPaletteStyles.targetLabel}>
-                          {target.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null
-              }
+              value={chartColor}
               onChange={(color) =>
-                onChange(
-                  index,
-                  updateChartColorTarget(element, activeTarget.index, color),
-                )
+                onChange(index, updateChartColorTarget(element, 0, color))
               }
               onClose={() => setPaletteOpen(false)}
             />
@@ -152,45 +112,3 @@ export function ChartToolbar({
     </FloatingToolbar>
   );
 }
-
-const toolbarPaletteStyles = {
-  targetButton: {
-    alignItems: "center",
-    background: "#FFFFFF",
-    border: "1px solid #E6E6EA",
-    borderRadius: 999,
-    color: "#191919",
-    cursor: "pointer",
-    display: "inline-flex",
-    flex: "0 0 auto",
-    fontSize: 11,
-    fontWeight: 700,
-    gap: 6,
-    height: 28,
-    maxWidth: 132,
-    padding: "0 9px",
-  },
-  targetButtonActive: {
-    background: "#F4F3FF",
-    borderColor: "#7C51F8",
-    color: "#7C51F8",
-  },
-  targetDot: {
-    border: "1px solid #E6E6EA",
-    borderRadius: 999,
-    flex: "0 0 auto",
-    height: 12,
-    width: 12,
-  },
-  targetLabel: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  targetList: {
-    display: "flex",
-    gap: 6,
-    maxWidth: 212,
-    overflowX: "auto",
-  },
-} satisfies Record<string, CSSProperties>;
