@@ -41,7 +41,7 @@ import {
 } from "@/components/slide-editor/text/template-v2-text";
 import type { TableCellSelection } from "@/components/slide-editor/state/state";
 import { loadKonvaImage } from "@/components/slide-editor/surface/exportAssets";
-import { TemplateV2ChartElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartElement";
+import { TemplateV2ChartJsElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartJsElement";
 import { TemplateV2TableElement as RawTableElement } from "@/components/slide-editor/tables/TemplateV2TableElement";
 import { buildSvgUpdateUrl } from "@/lib/svg-color";
 import {
@@ -561,7 +561,9 @@ function RawElementNode({
         }));
       }}
     >
-      {editing ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}
+      {isEditMode ? (
+        <SelectionBoundsRect width={box.width} height={box.height} />
+      ) : null}
       {editing ? null : (
         <MemoizedRawElementVisual
           element={element}
@@ -777,7 +779,14 @@ function RawElementVisual({
     );
   }
   if (type === "chart") {
-    return <RawChartElement element={element} width={width} height={height} interactive={interactive} />;
+    return (
+      <RawChartElement
+        element={element}
+        width={width}
+        height={height}
+        interactive={interactive}
+      />
+    );
   }
   if (type === "infographic") {
     return <RawInfographicElement element={element} width={width} height={height} interactive={interactive} />;
@@ -1028,14 +1037,32 @@ function RawImageElement({
   let drawH = height;
   let offsetX = 0;
   let offsetY = 0;
+  let crop:
+    | {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }
+    | undefined;
 
   if (fit === "cover") {
     if (naturalRatio > boxRatio) {
-      drawW = height * naturalRatio;
-      offsetX = -(drawW - width) * focusX;
+      const cropWidth = loaded.height * boxRatio;
+      crop = {
+        x: Math.max(0, (loaded.width - cropWidth) * focusX),
+        y: 0,
+        width: Math.min(loaded.width, cropWidth),
+        height: loaded.height,
+      };
     } else {
-      drawH = width / naturalRatio;
-      offsetY = -(drawH - height) * focusY;
+      const cropHeight = loaded.width / boxRatio;
+      crop = {
+        x: 0,
+        y: Math.max(0, (loaded.height - cropHeight) * focusY),
+        width: loaded.width,
+        height: Math.min(loaded.height, cropHeight),
+      };
     }
   } else if (fit === "contain") {
     if (naturalRatio > boxRatio) {
@@ -1054,6 +1081,7 @@ function RawImageElement({
       y={offsetY + (flipV ? drawH : 0)}
       width={drawW}
       height={drawH}
+      crop={crop}
       scaleX={flipH ? -1 : 1}
       scaleY={flipV ? -1 : 1}
       listening={interactive}

@@ -72,6 +72,7 @@ from utils.outline_utils import (
     get_presentation_outline_model_with_toc,
     get_presentation_title_from_presentation_outline,
 )
+from utils.outline_limits import normalize_outline_payload
 from utils.process_slides import (
     process_slide_add_placeholder_assets,
     process_slide_and_fetch_assets,
@@ -1165,12 +1166,27 @@ def _apply_template_v2_chart_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        return copy.deepcopy(element)
-
     updated = copy.deepcopy(element)
+    updated.pop("data_labels_color", None)
+    updated.pop("grid", None)
+    if not isinstance(value, dict):
+        return updated
+
     chart_type = value.get("chartType", value.get("chart_type"))
-    if chart_type in {"bar", "line", "area", "pie", "donut"}:
+    if chart_type in {
+        "area",
+        "bar",
+        "bubble",
+        "donut",
+        "horizontal_bar",
+        "horizontal_stacked_bar",
+        "line",
+        "pie",
+        "polar_area",
+        "radar",
+        "scatter",
+        "stacked_bar",
+    }:
         updated["chart_type"] = chart_type
     if isinstance(value.get("title"), str):
         updated["title"] = value["title"]
@@ -1178,18 +1194,18 @@ def _apply_template_v2_chart_content(
         updated["categories"] = value["categories"]
     if isinstance(value.get("series"), list) and value["series"]:
         updated["series"] = value["series"]
-    series_colors = value.get("seriesColors", value.get("series_colors"))
-    if isinstance(series_colors, list) and series_colors:
-        updated["series_colors"] = series_colors
+    colors = value.get("colors")
+    if isinstance(colors, list) and colors:
+        updated["colors"] = colors
     for source_key, target_key in (
         ("axisColor", "axis_color"),
         ("axis_color", "axis_color"),
+        ("gridColor", "grid_color"),
+        ("grid_color", "grid_color"),
         ("xAxisTitle", "x_axis_title"),
         ("x_axis_title", "x_axis_title"),
         ("yAxisTitle", "y_axis_title"),
         ("y_axis_title", "y_axis_title"),
-        ("dataLabelsColor", "data_labels_color"),
-        ("data_labels_color", "data_labels_color"),
         ("source", "source"),
     ):
         if isinstance(value.get(source_key), str):
@@ -1199,9 +1215,12 @@ def _apply_template_v2_chart_content(
         ("x_axis", "x_axis"),
         ("yAxis", "y_axis"),
         ("y_axis", "y_axis"),
+        ("xAxisGrid", "x_axis_grid"),
+        ("x_axis_grid", "x_axis_grid"),
+        ("yAxisGrid", "y_axis_grid"),
+        ("y_axis_grid", "y_axis_grid"),
         ("dataLabels", "data_labels"),
         ("data_labels", "data_labels"),
-        ("grid", "grid"),
     ):
         if isinstance(value.get(source_key), bool):
             updated[target_key] = value[source_key]
@@ -1471,6 +1490,11 @@ async def prepare_presentation(
 ):
     if not outlines:
         raise HTTPException(status_code=400, detail="Outlines are required")
+    if len(outlines) > MAX_NUMBER_OF_SLIDES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Number of outlines cannot be greater than {MAX_NUMBER_OF_SLIDES}",
+        )
 
     presentation = await sql_session.get(PresentationModel, presentation_id)
     if not presentation:
@@ -1807,6 +1831,16 @@ async def update_presentation(
 
     presentation_update_dict = {}
     if n_slides is not None:
+        if n_slides < 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Number of slides must be greater than 0",
+            )
+        if n_slides > MAX_NUMBER_OF_SLIDES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Number of slides cannot be greater than {MAX_NUMBER_OF_SLIDES}",
+            )
         presentation_update_dict["n_slides"] = n_slides
     if title:
         presentation_update_dict["title"] = title
@@ -1816,6 +1850,11 @@ async def update_presentation(
     if presentation_update_dict:
         presentation.sqlmodel_update(presentation_update_dict)
     if slides:
+        if len(slides) > MAX_NUMBER_OF_SLIDES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Number of slides cannot be greater than {MAX_NUMBER_OF_SLIDES}",
+            )
         # Just to make sure id is UUID
         for slide in slides:
             slide.presentation = uuid.UUID(slide.presentation)
@@ -1875,6 +1914,15 @@ async def check_if_api_request_is_valid(
         )
 
     if (
+        request.slides_markdown is not None
+        and len(request.slides_markdown) > MAX_NUMBER_OF_SLIDES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Number of slides cannot be greater than {MAX_NUMBER_OF_SLIDES}",
+        )
+
+    if (
         request.include_table_of_contents
         and request.n_slides is not None
         and request.n_slides < 3
@@ -1915,6 +1963,11 @@ async def generate_presentation_handler(
 
         if request.slides_markdown:
             using_slides_markdown = True
+            if len(request.slides_markdown) > MAX_NUMBER_OF_SLIDES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Number of slides cannot be greater than {MAX_NUMBER_OF_SLIDES}",
+                )
             request.n_slides = len(request.slides_markdown)
 
         if not using_slides_markdown:
@@ -2004,7 +2057,10 @@ async def generate_presentation_handler(
                     detail="Failed to generate presentation outlines. Please try again.",
                 )
             presentation_outlines = PresentationOutlineModel(
-                **presentation_outlines_json
+                **normalize_outline_payload(
+                    presentation_outlines_json,
+                    MAX_NUMBER_OF_SLIDES,
+                )
             )
 
             if (

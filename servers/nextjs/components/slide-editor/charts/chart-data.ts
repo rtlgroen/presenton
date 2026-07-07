@@ -11,7 +11,7 @@ export type ResolvedChartDataset = {
   color: string;
 };
 
-export type ChartColorTargetMode = "point" | "series";
+export type ChartColorTargetMode = "category" | "series";
 
 export type ChartColorTarget = {
   color: string;
@@ -61,16 +61,26 @@ export const CHART_SYSTEM_COLORS = [
 ];
 
 export function resolvedChartCategories(element: ChartElement): string[] {
-  if (element.categories && element.categories.length > 0) {
-    return element.categories.slice(0, 24);
-  }
-
   const seriesLength = Math.max(
     0,
     ...(element.series ?? []).map((series) => series.values.length),
   );
+  if (element.categories && element.categories.length > 0) {
+    const categoryLength = Math.min(
+      24,
+      Math.max(element.categories.length, seriesLength),
+    );
+    return Array.from(
+      { length: categoryLength },
+      (_, index) => element.categories?.[index] ?? `Item ${index + 1}`,
+    );
+  }
+
   if (seriesLength > 0) {
-    return Array.from({ length: seriesLength }, (_, index) => `Item ${index + 1}`);
+    return Array.from(
+      { length: Math.min(24, seriesLength) },
+      (_, index) => `Item ${index + 1}`,
+    );
   }
 
   return [];
@@ -99,21 +109,15 @@ export function primaryChartData(element: ChartElement): ChartDatum[] {
   return categories.slice(0, Math.max(1, first.values.length)).map((label, index) => ({
     label,
     value: first.values[index] ?? 0,
-    color: chartSeriesColor(element, index),
+    color: chartColorTargetMode(element) === "category"
+      ? chartSeriesColor(element, index)
+      : chartSeriesColor(element, 0),
   }));
 }
 
 export function chartSeriesColor(element: ChartElement, index: number) {
-  if (element.chart_type !== "pie" && element.chart_type !== "donut") {
-    return (
-      element.series_colors?.[0] ??
-      element.color ??
-      DEFAULT_CHART_COLORS[0]
-    );
-  }
-
   return (
-    element.series_colors?.[index] ??
+    element.colors?.[index] ??
     (index === 0 ? element.color : null) ??
     DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length]
   );
@@ -138,10 +142,7 @@ export function normalizeChartColor(
 export function chartColorTargetMode(
   element: ChartElement,
 ): ChartColorTargetMode {
-  if (element.chart_type === "pie" || element.chart_type === "donut") {
-    return "point";
-  }
-  return "series";
+  return (element.series?.length ?? 0) > 1 ? "series" : "category";
 }
 
 export function resolvedChartColorTargets(
@@ -149,17 +150,19 @@ export function resolvedChartColorTargets(
 ): ChartColorTarget[] {
   const mode = chartColorTargetMode(element);
   if (mode === "series") {
-    return [
-      {
-        color: normalizeChartColor(chartSeriesColor(element, 0)),
-        index: 0,
-        label: "Chart color",
-        mode,
-      },
-    ];
+    const seriesCount = Math.min(12, Math.max(1, element.series?.length ?? 0));
+    return Array.from({ length: seriesCount }, (_, index) => ({
+      color: normalizeChartColor(chartSeriesColor(element, index)),
+      index,
+      label:
+        seriesCount === 1
+          ? "Chart color"
+          : element.series?.[index]?.name ?? `Series ${index + 1}`,
+      mode,
+    }));
   }
 
-  if (mode === "point") {
+  if (mode === "category") {
     const categories = resolvedChartCategories(element);
     const pointCount = Math.min(
       12,
@@ -184,30 +187,11 @@ export function resolvedChartColorTargets(
   return [];
 }
 
-export function chartDataFromSeries(
-  categories: string[],
-  series: ChartSeries[],
-  fallbackColor?: string | null,
-): ChartDatum[] {
-  const first = series[0];
-  if (!first) return [];
-  const labels =
-    categories.length > 0
-      ? categories
-      : first.values.map((_, index) => `Item ${index + 1}`);
-
-  return labels.slice(0, 8).map((label, index) => ({
-    label,
-    value: first.values[index] ?? 0,
-    color: fallbackColor ?? undefined,
-  }));
-}
-
 export function chartDataFromSeriesWithColors(
   categories: string[],
   series: ChartSeries[],
   colors: string[],
-  pointColors = false,
+  categoryColors = false,
 ): ChartDatum[] {
   const first = series[0];
   if (!first) return [];
@@ -220,7 +204,7 @@ export function chartDataFromSeriesWithColors(
   return labels.slice(0, 8).map((label, index) => ({
     label,
     value: first.values[index] ?? 0,
-    color: pointColors ? colors[index] ?? fallbackColor : fallbackColor,
+    color: categoryColors ? colors[index] ?? fallbackColor : fallbackColor,
   }));
 }
 
@@ -235,25 +219,22 @@ export function updateChartColorTarget(
 
   const mode = chartColorTargetMode(element);
   const targets = resolvedChartColorTargets(element);
-  const colorCount =
-    mode === "point"
-      ? Math.min(12, Math.max(targetIndex + 1, targets.length))
-      : 1;
-  const seriesColors = Array.from({ length: colorCount }, (_, index) =>
+  const colorCount = Math.min(12, Math.max(targetIndex + 1, targets.length));
+  const colors = Array.from({ length: colorCount }, (_, index) =>
     normalizeChartColor(
-      element.series_colors?.[index] ??
+      element.colors?.[index] ??
         (index === 0 ? element.color : null) ??
         DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
     ),
   );
-  seriesColors[mode === "point" ? targetIndex : 0] = normalizeChartColor(color);
+  colors[targetIndex] = normalizeChartColor(color);
 
-  const primaryColor = seriesColors[0] ?? normalizeChartColor(color);
+  const primaryColor = colors[0] ?? normalizeChartColor(color);
   const data = chartDataFromSeriesWithColors(
     resolvedChartCategories(element),
     element.series ?? [],
-    seriesColors,
-    mode === "point",
+    colors,
+    mode === "category",
   );
   const nextData =
     data.length > 0
@@ -261,8 +242,8 @@ export function updateChartColorTarget(
       : element.data.map((datum, index) => ({
           ...datum,
           color:
-            mode === "point"
-              ? seriesColors[index] ?? primaryColor
+            mode === "category"
+              ? colors[index] ?? primaryColor
               : primaryColor,
         }));
 
@@ -270,7 +251,7 @@ export function updateChartColorTarget(
     ...element,
     color: primaryColor,
     data: nextData,
-    series_colors: seriesColors,
+    colors,
   };
 }
 
@@ -289,16 +270,38 @@ export function chartDataToCsv(element: ChartElement) {
 }
 
 export function rawChartType(value: unknown): ChartType {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized =
+    typeof value === "string"
+      ? value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+      : "";
   switch (normalized) {
     case "area":
       return "area";
+    case "bubble":
+      return "bubble";
+    case "donut":
+    case "doughnut":
+      return "donut";
+    case "horizontal_bar":
+    case "bar_horizontal":
+      return "horizontal_bar";
     case "line":
       return "line";
     case "pie":
       return "pie";
-    case "donut":
-      return "donut";
+    case "polar":
+    case "polar_area":
+      return "polar_area";
+    case "radar":
+      return "radar";
+    case "scatter":
+      return "scatter";
+    case "stacked":
+    case "stacked_bar":
+    case "bar_stacked":
+      return "stacked_bar";
+    case "horizontal_stacked_bar":
+      return "horizontal_stacked_bar";
     default:
       return "bar";
   }

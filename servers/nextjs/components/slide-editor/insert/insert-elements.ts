@@ -7,12 +7,9 @@ import type {
   TableCell,
 } from "@/components/slide-editor/types";
 
-const DEFAULT_BAR_CHART_SOURCE = "presenton-default-bar-chart";
-const DEFAULT_LINE_CHART_SOURCE = "presenton-default-line-chart";
-const DEFAULT_AREA_CHART_SOURCE = "presenton-default-area-chart";
-const DEFAULT_PIE_CHART_SOURCE = "presenton-default-pie-chart";
 const DEFAULT_CHART_INSERT_POSITION = { x: 128, y: 115 };
 const DEFAULT_CHART_INSERT_SIZE = { width: 717, height: 410 };
+const DEFAULT_IMAGE_PLACEHOLDER_SRC = "/placeholder.jpg";
 const TEXT_INSERT_VERTICAL_PADDING_PX = 14;
 const IMAGE_RADIUS = { tl: 10, tr: 10, bl: 10, br: 10 };
 
@@ -195,27 +192,34 @@ export function createTextInsertElements(kind?: string): SlideElement[] {
 }
 
 function chartTypeFromPaletteId(id?: string): ChartType | null {
-  if (
-    id === "bar" ||
-    id === "line" ||
-    id === "area" ||
-    id === "pie" ||
-    id === "donut"
-  ) {
-    return id;
+  switch (id) {
+    case "area":
+    case "bar":
+    case "bubble":
+    case "donut":
+    case "horizontal_bar":
+    case "horizontal_stacked_bar":
+    case "line":
+    case "pie":
+    case "polar_area":
+    case "radar":
+    case "scatter":
+    case "stacked_bar":
+      return id;
+    default:
+      return null;
   }
-  return null;
 }
 
 function chartData(
   categories: string[],
   values: number[],
-  seriesColors: string[],
+  colors: string[],
 ) {
   return categories.map((category, index) => ({
     label: category,
     value: values[index] ?? 0,
-    color: seriesColors[index] ?? seriesColors[0],
+    color: colors[index] ?? colors[0],
   }));
 }
 
@@ -223,7 +227,15 @@ function makeChartElement(chartType: ChartType): SlideElement {
   if (chartType === "bar") {
     const categories = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const values = [70, 120, 45, 145, 105, 105, 45];
-    const seriesColors = ["4D20C5"];
+    const colors = [
+      "4D20C5",
+      "155DFC",
+      "F59E0B",
+      "12B76A",
+      "EF4444",
+      "06B6D4",
+      "8B5CF6",
+    ];
 
     return {
       type: "chart",
@@ -233,23 +245,30 @@ function makeChartElement(chartType: ChartType): SlideElement {
       title: "Weekly Report\nJun 10-12",
       color: "4D20C5",
       axis_color: "D8D8D8",
-      data_labels_color: "4B55A5",
+      grid_color: "D8D8D8",
       data_labels: true,
-      grid: true,
+      x_axis_grid: true,
+      y_axis_grid: true,
       x_axis: true,
       y_axis: true,
       categories,
       series: [{ name: "Students Number", values }],
-      series_colors: seriesColors,
-      source: DEFAULT_BAR_CHART_SOURCE,
-      data: chartData(categories, values, seriesColors),
+      colors,
+      data: chartData(categories, values, colors),
     };
   }
 
   if (chartType === "line") {
     const categories = ["2021", "2022", "2023", "2024", "2025", "2026"];
     const values = [15, 45, 85, 50, 15, 55];
-    const seriesColors = ["4D20C5"];
+    const colors = [
+      "4D20C5",
+      "155DFC",
+      "F59E0B",
+      "12B76A",
+      "EF4444",
+      "06B6D4",
+    ];
 
     return {
       type: "chart",
@@ -259,23 +278,30 @@ function makeChartElement(chartType: ChartType): SlideElement {
       title: "Enrollment Over Years\n2021-2026",
       color: "4D20C5",
       axis_color: "D8D8D8",
-      data_labels_color: "4D20C5",
+      grid_color: "D8D8D8",
       data_labels: false,
-      grid: true,
+      x_axis_grid: true,
+      y_axis_grid: true,
       x_axis: true,
       y_axis: false,
       categories,
       series: [{ name: "Students Number", values }],
-      series_colors: seriesColors,
-      source: DEFAULT_LINE_CHART_SOURCE,
-      data: chartData(categories, values, seriesColors),
+      colors,
+      data: chartData(categories, values, colors),
     };
   }
 
   if (chartType === "area") {
     const categories = ["2021", "2022", "2023", "2024", "2025", "2026"];
     const values = [25, 74, 46, 57, 62, 67];
-    const seriesColors = ["4D20C5"];
+    const colors = [
+      "4D20C5",
+      "155DFC",
+      "F59E0B",
+      "12B76A",
+      "EF4444",
+      "06B6D4",
+    ];
 
     return {
       type: "chart",
@@ -285,23 +311,23 @@ function makeChartElement(chartType: ChartType): SlideElement {
       title: "Enrollment Over Years\n2021-2026",
       color: "7555F6",
       axis_color: "D8D8D8",
-      data_labels_color: "4D20C5",
+      grid_color: "D8D8D8",
       data_labels: false,
-      grid: true,
+      x_axis_grid: true,
+      y_axis_grid: true,
       x_axis: true,
       y_axis: false,
       categories,
       series: [{ name: "Students Number", values }],
-      series_colors: seriesColors,
-      source: DEFAULT_AREA_CHART_SOURCE,
-      data: chartData(categories, values, seriesColors),
+      colors,
+      data: chartData(categories, values, colors),
     };
   }
 
   if (chartType === "pie") {
     const categories = ["Category A", "Category B", "Category C"];
     const values = [55, 25, 20];
-    const seriesColors = ["7555F6", "AA9AF8", "E7E3FA"];
+    const colors = ["7555F6", "AA9AF8", "E7E3FA"];
 
     return {
       type: "chart",
@@ -311,20 +337,19 @@ function makeChartElement(chartType: ChartType): SlideElement {
       title: "Weekly Report\nJun 10-12",
       color: "7555F6",
       axis_color: "D8D8D8",
-      data_labels_color: "191919",
+      grid_color: "D8D8D8",
       data_labels: true,
       categories,
       series: [{ name: "Weekly Report", values }],
-      series_colors: seriesColors,
-      source: DEFAULT_PIE_CHART_SOURCE,
-      data: chartData(categories, values, seriesColors),
+      colors,
+      data: chartData(categories, values, colors),
     };
   }
 
-  const label = "Donut chart";
+  const label = chartLabel(chartType);
   const categories = ["Q1", "Q2", "Q3", "Q4"];
   const values = [38, 54, 47, 68];
-  const seriesColors = ["7F22FE", "155DFC", "F59E0B", "12B76A"];
+  const colors = ["7F22FE", "155DFC", "F59E0B", "12B76A"];
 
   return {
     type: "chart",
@@ -334,13 +359,38 @@ function makeChartElement(chartType: ChartType): SlideElement {
     title: label,
     color: "7F22FE",
     axis_color: "D0D5DD",
-    data_labels_color: "475467",
+    grid_color: "D0D5DD",
     data_labels: true,
+    x_axis_grid: true,
+    y_axis_grid: true,
     categories,
     series: [{ name: label, values }],
-    series_colors: seriesColors,
-    data: chartData(categories, values, seriesColors),
+    colors,
+    data: chartData(categories, values, colors),
   };
+}
+
+function chartLabel(chartType: ChartType) {
+  switch (chartType) {
+    case "bubble":
+      return "Bubble chart";
+    case "horizontal_bar":
+      return "Horizontal bar";
+    case "donut":
+      return "Donut chart";
+    case "polar_area":
+      return "Polar area chart";
+    case "radar":
+      return "Radar chart";
+    case "scatter":
+      return "Scatter chart";
+    case "stacked_bar":
+      return "Stacked bar chart";
+    case "horizontal_stacked_bar":
+      return "Horizontal stack bar";
+    default:
+      return "Chart";
+  }
 }
 
 export function createChartInsertElements(kind?: string): SlideElement[] {
@@ -414,6 +464,7 @@ function makeImageElement({
     type: "image",
     position: { x, y },
     size: { width, height },
+    data: DEFAULT_IMAGE_PLACEHOLDER_SRC,
     fit: "cover",
     name,
     border_radius: IMAGE_RADIUS,

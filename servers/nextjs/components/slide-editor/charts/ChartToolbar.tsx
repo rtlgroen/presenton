@@ -1,11 +1,7 @@
-import { useState, type CSSProperties } from "react";
-import { BarChart3, Download, Palette, Pencil } from "lucide-react";
+import { useState } from "react";
+import { BarChart3, Palette } from "lucide-react";
 import type { ChartSlideElement } from "@/components/slide-editor/state/state";
-import {
-  chartDataToCsv,
-  resolvedChartColorTargets,
-  updateChartColorTarget,
-} from "@/components/slide-editor/charts/chart-data";
+import { updateChartColorTarget } from "@/components/slide-editor/charts/chart-data";
 import { ChartColorPaletteCard } from "@/components/slide-editor/charts/ChartColorPalette";
 import {
   FloatingToolbar,
@@ -22,24 +18,15 @@ export function ChartToolbar({
   index,
   scale,
   onChange,
-  onEdit,
 }: {
   anchorBox?: FloatingToolbarBox | null;
   element: ChartSlideElement;
   index: number;
   scale: number;
   onChange: (index: number, element: ChartSlideElement) => void;
-  onEdit?: (index: number) => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [activeColorIndex, setActiveColorIndex] = useState(0);
-  const colorTargets = resolvedChartColorTargets(element);
-  const activeTarget =
-    colorTargets.find((target) => target.index === activeColorIndex) ??
-    colorTargets[0];
-  const isDefaultPresentonChart =
-    typeof element.source === "string" &&
-    element.source.startsWith("presenton-default-");
+  const chartColor = element.colors?.[0] ?? element.color ?? "7F22FE";
 
   return (
     <FloatingToolbar
@@ -52,7 +39,7 @@ export function ChartToolbar({
             (element.size?.height ?? DEFAULT_CHART_TOOLBAR_SIZE.height) * scale,
         }
       }
-      fallbackWidth={330}
+      fallbackWidth={220}
       inlineEditIgnore
       style={inlineStyles.toolbar}
     >
@@ -74,9 +61,6 @@ export function ChartToolbar({
             onChange(index, {
               ...element,
               chart_type: event.target.value as ChartSlideElement["chart_type"],
-              size: isDefaultPresentonChart
-                ? { ...DEFAULT_CHART_TOOLBAR_SIZE }
-                : element.size,
             })
           }
           style={{
@@ -87,21 +71,19 @@ export function ChartToolbar({
           }}
         >
           <option value="bar">Bar Chart</option>
+          <option value="horizontal_bar">Horizontal Bar</option>
+          <option value="stacked_bar">Stacked Bar</option>
+          <option value="horizontal_stacked_bar">Horizontal Stack Bar</option>
           <option value="line">Line Chart</option>
           <option value="area">Area Chart</option>
           <option value="pie">Pie Chart</option>
           <option value="donut">Donut Chart</option>
+          <option value="scatter">Scatter Chart</option>
+          <option value="bubble">Bubble Chart</option>
+          <option value="radar">Radar Chart</option>
+          <option value="polar_area">Polar Area</option>
         </select>
       </div>
-
-      <button
-        type="button"
-        title="Edit chart"
-        onClick={() => onEdit?.(index)}
-        style={inlineStyles.iconButton}
-      >
-        <Pencil size={16} strokeWidth={2} />
-      </button>
 
       <div style={{ position: "relative" }}>
         <button
@@ -115,114 +97,18 @@ export function ChartToolbar({
         >
           <Palette size={16} strokeWidth={2} />
         </button>
-        {paletteOpen && activeTarget ? (
+        {paletteOpen ? (
           <FloatingToolbarPanel>
             <ChartColorPaletteCard
-              value={activeTarget.color}
-              header={
-                colorTargets.length > 1 ? (
-                  <div style={toolbarPaletteStyles.targetList}>
-                    {colorTargets.map((target) => (
-                      <button
-                        key={`${target.mode}-${target.index}`}
-                        type="button"
-                        title={target.label}
-                        style={{
-                          ...toolbarPaletteStyles.targetButton,
-                          ...(target.index === activeTarget.index
-                            ? toolbarPaletteStyles.targetButtonActive
-                            : {}),
-                        }}
-                        onClick={() => setActiveColorIndex(target.index)}
-                      >
-                        <span
-                          style={{
-                            ...toolbarPaletteStyles.targetDot,
-                            background: `#${target.color}`,
-                          }}
-                        />
-                        <span style={toolbarPaletteStyles.targetLabel}>
-                          {target.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null
-              }
+              value={chartColor}
               onChange={(color) =>
-                onChange(
-                  index,
-                  updateChartColorTarget(element, activeTarget.index, color),
-                )
+                onChange(index, updateChartColorTarget(element, 0, color))
               }
               onClose={() => setPaletteOpen(false)}
             />
           </FloatingToolbarPanel>
         ) : null}
       </div>
-
-      <button
-        type="button"
-        title="Download chart data"
-        onClick={() => downloadChartData(element)}
-        style={inlineStyles.iconButton}
-      >
-        <Download size={16} strokeWidth={2} />
-      </button>
     </FloatingToolbar>
   );
-}
-
-const toolbarPaletteStyles = {
-  targetButton: {
-    alignItems: "center",
-    background: "#FFFFFF",
-    border: "1px solid #E6E6EA",
-    borderRadius: 999,
-    color: "#191919",
-    cursor: "pointer",
-    display: "inline-flex",
-    flex: "0 0 auto",
-    fontSize: 11,
-    fontWeight: 700,
-    gap: 6,
-    height: 28,
-    maxWidth: 132,
-    padding: "0 9px",
-  },
-  targetButtonActive: {
-    background: "#F4F3FF",
-    borderColor: "#7C51F8",
-    color: "#7C51F8",
-  },
-  targetDot: {
-    border: "1px solid #E6E6EA",
-    borderRadius: 999,
-    flex: "0 0 auto",
-    height: 12,
-    width: 12,
-  },
-  targetLabel: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  targetList: {
-    display: "flex",
-    gap: 6,
-    maxWidth: 212,
-    overflowX: "auto",
-  },
-} satisfies Record<string, CSSProperties>;
-
-function downloadChartData(element: ChartSlideElement) {
-  const blob = new Blob([chartDataToCsv(element)], {
-    type: "text/csv;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${(element.title || "chart").toLowerCase().replace(/\W+/g, "-") || "chart"}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
