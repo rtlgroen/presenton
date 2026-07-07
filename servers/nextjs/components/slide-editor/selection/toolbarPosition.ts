@@ -9,6 +9,11 @@ type Size = {
   height: number;
 };
 
+type Bounds = Size & {
+  x?: number;
+  y?: number;
+};
+
 const STAGE_WIDTH = 1280;
 const STAGE_HEIGHT = 720;
 const COMPACT_SELECTION_TOOLBAR_WIDTH = 420;
@@ -80,23 +85,33 @@ function toolbarPosition({
   toolbarWidth,
 }: {
   anchorBox: TemplateV2ToolbarBox;
-  bounds?: Size;
+  bounds?: Bounds;
   toolbarWidth: number;
 }) {
   const boundary = bounds ?? { width: STAGE_WIDTH, height: STAGE_HEIGHT };
-  const canFitAbove = anchorBox.y >= TOOLBAR_HEIGHT + TOOLBAR_MARGIN;
+  const boundaryX = boundary.x ?? 0;
+  const boundaryY = boundary.y ?? 0;
+  const minLeft = boundaryX + TOOLBAR_MARGIN;
+  const maxLeft = Math.max(
+    minLeft,
+    boundaryX + boundary.width - toolbarWidth - TOOLBAR_MARGIN,
+  );
+  const minTop = boundaryY + TOOLBAR_MARGIN;
+  const maxTop = Math.max(
+    minTop,
+    boundaryY + boundary.height - TOOLBAR_HEIGHT - TOOLBAR_MARGIN,
+  );
+  const canFitAbove =
+    anchorBox.y - boundaryY >= TOOLBAR_HEIGHT + TOOLBAR_MARGIN;
   const top = canFitAbove
     ? anchorBox.y - TOOLBAR_HEIGHT - TOOLBAR_GAP
     : Math.min(
-        boundary.height - TOOLBAR_HEIGHT - TOOLBAR_MARGIN,
+        maxTop,
         anchorBox.y + anchorBox.height + TOOLBAR_GAP,
       );
   return {
-    left: Math.max(
-      TOOLBAR_MARGIN,
-      Math.min(anchorBox.x, boundary.width - toolbarWidth - TOOLBAR_MARGIN),
-    ),
-    top: Math.max(TOOLBAR_MARGIN, top),
+    left: Math.max(minLeft, Math.min(anchorBox.x, maxLeft)),
+    top: Math.max(minTop, Math.min(top, maxTop)),
   };
 }
 
@@ -124,8 +139,10 @@ function viewportToolbarPosition({
       height: anchorBox.height * scaleY,
     },
     bounds: {
-      width: window.innerWidth,
-      height: window.innerHeight,
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
     },
     toolbarWidth,
   });

@@ -74,6 +74,8 @@ import {
   ROOT_ELEMENTS_COMPONENT_INDEX,
   STAGE_BOX,
   resizeComponent,
+  resizeComponentElementBounds,
+  resizeComponentFrame,
   scaleRawElementTextMetrics,
   selectionTouchesComponent,
   selectionTouchesElement,
@@ -95,6 +97,101 @@ import {
   type SelectOptions,
   type Selection,
 } from "@/components/slide-editor/model/model";
+
+type ComponentTransformAnchor =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "middle-left"
+  | "middle-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right"
+  | "rotater";
+
+type ComponentResizeMode =
+  | "scale-content"
+  | "resize-element-bounds"
+  | "resize-frame";
+
+const HORIZONTAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
+  "middle-left",
+  "middle-right",
+]);
+const VERTICAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
+  "top-center",
+  "bottom-center",
+]);
+
+function componentTransformAnchorForNode(
+  node: Konva.Node,
+): ComponentTransformAnchor | null {
+  const stage = node.getStage();
+  if (!stage) return null;
+  const transformer = stage
+    .find<Konva.Transformer>("Transformer")
+    .find((candidate) => candidate.getNodes().includes(node));
+  const activeAnchor = transformer?.getActiveAnchor();
+  return isComponentTransformAnchor(activeAnchor) ? activeAnchor : null;
+}
+
+function isComponentTransformAnchor(
+  value: string | null | undefined,
+): value is ComponentTransformAnchor {
+  return (
+    value === "top-left" ||
+    value === "top-center" ||
+    value === "top-right" ||
+    value === "middle-left" ||
+    value === "middle-right" ||
+    value === "bottom-left" ||
+    value === "bottom-center" ||
+    value === "bottom-right" ||
+    value === "rotater"
+  );
+}
+
+function componentResizeModeForTransform(
+  anchor: ComponentTransformAnchor | null,
+  scaleX: number,
+  scaleY: number,
+): ComponentResizeMode {
+  if (anchor === "rotater") return "resize-frame";
+  if (
+    anchor &&
+    (HORIZONTAL_RESIZE_ANCHORS.has(anchor) ||
+      VERTICAL_RESIZE_ANCHORS.has(anchor))
+  ) {
+    return "resize-element-bounds";
+  }
+  if (anchor) return "scale-content";
+
+  const changedX = Math.abs(scaleX - 1) > 0.001;
+  const changedY = Math.abs(scaleY - 1) > 0.001;
+  if (changedX && changedY) return "scale-content";
+  if (changedX || changedY) return "resize-element-bounds";
+  return "resize-frame";
+}
+
+function componentBoxFromTransform(
+  box: Box,
+  scaleX: number,
+  scaleY: number,
+  anchor: ComponentTransformAnchor | null,
+): Box & { scaleX: number; scaleY: number } {
+  const isVerticalOnly = anchor ? VERTICAL_RESIZE_ANCHORS.has(anchor) : false;
+  const isHorizontalOnly = anchor ? HORIZONTAL_RESIZE_ANCHORS.has(anchor) : false;
+  const nextScaleX = isVerticalOnly || anchor === "rotater" ? 1 : scaleX;
+  const nextScaleY = isHorizontalOnly || anchor === "rotater" ? 1 : scaleY;
+
+  return {
+    ...box,
+    width: Math.max(1, box.width * nextScaleX),
+    height: Math.max(1, box.height * nextScaleY),
+    scaleX: nextScaleX,
+    scaleY: nextScaleY,
+  };
+}
 
 
 export function RawComponentNode({
@@ -212,27 +309,42 @@ export function RawComponentNode({
         if (!node) return;
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
+        const anchor = componentTransformAnchorForNode(node);
+        const nextBox = componentBoxFromTransform(box, scaleX, scaleY, anchor);
+        const resizeMode = componentResizeModeForTransform(
+          anchor,
+          scaleX,
+          scaleY,
+        );
         node.scaleX(1);
         node.scaleY(1);
-        const nextBox = {
-          ...box,
-          width: Math.max(1, box.width * scaleX),
-          height: Math.max(1, box.height * scaleY),
-        };
         const position = positionFromNodeInParent(node, STAGE_BOX, {
           ...box,
           ...nextBox,
         });
-        onComponentChange(componentIndex, (current) =>
-          resizeComponent(current, {
+        onComponentChange(componentIndex, (current) => {
+          const nextComponentBox = {
             ...position,
             width: nextBox.width,
             height: nextBox.height,
-            scaleX,
-            scaleY,
             rotation: node.rotation(),
-          }),
-        );
+          };
+          if (resizeMode === "resize-frame") {
+            return resizeComponentFrame(current, nextComponentBox);
+          }
+          if (resizeMode === "resize-element-bounds") {
+            return resizeComponentElementBounds(current, {
+              ...nextComponentBox,
+              scaleX: nextBox.scaleX,
+              scaleY: nextBox.scaleY,
+            });
+          }
+          return resizeComponent(current, {
+            ...nextComponentBox,
+            scaleX: nextBox.scaleX,
+            scaleY: nextBox.scaleY,
+          });
+        });
       }}
     >
       {isEditMode ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}

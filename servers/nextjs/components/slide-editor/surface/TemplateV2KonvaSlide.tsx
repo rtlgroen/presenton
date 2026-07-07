@@ -132,6 +132,7 @@ import {
   setComponentPositionsInUi,
   surfaceSelectionTarget,
   positionFromNodeInParent,
+  unclampedPositionFromNodeInParent,
   updateComponentInUi,
   updateElementInUi,
   type ComponentSelection,
@@ -779,7 +780,7 @@ function TemplateV2KonvaSlideComponent({
       if (!dragState || dragState.draggedComponentIndex !== componentIndex) {
         updateComponent(componentIndex, (current) => ({
           ...current,
-          position: positionFromNodeInParent(
+          position: unclampedPositionFromNodeInParent(
             node,
             STAGE_BOX,
             componentBox(current),

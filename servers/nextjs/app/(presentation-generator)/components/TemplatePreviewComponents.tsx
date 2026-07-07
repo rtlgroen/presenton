@@ -171,7 +171,10 @@ export const TemplateV2CustomTemplatePreview = memo(function TemplateV2CustomTem
             ) : (
                 previewLayouts.slice(0, 2).map((layout, index) => (
                     <ScaledSlidePreview key={templateV2PreviewKey(templateId, layout)} index={index} isOutline={isOutline}>
-                        <TemplateV2LayoutPreview layout={layout} />
+                        <TemplateV2LayoutPreview
+                            layout={layout}
+                            useKonvaRenderer={!isOutline}
+                        />
                     </ScaledSlidePreview>
                 ))
             )}

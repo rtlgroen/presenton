@@ -358,6 +358,64 @@ export function resizeComponent(
   };
 }
 
+export function resizeComponentFrame(
+  component: RawComponent,
+  next: Box & { rotation?: number },
+) {
+  return {
+    ...component,
+    position: { x: next.x, y: next.y },
+    size: { width: next.width, height: next.height },
+    rotation: next.rotation ?? readNumber(component.rotation) ?? 0,
+  };
+}
+
+export function resizeComponentElementBounds(
+  component: RawComponent,
+  next: Box & { scaleX: number; scaleY: number; rotation?: number },
+) {
+  return {
+    ...component,
+    position: { x: next.x, y: next.y },
+    size: { width: next.width, height: next.height },
+    rotation: next.rotation ?? readNumber(component.rotation) ?? 0,
+    elements: resizeRawElementBounds(
+      readArray(component.elements),
+      next.scaleX,
+      next.scaleY,
+    ),
+  };
+}
+
+export function resizeRawElementBounds(
+  elements: unknown[],
+  scaleX: number,
+  scaleY: number,
+): unknown[] {
+  const safeScaleX = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1;
+  const safeScaleY = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1;
+
+  return elements.map((value) => {
+    const element = asRecord(value);
+    if (!element) return value;
+    const box = elementBox(element);
+    const childInfo = childArrayInfo(element);
+    const resizedChildren = childInfo
+      ? resizeRawElementBounds(childInfo.items, safeScaleX, safeScaleY)
+      : null;
+    return {
+      ...element,
+      size: {
+        width: Math.max(1, box.width * safeScaleX),
+        height: Math.max(1, box.height * safeScaleY),
+      },
+      ...(childInfo && resizedChildren
+        ? withUpdatedChildItems({}, childInfo, resizedChildren)
+        : {}),
+    };
+  });
+}
+
 export function scaleRawElements(
   elements: unknown[],
   scaleX: number,
@@ -400,17 +458,22 @@ export function positionFromNodeInParent(
   parentBox: Box,
   renderedBox: Box,
 ): Point {
+  const position = unclampedPositionFromNodeInParent(node, parentBox, renderedBox);
+  return clampRelativePosition(position, renderedBox, parentBox);
+}
+
+export function unclampedPositionFromNodeInParent(
+  node: Konva.Node,
+  parentBox: Box,
+  renderedBox: Box,
+): Point {
   const absolute = node.absolutePosition();
   const offsetX = node.offsetX() ? renderedBox.width / 2 : 0;
   const offsetY = node.offsetY() ? renderedBox.height / 2 : 0;
-  return clampRelativePosition(
-    {
-      x: absolute.x - parentBox.x - offsetX,
-      y: absolute.y - parentBox.y - offsetY,
-    },
-    renderedBox,
-    parentBox,
-  );
+  return {
+    x: absolute.x - parentBox.x - offsetX,
+    y: absolute.y - parentBox.y - offsetY,
+  };
 }
 
 export function clampRelativePosition(pos: Point, box: Box, parentSize: Size): Point {

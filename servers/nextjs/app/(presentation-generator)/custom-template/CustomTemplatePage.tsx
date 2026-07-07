@@ -27,6 +27,7 @@ import { validateLayoutCodeForClient } from "./utils/layoutCodeValidation";
 
 import { useFontLoader as loadFontAssets } from "../hooks/useFontLoad";
 import Header from "@/app/(presentation-generator)/(dashboard)/dashboard/components/Header";
+import { normalizeBackendAssetUrls } from "@/utils/api";
 
 type LibreOfficeGateState = "checking" | "ready" | "missing" | "installing" | "error";
 type LibreOfficeGateSnapshot = {
@@ -475,7 +476,10 @@ const CustomTemplatePage = ({
         if (selectedFile) {
             const data = await fontUploadAndPreview(selectedFile);
             if (data) {
-                loadFontAssets(data.fonts);
+                console.log("data", data.fonts);
+                const normalizedFonts = normalizeBackendAssetUrls(data.fonts);
+                console.log("normalizedFonts", normalizedFonts);
+                loadFontAssets(normalizedFonts);
             }
         }
     }, [selectedFile, fontUploadAndPreview]);
@@ -610,70 +614,70 @@ const CustomTemplatePage = ({
                 ) : (
                     <div className="mx-auto min-h-[600px] px-6 pb-24">
 
-                    <TemplateCreationProgress
-                        currentStep={state.step}
-                        totalSlides={state.totalSlides}
-                        processedSlides={completedSlides}
-                    />
-
-                    {/* Step 2: Font Management */}
-                    {showFontManager && (
-                        <Step2FontManagement
-                            fontsData={state.fontsData}
-                            uploadedFonts={uploadedFonts}
-                            uploadFont={uploadFont}
-                            removeFont={removeFont}
-                            onContinue={handleFontUploadAndPreview}
-                            isUploading={state.isLoading}
+                        <TemplateCreationProgress
+                            currentStep={state.step}
+                            totalSlides={state.totalSlides}
+                            processedSlides={completedSlides}
                         />
-                    )}
 
-                    {/* Step 3: Slide Preview */}
-                    {showPreview && (
-                        <Step3SlidePreview
-                            previewData={state.previewData}
-                            onInitTemplate={initTemplateCreation}
-                            isLoading={state.isLoading}
-                            defaultTemplateName={defaultTemplateName}
-                            requiresTemplateMetadata={useTemplateV2Generation}
-                        />
-                    )}
+                        {/* Step 2: Font Management */}
+                        {showFontManager && (
+                            <Step2FontManagement
+                                fontsData={state.fontsData}
+                                uploadedFonts={uploadedFonts}
+                                uploadFont={uploadFont}
+                                removeFont={removeFont}
+                                onContinue={handleFontUploadAndPreview}
+                                isUploading={state.isLoading}
+                            />
+                        )}
 
-                    {/* Step 4: Template Creation & Editing */}
-                    {showSlides && slides.length > 0 && (
-                        <Step4TemplateCreation
-                            slides={slides}
-                            templateFonts={state.previewData?.fonts}
-                            setSlides={setSlides}
-                            retrySlide={retrySlide}
-                            onSlideUpdate={handleSlideUpdate}
-                            schemaEditorSlideIndex={schemaEditorSlideIndex}
-                            onOpenSchemaEditor={handleOpenSchemaEditor}
-                            onCloseSchemaEditor={handleCloseSchemaEditor}
-                            onSchemaEditorSave={handleSchemaEditorSave}
-                            schemaPreviewData={schemaPreviewData}
-                            onSchemaPreviewContent={handleSchemaPreviewContent}
-                            onClearSchemaPreview={handleClearSchemaPreview}
-                        />
-                    )}
+                        {/* Step 3: Slide Preview */}
+                        {showPreview && (
+                            <Step3SlidePreview
+                                previewData={state.previewData}
+                                onInitTemplate={initTemplateCreation}
+                                isLoading={state.isLoading}
+                                defaultTemplateName={defaultTemplateName}
+                                requiresTemplateMetadata={useTemplateV2Generation}
+                            />
+                        )}
 
-                    {/* Floating Save Template Button */}
-                    {isProcessingCompleted && !hasV2GeneratedSlides && slides.some((s) => s.processed) && (
-                        <SaveLayoutButton
-                            onSave={openSaveModal}
+                        {/* Step 4: Template Creation & Editing */}
+                        {showSlides && slides.length > 0 && (
+                            <Step4TemplateCreation
+                                slides={slides}
+                                templateFonts={state.previewData?.fonts}
+                                setSlides={setSlides}
+                                retrySlide={retrySlide}
+                                onSlideUpdate={handleSlideUpdate}
+                                schemaEditorSlideIndex={schemaEditorSlideIndex}
+                                onOpenSchemaEditor={handleOpenSchemaEditor}
+                                onCloseSchemaEditor={handleCloseSchemaEditor}
+                                onSchemaEditorSave={handleSchemaEditorSave}
+                                schemaPreviewData={schemaPreviewData}
+                                onSchemaPreviewContent={handleSchemaPreviewContent}
+                                onClearSchemaPreview={handleClearSchemaPreview}
+                            />
+                        )}
+
+                        {/* Floating Save Template Button */}
+                        {isProcessingCompleted && !hasV2GeneratedSlides && slides.some((s) => s.processed) && (
+                            <SaveLayoutButton
+                                onSave={openSaveModal}
+                                isSaving={isSavingLayout}
+                                isProcessing={slides.some((s) => s.processing)}
+                            />
+                        )}
+
+                        {/* Save Template Modal */}
+                        <SaveLayoutModal
+                            isOpen={isModalOpen}
+                            onClose={closeSaveModal}
+                            onSave={handleSaveTemplate}
                             isSaving={isSavingLayout}
-                            isProcessing={slides.some((s) => s.processing)}
+                            template_info_id={state.templateId || ''}
                         />
-                    )}
-
-                    {/* Save Template Modal */}
-                    <SaveLayoutModal
-                        isOpen={isModalOpen}
-                        onClose={closeSaveModal}
-                        onSave={handleSaveTemplate}
-                        isSaving={isSavingLayout}
-                        template_info_id={state.templateId || ''}
-                    />
                     </div>
                 )}
             </div>
