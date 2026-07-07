@@ -55,9 +55,7 @@ export function TemplateV2TableElement({
             asRecord(cell.font) ?? asRecord(firstRun.font),
             font,
           );
-          const fill =
-            fillColor(cell.fill ?? cell.color) ??
-            (rowIndex === 0 ? "#F2F4F7" : undefined);
+          const fill = fillColor(cell.fill ?? cell.color);
           const runs = readableTableCellRuns(
             rawTableCellRuns(cell, cellFont),
             fill,
