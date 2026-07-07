@@ -27,7 +27,6 @@ type ElementToolbarProps = {
   templateFonts?: TemplateFontOption[];
   textSelectionRange?: TextSelectionRange | null;
   onChange: (index: number, element: SlideElement, path?: string) => void;
-  onEditChart?: (index: number, path?: string) => void;
   onEditImage: (index: number, path?: string) => void;
   onEditText?: (index: number, path?: string) => void;
 };
@@ -120,7 +119,7 @@ const TOOLBAR_RENDERERS: Partial<
         onChange={(index, element) => onChange(index, element, path)}
       />
     ) : null,
-  chart: ({ anchorBox, element, index, onChange, onEditChart, path, scale }) =>
+  chart: ({ anchorBox, element, index, onChange, path, scale }) =>
     element.type === "chart" ? (
       <ChartToolbar
         element={element}
@@ -128,7 +127,6 @@ const TOOLBAR_RENDERERS: Partial<
         anchorBox={anchorBox}
         scale={scale}
         onChange={(index, element) => onChange(index, element, path)}
-        onEdit={onEditChart ? (index) => onEditChart(index, path) : undefined}
       />
     ) : null,
 

@@ -38,14 +38,21 @@ import {
   type ChartType,
 } from "@/components/slide-editor/types";
 import { ChartColorPaletteCard } from "@/components/slide-editor/charts/ChartColorPalette";
-import { TemplateV2ChartElement } from "@/components/slide-editor/charts/TemplateV2ChartElement";
+import { TemplateV2ChartJsElement } from "@/components/slide-editor/charts/TemplateV2ChartJsElement";
 
 const CHART_TYPES: Array<{ label: string; value: ChartType }> = [
   { label: "Bar Chart", value: "bar" },
+  { label: "Horizontal Bar", value: "horizontal_bar" },
+  { label: "Stacked Bar", value: "stacked_bar" },
+  { label: "Horizontal Stack Bar", value: "horizontal_stacked_bar" },
   { label: "Line Chart", value: "line" },
   { label: "Area Chart", value: "area" },
   { label: "Pie Chart", value: "pie" },
   { label: "Donut Chart", value: "donut" },
+  { label: "Scatter Chart", value: "scatter" },
+  { label: "Bubble Chart", value: "bubble" },
+  { label: "Radar Chart", value: "radar" },
+  { label: "Polar Area", value: "polar_area" },
 ];
 const DATA_MODAL_CHART_PREVIEW_WIDTH = 274;
 const DATA_MODAL_CHART_PREVIEW_HEIGHT =
@@ -269,7 +276,10 @@ function ChartCustomizePanel({
   onChange: (chart: ChartElement) => void;
 }) {
   const hasCartesianAxes =
-    chart.chart_type !== "pie" && chart.chart_type !== "donut";
+    chart.chart_type !== "pie" &&
+    chart.chart_type !== "donut" &&
+    chart.chart_type !== "polar_area" &&
+    chart.chart_type !== "radar";
 
   return (
     <div className="space-y-3 pt-5">
@@ -285,16 +295,9 @@ function ChartCustomizePanel({
           }
         />
         <ToggleRow
-          checked={chart.data_labels ?? chart.data_labels ?? false}
+          checked={chart.data_labels ?? false}
           label="Show values"
           onChange={(checked) => onChange({ ...chart, data_labels: checked })}
-        />
-        <ColorRow
-          label="Label color"
-          value={chart.data_labels_color ?? "6A7894"}
-          onChange={(labelColor) =>
-            onChange({ ...chart, data_labels_color: labelColor })
-          }
         />
       </PanelSection>
 
@@ -339,17 +342,37 @@ function ChartCustomizePanel({
       ) : null}
 
       <PanelSection icon={<Settings size={18} />} label="Settings">
-        <ToggleRow
-          checked={chart.grid ?? true}
-          label="Grid lines"
-          onChange={(grid) => onChange({ ...chart, grid })}
-        />
+        {hasCartesianAxes ? (
+          <>
+            <ToggleRow
+              checked={chart.x_axis_grid ?? true}
+              label="X-axis grid"
+              onChange={(xAxisGrid) =>
+                onChange({ ...chart, x_axis_grid: xAxisGrid })
+              }
+            />
+            <ToggleRow
+              checked={chart.y_axis_grid ?? true}
+              label="Y-axis grid"
+              onChange={(yAxisGrid) =>
+                onChange({ ...chart, y_axis_grid: yAxisGrid })
+              }
+            />
+          </>
+        ) : null}
         <ChartSeriesColorControls chart={chart} onChange={onChange} />
         <ColorRow
           label="Axis color"
           value={chart.axis_color ?? "9AA7BD"}
           onChange={(axisColor) =>
             onChange({ ...chart, axis_color: axisColor })
+          }
+        />
+        <ColorRow
+          label="Grid color"
+          value={chart.grid_color ?? chart.axis_color ?? "D0D5DD"}
+          onChange={(gridColor) =>
+            onChange({ ...chart, grid_color: gridColor })
           }
         />
         <label className="block text-[12px] font-medium text-[#686873]">
@@ -586,7 +609,7 @@ function ChartDataModal({
           12,
           Math.max(1, normalizedCategories.length, normalized[0]?.values.length ?? 0),
         )
-        : 1;
+        : Math.min(12, Math.max(1, normalized.length));
     const seriesColors = Array.from({ length: colorCount }, (_, index) =>
       nextSeriesColors[index] ??
       chart.series_colors?.[index] ??
@@ -698,7 +721,7 @@ function ChartDataModal({
                   width={DATA_MODAL_CHART_PREVIEW_WIDTH}
                 >
                   <Layer listening={false}>
-                    <TemplateV2ChartElement
+                    <TemplateV2ChartJsElement
                       element={previewChart}
                       height={DATA_MODAL_CHART_PREVIEW_HEIGHT}
                       interactive={false}

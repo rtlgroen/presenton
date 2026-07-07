@@ -35,7 +35,6 @@ import {
   setRawTextRunsContent,
 } from "@/components/slide-editor/text/template-v2-text";
 import type {
-  ChartElement,
   SlideElement,
   TextRun,
 } from "@/components/slide-editor/types";
@@ -172,8 +171,6 @@ export {
   type TemplateV2InsertElementsDetail,
   type TemplateV2SurfaceSelectedDetail,
 } from "@/components/slide-editor/events/events";
-
-export type TemplateV2ChartElement = ChartElement;
 
 type TemplateV2KonvaSlideProps = {
   layout: TemplateV2Layout;
@@ -1573,7 +1570,6 @@ function TemplateV2KonvaSlideComponent({
               : null
           }
           onChange={(_index, element) => applyToolbarElementChange(element)}
-          onEditChart={() => openChartEditor(selection)}
           onEditImage={() => openImageUpload(selection)}
           onEditText={() => openInlineEditor(selection)}
         />

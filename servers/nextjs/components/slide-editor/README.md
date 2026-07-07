@@ -372,7 +372,8 @@ Rendering rules:
 - Text uses text layout helpers from `text/template-v2-text.ts`.
 - Images load through `loadKonvaImage()` and are clipped manually for rounded
   corners.
-- Charts are delegated to `charts/TemplateV2ChartElement.tsx`.
+- Charts are delegated to `charts/TemplateV2ChartJsElement.tsx`, which renders
+  Chart.js output into the Konva scene as an image-backed element.
 - Tables are delegated to `tables/TemplateV2TableElement.tsx`.
 
 ### HTML Preview Renderer
@@ -458,7 +459,7 @@ line dash support is already handled in `renderLine()` through
 | Grid layout | `layoutFlowChildren()` | `LayoutToolbar` flow controls | `placeGridChildren()`, `layoutResize.ts` | Calculates grid cells, spans, and alignment. |
 | Layout add/remove items | Layout render path | `ItemsControl` | `layoutItems.ts`, `layoutResize.ts` | Supports `children` and `elements` child arrays. |
 | Tables | `TemplateV2TableElement` | `TableToolbar`, `TableInlineEditor` | `useTableCellSelection()` | Cell editing uses text toolbar plus Tiptap editor. |
-| Charts | `TemplateV2ChartElement` | `ChartToolbar`, chart editor event | `chart-data.ts` | Chart editor is opened by event and updates selected chart. |
+| Charts | `TemplateV2ChartJsElement` | `ChartToolbar`, chart editor event | `chart-data.ts` | Chart editor is opened by event and updates selected chart. |
 | Design variables | Normal element render | `DesignVariablesToolbar` | `design-variables.ts` | Overrides element properties from predefined options. |
 | Fonts | Text/table/chart renderers | Text toolbar font picker | `google-fonts.ts`, `fontLoading.ts` | Surface waits for fonts before enabling layer. |
 
@@ -945,7 +946,7 @@ These are useful for converting table data to/from text-like drafts.
 
 Primary files:
 
-- `charts/TemplateV2ChartElement.tsx`
+- `charts/TemplateV2ChartJsElement.tsx`
 - `charts/ChartToolbar.tsx`
 - `charts/ChartEditorContent.tsx`
 - `charts/chart-data.ts`
@@ -954,9 +955,10 @@ Primary files:
 
 Rendering:
 
-- `TemplateV2ChartElement` renders chart visuals in Konva.
-- It supports chart variants such as bar, line, area, pie/donut-like visuals,
-  and generated default chart layouts.
+- `TemplateV2ChartJsElement` renders Chart.js output to an offscreen canvas and
+  places that canvas in the Konva scene.
+- It supports chart variants such as bar, horizontal/stacked bar, line, area,
+  pie/donut, scatter, bubble, radar, and polar area.
 - It normalizes raw chart categories and series before rendering.
 
 Data helpers:
@@ -1042,7 +1044,7 @@ SVG icon recoloring uses `buildSvgUpdateUrl()` from `lib/svg-color.ts`.
 | Text rendering | `surface/nodes.tsx`, `text/template-v2-text.ts` | `RawRichTextElement`, `layoutRichText`, `rawRenderTextRuns` |
 | Image rendering | `surface/nodes.tsx` | `RawImageElement`, `useLoadedKonvaImage`, `imageCornerRadii` |
 | Table rendering | `tables/TemplateV2TableElement.tsx` | `TemplateV2TableElement`, `TableCellText` |
-| Chart rendering | `charts/TemplateV2ChartElement.tsx` | `TemplateV2ChartElement`, chart-specific raw renderers |
+| Chart rendering | `charts/TemplateV2ChartJsElement.tsx` | `TemplateV2ChartJsElement`, Chart.js canvas renderer |
 | Flex/grid layout | `layout/flowLayout.ts` | `layoutFlowChildren`, `layoutFlexChildren`, `layoutGridChildren` |
 | HTML preview | `TemplateV2LayoutPreview.tsx` | `renderImage`, `renderText`, `renderFlex`, `renderGrid`, `renderChart` |
 | HTML export | `lib/template-v2-json-to-html.ts` | `renderItem`, `renderImage`, `renderLine`, `renderChart`, `boxStyle` |

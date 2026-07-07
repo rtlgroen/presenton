@@ -61,16 +61,26 @@ export const CHART_SYSTEM_COLORS = [
 ];
 
 export function resolvedChartCategories(element: ChartElement): string[] {
-  if (element.categories && element.categories.length > 0) {
-    return element.categories.slice(0, 24);
-  }
-
   const seriesLength = Math.max(
     0,
     ...(element.series ?? []).map((series) => series.values.length),
   );
+  if (element.categories && element.categories.length > 0) {
+    const categoryLength = Math.min(
+      24,
+      Math.max(element.categories.length, seriesLength),
+    );
+    return Array.from(
+      { length: categoryLength },
+      (_, index) => element.categories?.[index] ?? `Item ${index + 1}`,
+    );
+  }
+
   if (seriesLength > 0) {
-    return Array.from({ length: seriesLength }, (_, index) => `Item ${index + 1}`);
+    return Array.from(
+      { length: Math.min(24, seriesLength) },
+      (_, index) => `Item ${index + 1}`,
+    );
   }
 
   return [];
@@ -99,19 +109,13 @@ export function primaryChartData(element: ChartElement): ChartDatum[] {
   return categories.slice(0, Math.max(1, first.values.length)).map((label, index) => ({
     label,
     value: first.values[index] ?? 0,
-    color: chartSeriesColor(element, index),
+    color: chartUsesPointColors(element.chart_type)
+      ? chartSeriesColor(element, index)
+      : chartSeriesColor(element, 0),
   }));
 }
 
 export function chartSeriesColor(element: ChartElement, index: number) {
-  if (element.chart_type !== "pie" && element.chart_type !== "donut") {
-    return (
-      element.series_colors?.[0] ??
-      element.color ??
-      DEFAULT_CHART_COLORS[0]
-    );
-  }
-
   return (
     element.series_colors?.[index] ??
     (index === 0 ? element.color : null) ??
@@ -138,10 +142,18 @@ export function normalizeChartColor(
 export function chartColorTargetMode(
   element: ChartElement,
 ): ChartColorTargetMode {
-  if (element.chart_type === "pie" || element.chart_type === "donut") {
+  if (chartUsesPointColors(element.chart_type)) {
     return "point";
   }
   return "series";
+}
+
+export function chartUsesPointColors(chartType: ChartType) {
+  return (
+    chartType === "pie" ||
+    chartType === "donut" ||
+    chartType === "polar_area"
+  );
 }
 
 export function resolvedChartColorTargets(
@@ -149,14 +161,16 @@ export function resolvedChartColorTargets(
 ): ChartColorTarget[] {
   const mode = chartColorTargetMode(element);
   if (mode === "series") {
-    return [
-      {
-        color: normalizeChartColor(chartSeriesColor(element, 0)),
-        index: 0,
-        label: "Chart color",
-        mode,
-      },
-    ];
+    const seriesCount = Math.min(12, Math.max(1, element.series?.length ?? 0));
+    return Array.from({ length: seriesCount }, (_, index) => ({
+      color: normalizeChartColor(chartSeriesColor(element, index)),
+      index,
+      label:
+        seriesCount === 1
+          ? "Chart color"
+          : element.series?.[index]?.name ?? `Series ${index + 1}`,
+      mode,
+    }));
   }
 
   if (mode === "point") {
@@ -235,10 +249,7 @@ export function updateChartColorTarget(
 
   const mode = chartColorTargetMode(element);
   const targets = resolvedChartColorTargets(element);
-  const colorCount =
-    mode === "point"
-      ? Math.min(12, Math.max(targetIndex + 1, targets.length))
-      : 1;
+  const colorCount = Math.min(12, Math.max(targetIndex + 1, targets.length));
   const seriesColors = Array.from({ length: colorCount }, (_, index) =>
     normalizeChartColor(
       element.series_colors?.[index] ??
@@ -246,7 +257,7 @@ export function updateChartColorTarget(
         DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
     ),
   );
-  seriesColors[mode === "point" ? targetIndex : 0] = normalizeChartColor(color);
+  seriesColors[targetIndex] = normalizeChartColor(color);
 
   const primaryColor = seriesColors[0] ?? normalizeChartColor(color);
   const data = chartDataFromSeriesWithColors(
@@ -289,16 +300,38 @@ export function chartDataToCsv(element: ChartElement) {
 }
 
 export function rawChartType(value: unknown): ChartType {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized =
+    typeof value === "string"
+      ? value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+      : "";
   switch (normalized) {
     case "area":
       return "area";
+    case "bubble":
+      return "bubble";
+    case "donut":
+    case "doughnut":
+      return "donut";
+    case "horizontal_bar":
+    case "bar_horizontal":
+      return "horizontal_bar";
     case "line":
       return "line";
     case "pie":
       return "pie";
-    case "donut":
-      return "donut";
+    case "polar":
+    case "polar_area":
+      return "polar_area";
+    case "radar":
+      return "radar";
+    case "scatter":
+      return "scatter";
+    case "stacked":
+    case "stacked_bar":
+    case "bar_stacked":
+      return "stacked_bar";
+    case "horizontal_stacked_bar":
+      return "horizontal_stacked_bar";
     default:
       return "bar";
   }

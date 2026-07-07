@@ -1,8 +1,7 @@
 import { useState, type CSSProperties } from "react";
-import { BarChart3, Download, Palette, Pencil } from "lucide-react";
+import { BarChart3, Palette } from "lucide-react";
 import type { ChartSlideElement } from "@/components/slide-editor/state/state";
 import {
-  chartDataToCsv,
   resolvedChartColorTargets,
   updateChartColorTarget,
 } from "@/components/slide-editor/charts/chart-data";
@@ -22,14 +21,12 @@ export function ChartToolbar({
   index,
   scale,
   onChange,
-  onEdit,
 }: {
   anchorBox?: FloatingToolbarBox | null;
   element: ChartSlideElement;
   index: number;
   scale: number;
   onChange: (index: number, element: ChartSlideElement) => void;
-  onEdit?: (index: number) => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [activeColorIndex, setActiveColorIndex] = useState(0);
@@ -37,9 +34,6 @@ export function ChartToolbar({
   const activeTarget =
     colorTargets.find((target) => target.index === activeColorIndex) ??
     colorTargets[0];
-  const isDefaultPresentonChart =
-    typeof element.source === "string" &&
-    element.source.startsWith("presenton-default-");
 
   return (
     <FloatingToolbar
@@ -52,7 +46,7 @@ export function ChartToolbar({
             (element.size?.height ?? DEFAULT_CHART_TOOLBAR_SIZE.height) * scale,
         }
       }
-      fallbackWidth={330}
+      fallbackWidth={220}
       inlineEditIgnore
       style={inlineStyles.toolbar}
     >
@@ -74,9 +68,6 @@ export function ChartToolbar({
             onChange(index, {
               ...element,
               chart_type: event.target.value as ChartSlideElement["chart_type"],
-              size: isDefaultPresentonChart
-                ? { ...DEFAULT_CHART_TOOLBAR_SIZE }
-                : element.size,
             })
           }
           style={{
@@ -87,21 +78,19 @@ export function ChartToolbar({
           }}
         >
           <option value="bar">Bar Chart</option>
+          <option value="horizontal_bar">Horizontal Bar</option>
+          <option value="stacked_bar">Stacked Bar</option>
+          <option value="horizontal_stacked_bar">Horizontal Stack Bar</option>
           <option value="line">Line Chart</option>
           <option value="area">Area Chart</option>
           <option value="pie">Pie Chart</option>
           <option value="donut">Donut Chart</option>
+          <option value="scatter">Scatter Chart</option>
+          <option value="bubble">Bubble Chart</option>
+          <option value="radar">Radar Chart</option>
+          <option value="polar_area">Polar Area</option>
         </select>
       </div>
-
-      <button
-        type="button"
-        title="Edit chart"
-        onClick={() => onEdit?.(index)}
-        style={inlineStyles.iconButton}
-      >
-        <Pencil size={16} strokeWidth={2} />
-      </button>
 
       <div style={{ position: "relative" }}>
         <button
@@ -160,15 +149,6 @@ export function ChartToolbar({
           </FloatingToolbarPanel>
         ) : null}
       </div>
-
-      <button
-        type="button"
-        title="Download chart data"
-        onClick={() => downloadChartData(element)}
-        style={inlineStyles.iconButton}
-      >
-        <Download size={16} strokeWidth={2} />
-      </button>
     </FloatingToolbar>
   );
 }
@@ -214,15 +194,3 @@ const toolbarPaletteStyles = {
     overflowX: "auto",
   },
 } satisfies Record<string, CSSProperties>;
-
-function downloadChartData(element: ChartSlideElement) {
-  const blob = new Blob([chartDataToCsv(element)], {
-    type: "text/csv;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${(element.title || "chart").toLowerCase().replace(/\W+/g, "-") || "chart"}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}

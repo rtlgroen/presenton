@@ -69,13 +69,17 @@ class ImageFit(str, Enum):
 
 class ChartType(str, Enum):
     BAR = "bar"
+    HORIZONTAL_BAR = "horizontal_bar"
     LINE = "line"
     AREA = "area"
     PIE = "pie"
     DONUT = "donut"
-    COLUMN = "column"
     STACKED_BAR = "stacked_bar"
-    STACKED_COLUMN = "stacked_column"
+    HORIZONTAL_STACKED_BAR = "horizontal_stacked_bar"
+    SCATTER = "scatter"
+    BUBBLE = "bubble"
+    RADAR = "radar"
+    POLAR_AREA = "polar_area"
 
 
 class Position(BaseModel):
@@ -296,8 +300,9 @@ class Chart(BaseModel):
     categories: Optional[list[str]] = None
     series: Optional[list[ChartSeries]] = None
     data_labels: Optional[bool] = None
-    data_labels_color: Optional[str] = None
-    grid: Optional[bool] = None
+    x_axis_grid: Optional[bool] = None
+    y_axis_grid: Optional[bool] = None
+    grid_color: Optional[str] = None
     source: Optional[str] = None
 
     # Schema

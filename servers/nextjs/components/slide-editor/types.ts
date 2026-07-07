@@ -24,7 +24,19 @@ export type TextWrap = "word" | "char" | "none";
 export type Marker = "bullet" | "number" | "none";
 export type FlexDirection = "row" | "column";
 export type ImageFit = "contain" | "cover" | "fill";
-export type ChartType = "bar" | "line" | "area" | "pie" | "donut";
+export type ChartType =
+  | "area"
+  | "bar"
+  | "bubble"
+  | "donut"
+  | "horizontal_bar"
+  | "horizontal_stacked_bar"
+  | "line"
+  | "pie"
+  | "polar_area"
+  | "radar"
+  | "scatter"
+  | "stacked_bar";
 export type InfographicType = "progress_bar" | "gauge";
 
 export type Position = {
@@ -262,16 +274,17 @@ export type ChartElement = ElementBase & {
   title?: string | null;
   color?: string | null;
   axis_color?: string | null;
-  data_labels_color?: string | null;
+  grid_color?: string | null;
   series_colors?: string[] | null;
   x_axis?: boolean | null;
   y_axis?: boolean | null;
+  x_axis_grid?: boolean | null;
+  y_axis_grid?: boolean | null;
   x_axis_title?: string | null;
   y_axis_title?: string | null;
   categories?: string[] | null;
   series?: ChartSeries[] | null;
   data_labels?: boolean | null;
-  grid?: boolean | null;
   source?: string | null;
 };
 

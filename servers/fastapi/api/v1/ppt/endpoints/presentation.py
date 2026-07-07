@@ -1070,12 +1070,27 @@ def _apply_template_v2_chart_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        return copy.deepcopy(element)
-
     updated = copy.deepcopy(element)
+    updated.pop("data_labels_color", None)
+    updated.pop("grid", None)
+    if not isinstance(value, dict):
+        return updated
+
     chart_type = value.get("chartType", value.get("chart_type"))
-    if chart_type in {"bar", "line", "area", "pie", "donut"}:
+    if chart_type in {
+        "area",
+        "bar",
+        "bubble",
+        "donut",
+        "horizontal_bar",
+        "horizontal_stacked_bar",
+        "line",
+        "pie",
+        "polar_area",
+        "radar",
+        "scatter",
+        "stacked_bar",
+    }:
         updated["chart_type"] = chart_type
     if isinstance(value.get("title"), str):
         updated["title"] = value["title"]
@@ -1089,12 +1104,12 @@ def _apply_template_v2_chart_content(
     for source_key, target_key in (
         ("axisColor", "axis_color"),
         ("axis_color", "axis_color"),
+        ("gridColor", "grid_color"),
+        ("grid_color", "grid_color"),
         ("xAxisTitle", "x_axis_title"),
         ("x_axis_title", "x_axis_title"),
         ("yAxisTitle", "y_axis_title"),
         ("y_axis_title", "y_axis_title"),
-        ("dataLabelsColor", "data_labels_color"),
-        ("data_labels_color", "data_labels_color"),
         ("source", "source"),
     ):
         if isinstance(value.get(source_key), str):
@@ -1104,9 +1119,12 @@ def _apply_template_v2_chart_content(
         ("x_axis", "x_axis"),
         ("yAxis", "y_axis"),
         ("y_axis", "y_axis"),
+        ("xAxisGrid", "x_axis_grid"),
+        ("x_axis_grid", "x_axis_grid"),
+        ("yAxisGrid", "y_axis_grid"),
+        ("y_axis_grid", "y_axis_grid"),
         ("dataLabels", "data_labels"),
         ("data_labels", "data_labels"),
-        ("grid", "grid"),
     ):
         if isinstance(value.get(source_key), bool):
             updated[target_key] = value[source_key]

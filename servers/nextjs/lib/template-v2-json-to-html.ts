@@ -5,9 +5,9 @@ type JsonRecord = Record<string, unknown>;
 type RenderMode = "absolute" | "flow";
 type ChartKind =
   | "bar"
-  | "column"
+  | "horizontal_bar"
+  | "horizontal_stacked_bar"
   | "stacked_bar"
-  | "stacked_column"
   | "line"
   | "area"
   | "pie"
@@ -736,10 +736,6 @@ function chartConfig(item: JsonRecord): JsonRecord {
   const axisColor =
     normalizeChartColor(readString(item.axisColor ?? item.axis_color)) ??
     labelColor;
-  const dataLabelsColor =
-    normalizeChartColor(
-      readString(item.dataLabelsColor ?? item.data_labels_color)
-    ) ?? axisColor;
   const titleColor =
     normalizeChartColor(readString(item.titleColor ?? item.title_color)) ??
     "#111827";
@@ -752,6 +748,14 @@ function chartConfig(item: JsonRecord): JsonRecord {
   const dataLabels = readOptionalBoolean(
     item.dataLabels ?? item.data_labels,
     false
+  );
+  const xAxisGrid = readOptionalBoolean(
+    item.xAxisGrid ?? item.x_axis_grid,
+    true
+  );
+  const yAxisGrid = readOptionalBoolean(
+    item.yAxisGrid ?? item.y_axis_grid,
+    true
   );
   const config: JsonRecord = {
     type: chartJsType(chartKind),
@@ -789,7 +793,7 @@ function chartConfig(item: JsonRecord): JsonRecord {
         tooltip: { enabled: false },
         presentonDataLabels: {
           enabled: dataLabels,
-          color: dataLabelsColor,
+          color: axisColor,
           fontFamily,
           fontSize: Math.max(10, Math.min(14, readNumber(font.size) ?? 11)),
         },
@@ -803,8 +807,10 @@ function chartConfig(item: JsonRecord): JsonRecord {
     readRecord(config.options).cutout = "0%";
   } else {
     const stacked =
-      chartKind === "stacked_bar" || chartKind === "stacked_column";
-    const horizontal = chartKind === "bar" || chartKind === "stacked_bar";
+      chartKind === "stacked_bar" || chartKind === "horizontal_stacked_bar";
+    const horizontal =
+      chartKind === "horizontal_bar" ||
+      chartKind === "horizontal_stacked_bar";
     if (horizontal) {
       readRecord(config.options).indexAxis = "y";
     }
@@ -813,7 +819,10 @@ function chartConfig(item: JsonRecord): JsonRecord {
         display: readOptionalBoolean(item.xAxis ?? item.x_axis, true),
         stacked,
         beginAtZero: horizontal,
-        grid: { display: false },
+        grid: {
+          display: xAxisGrid,
+          color: gridColor,
+        },
         title: {
           display: Boolean(readString(item.xAxisTitle ?? item.x_axis_title)),
           text: readString(item.xAxisTitle ?? item.x_axis_title) ?? "",
@@ -832,7 +841,7 @@ function chartConfig(item: JsonRecord): JsonRecord {
         beginAtZero: true,
         stacked,
         grid: {
-          display: readOptionalBoolean(item.grid, false),
+          display: yAxisGrid,
           color: gridColor,
         },
         title: {
@@ -980,9 +989,11 @@ function normalizeChartColor(value: string | null): string | null {
 }
 
 function chartKindFromValue(value: string | null): ChartKind {
-  if (value === "column") return "column";
+  if (value === "horizontal_bar") return "horizontal_bar";
   if (value === "stacked_bar") return "stacked_bar";
-  if (value === "stacked_column") return "stacked_column";
+  if (value === "horizontal_stacked_bar") {
+    return "horizontal_stacked_bar";
+  }
   if (value === "line") return "line";
   if (value === "area") return "area";
   if (value === "pie") return "pie";
@@ -994,9 +1005,9 @@ function chartJsType(chartKind: ChartKind): string {
   if (chartKind === "donut") return "doughnut";
   if (chartKind === "area") return "line";
   if (
-    chartKind === "column" ||
+    chartKind === "horizontal_bar" ||
     chartKind === "stacked_bar" ||
-    chartKind === "stacked_column"
+    chartKind === "horizontal_stacked_bar"
   ) {
     return "bar";
   }

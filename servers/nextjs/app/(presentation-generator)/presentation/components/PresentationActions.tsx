@@ -215,9 +215,21 @@ const textItems = [
 
 const chartTypeItems = [
   { id: "bar", label: "Bar Chart", icon: BarChart3 },
+  { id: "horizontal_bar", label: "Horizontal Bar", icon: BarChart3 },
+  { id: "stacked_bar", label: "Stacked Bar", icon: BarChart3 },
+  {
+    id: "horizontal_stacked_bar",
+    label: "Horizontal Stack Bar",
+    icon: BarChart3,
+  },
   { id: "line", label: "Line Chart", icon: LineChart },
   { id: "pie", label: "Pie Chart", icon: PieChart },
   { id: "area", label: "Area Chart", icon: AreaChart },
+  { id: "donut", label: "Donut Chart", icon: PieChart },
+  { id: "scatter", label: "Scatter Chart", icon: Circle },
+  { id: "bubble", label: "Bubble Chart", icon: Circle },
+  { id: "radar", label: "Radar Chart", icon: PieChart },
+  { id: "polar_area", label: "Polar Area", icon: PieChart },
 ] satisfies PaletteItem[];
 
 const tableTypeItems = [

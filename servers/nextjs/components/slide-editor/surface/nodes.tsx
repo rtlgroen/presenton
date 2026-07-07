@@ -41,7 +41,7 @@ import {
 } from "@/components/slide-editor/text/template-v2-text";
 import type { TableCellSelection } from "@/components/slide-editor/state/state";
 import { loadKonvaImage } from "@/components/slide-editor/surface/exportAssets";
-import { TemplateV2ChartElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartElement";
+import { TemplateV2ChartJsElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartJsElement";
 import { TemplateV2TableElement as RawTableElement } from "@/components/slide-editor/tables/TemplateV2TableElement";
 import { buildSvgUpdateUrl } from "@/lib/svg-color";
 import {
@@ -777,7 +777,14 @@ function RawElementVisual({
     );
   }
   if (type === "chart") {
-    return <RawChartElement element={element} width={width} height={height} interactive={interactive} />;
+    return (
+      <RawChartElement
+        element={element}
+        width={width}
+        height={height}
+        interactive={interactive}
+      />
+    );
   }
   if (type === "infographic") {
     return <RawInfographicElement element={element} width={width} height={height} interactive={interactive} />;

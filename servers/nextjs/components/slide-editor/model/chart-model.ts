@@ -2,7 +2,10 @@ import type {
   ChartElement,
   ChartSeries,
 } from "@/components/slide-editor/types";
-import { rawChartType } from "@/components/slide-editor/charts/chart-data";
+import {
+  chartUsesPointColors,
+  rawChartType,
+} from "@/components/slide-editor/charts/chart-data";
 import {
   readArray,
   readNumber,
@@ -31,30 +34,35 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
     .filter((value): value is ChartSeries => value != null);
   const normalizedSeries =
     series.length > 0 ? series : [{ name: "Series 1", values: [0] }];
+  const categoryLength = Math.max(
+    categories.length,
+    ...normalizedSeries.map((item) => item.values.length),
+  );
   const normalizedCategories =
     categories.length > 0
-      ? categories
-      : normalizedSeries[0].values.map((_, index) => `Item ${index + 1}`);
+      ? Array.from(
+          { length: categoryLength },
+          (_, index) => categories[index] ?? `Item ${index + 1}`,
+        )
+      : Array.from({ length: categoryLength }, (_, index) => `Item ${index + 1}`);
   const colors = readArray(
     element.series_colors ?? element.seriesColors,
   ).map(String);
   const chartType = rawChartType(element.chart_type ?? element.chartType);
-  const usesUnifiedColor =
-    chartType === "bar" || chartType === "line" || chartType === "area";
-  const chartColors = usesUnifiedColor
-    ? [colors[0] ?? readString(element.color) ?? "7C51F8"]
-    : colors;
+  const usesPointColors = chartUsesPointColors(chartType);
+  const chartColors =
+    colors.length > 0 ? colors : [readString(element.color) ?? "7C51F8"];
   const firstSeries = normalizedSeries[0];
   const data = normalizedCategories.slice(0, 8).map((label, index) => ({
     label,
     value: firstSeries.values[index] ?? 0,
-    color: usesUnifiedColor
-      ? chartColors[0]
-      : chartColors[index] ?? chartColors[0],
+    color: usesPointColors
+      ? chartColors[index] ?? chartColors[0]
+      : chartColors[0],
   }));
 
   return {
-    ...element,
+    ...withoutRemovedChartFields(element),
     type: "chart",
     chart_type: chartType,
     data: data.length > 0 ? data : [{ label: "Item 1", value: 0 }],
@@ -62,9 +70,11 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
     series: normalizedSeries,
     series_colors: chartColors,
     axis_color: element.axis_color ?? element.axisColor,
-    data_labels_color: element.data_labels_color ?? element.labelColor,
+    grid_color: element.grid_color ?? element.gridColor,
     x_axis: element.x_axis ?? element.xAxis,
     y_axis: element.y_axis ?? element.yAxis,
+    x_axis_grid: element.x_axis_grid ?? element.xAxisGrid,
+    y_axis_grid: element.y_axis_grid ?? element.yAxisGrid,
     x_axis_title: element.x_axis_title ?? element.xAxisTitle,
     y_axis_title: element.y_axis_title ?? element.yAxisTitle,
     data_labels: element.data_labels ?? element.dataLabels,
@@ -73,8 +83,8 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
 
 export function editorChartToRawChart(source: RawElement, chart: UnknownRecord) {
   return {
-    ...source,
-    ...chart,
+    ...withoutRemovedChartFields(source),
+    ...withoutRemovedChartFields(chart),
     type: "chart",
     position: source.position,
     size: source.size,
@@ -83,12 +93,30 @@ export function editorChartToRawChart(source: RawElement, chart: UnknownRecord) 
     chart_type: chart.chartType ?? chart.chart_type ?? source.chart_type,
     series_colors: chart.seriesColors ?? chart.series_colors ?? source.series_colors,
     axis_color: chart.axisColor ?? chart.axis_color ?? source.axis_color,
-    data_labels_color:
-      chart.labelColor ?? chart.data_labels_color ?? source.data_labels_color,
+    grid_color: chart.gridColor ?? chart.grid_color ?? source.grid_color,
     x_axis: chart.xAxis ?? chart.x_axis ?? source.x_axis,
     y_axis: chart.yAxis ?? chart.y_axis ?? source.y_axis,
+    x_axis_grid:
+      chart.xAxisGrid ??
+      chart.x_axis_grid ??
+      source.x_axis_grid ??
+      source.xAxisGrid,
+    y_axis_grid:
+      chart.yAxisGrid ??
+      chart.y_axis_grid ??
+      source.y_axis_grid ??
+      source.yAxisGrid,
     x_axis_title: chart.xAxisTitle ?? chart.x_axis_title ?? source.x_axis_title,
     y_axis_title: chart.yAxisTitle ?? chart.y_axis_title ?? source.y_axis_title,
     data_labels: chart.dataLabels ?? chart.data_labels ?? source.data_labels,
   };
+}
+
+function withoutRemovedChartFields(element: UnknownRecord) {
+  const sanitized = { ...element };
+  delete sanitized.data_labels_color;
+  delete sanitized.dataLabelsColor;
+  delete sanitized.labelColor;
+  delete sanitized.grid;
+  return sanitized;
 }
