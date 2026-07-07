@@ -211,6 +211,7 @@ export function RawComponentNode({
   onComponentDragMove,
   onComponentDragEnd,
   onElementChange,
+  fontRevision,
 }: {
   component: RawComponent;
   componentIndex: number;
@@ -242,6 +243,7 @@ export function RawComponentNode({
     selection: ElementSelection,
     updater: (element: RawElement) => RawElement,
   ) => void;
+  fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
   const box = componentBox(component);
@@ -365,6 +367,7 @@ export function RawComponentNode({
           onElementChange={onElementChange}
           parentBox={box}
           layoutManaged={false}
+          fontRevision={fontRevision}
         />
       ))}
     </Group>
@@ -389,7 +392,8 @@ export const MemoizedRawComponentNode = memo(
       previous.onComponentDragMove !== next.onComponentDragMove ||
       previous.onComponentDragEnd !== next.onComponentDragEnd ||
       previous.onElementChange !== next.onElementChange ||
-      previous.selectedTableCell !== next.selectedTableCell
+      previous.selectedTableCell !== next.selectedTableCell ||
+      previous.fontRevision !== next.fontRevision
     ) {
       return false;
     }
@@ -420,6 +424,7 @@ function RawElementNode({
   parentBox,
   renderBox,
   layoutManaged = false,
+  fontRevision,
 }: {
   element: RawElement;
   componentIndex: number;
@@ -447,6 +452,7 @@ function RawElementNode({
   parentBox: Box;
   renderBox?: Box | null;
   layoutManaged?: boolean;
+  fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
   const box = renderBox ?? elementBox(element);
@@ -573,6 +579,7 @@ function RawElementNode({
           selectedTableCell={selectedCell}
           onTableCellSelect={handleTableCellSelect}
           onTableCellEdit={handleTableCellEdit}
+          fontRevision={fontRevision}
         />
       )}
       {laidOutChildren.map(({ child, index, box: childBox, layoutManaged }) => (
@@ -598,6 +605,7 @@ function RawElementNode({
           }}
           renderBox={childBox}
           layoutManaged={layoutManaged}
+          fontRevision={fontRevision}
         />
       ))}
     </Group>
@@ -610,6 +618,7 @@ export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
     previous.componentIndex !== next.componentIndex ||
     previous.isEditMode !== next.isEditMode ||
     previous.layoutManaged !== next.layoutManaged ||
+    previous.fontRevision !== next.fontRevision ||
     previous.selectedTableCell !== next.selectedTableCell ||
     previous.setNodeRef !== next.setNodeRef ||
     previous.onSelect !== next.onSelect ||
@@ -665,6 +674,7 @@ function RawElementVisual({
   selectedTableCell,
   onTableCellSelect,
   onTableCellEdit,
+  fontRevision,
 }: {
   element: RawElement;
   width: number;
@@ -673,7 +683,9 @@ function RawElementVisual({
   selectedTableCell: TableCellSelection | null;
   onTableCellSelect: (rowIndex: number, colIndex: number) => void;
   onTableCellEdit: (rowIndex: number, colIndex: number) => void;
+  fontRevision: number;
 }) {
+  void fontRevision;
   const type = readString(element.type);
   if (isBoxVisualType(type)) {
     const fill = colorWithOpacity(
@@ -807,7 +819,8 @@ const MemoizedRawElementVisual = memo(
     previous.interactive === next.interactive &&
     previous.selectedTableCell === next.selectedTableCell &&
     previous.onTableCellSelect === next.onTableCellSelect &&
-    previous.onTableCellEdit === next.onTableCellEdit,
+    previous.onTableCellEdit === next.onTableCellEdit &&
+    previous.fontRevision === next.fontRevision,
 );
 
 function RawRichTextElement({

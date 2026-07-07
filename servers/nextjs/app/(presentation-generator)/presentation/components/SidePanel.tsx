@@ -190,7 +190,7 @@ const SidePanel = ({
                     selected={selectedSlide === index}
                     fonts={presentationData.fonts}
                     presentationVersion={presentationData.version}
-                    onClick={() => onSlideClick(slide.index ?? index)}
+                    onClick={() => onSlideClick(index)}
                   />
                 ))
               ) : (

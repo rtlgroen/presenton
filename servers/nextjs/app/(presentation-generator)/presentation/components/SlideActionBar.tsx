@@ -92,8 +92,11 @@ const SlideActionBar = ({
     : [];
   const slideCount = slides.length;
   const hasReachedSlideLimit = slideCount >= MAX_NUMBER_OF_SLIDES;
-  const currentIndex =
-    typeof slide?.index === "number" ? slide.index : selectedSlide;
+  const currentIndex = Number.isInteger(selectedSlide)
+    ? selectedSlide
+    : typeof slide?.index === "number"
+      ? slide.index
+      : 0;
   const slideLayout = typeof slide?.layout === "string" ? slide.layout : "";
   const templateId = useMemo(() => getSlideTemplateId(slide), [slide]);
   const isTemplateV2Slide = templateId.startsWith("template-v2");

@@ -193,6 +193,7 @@ function TemplateV2KonvaSlideComponent({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null);
   const nodeRefs = useRef(new Map<string, Konva.Node>());
+  const contentLayerRef = useRef<Konva.Layer | null>(null);
   const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageUploadRef = useRef<ElementSelection | null>(null);
   const undoStackRef = useRef<RawUi[]>([]);
@@ -382,13 +383,14 @@ function TemplateV2KonvaSlideComponent({
     () => surfaceSelectionTarget(uiDraft, selection, surfaceSlideIndex),
     [selection, surfaceSlideIndex, uiDraft],
   );
-  const contentLayerKey = isEditMode
-    ? `template-v2-edit-layer:${fontLoadState.revision}`
-    : `fonts:${fontLoadState.revision}`;
-
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+
+  useEffect(() => {
+    if (!fontLoadState.ready) return;
+    contentLayerRef.current?.batchDraw();
+  }, [fontLoadState.ready, fontLoadState.revision]);
 
   useEffect(() => {
     selectedComponentIndexesRef.current = selectedComponentIndexes;
@@ -1550,11 +1552,7 @@ function TemplateV2KonvaSlideComponent({
         <Layer listening={false}>
           <Rect width={STAGE_WIDTH} height={STAGE_HEIGHT} fill={backgroundColor(uiDraft)} />
         </Layer>
-        <Layer
-          key={contentLayerKey}
-          listening={fontLoadState.ready}
-          visible={fontLoadState.ready}
-        >
+        <Layer ref={contentLayerRef} listening={isEditMode}>
           {rootElements.map((element, elementIndex) => (
             <MemoizedRawElementNode
               key={`root:${rawElementKey(element, elementIndex)}`}
@@ -1572,6 +1570,7 @@ function TemplateV2KonvaSlideComponent({
               onElementChange={updateElement}
               parentBox={STAGE_BOX}
               layoutManaged={false}
+              fontRevision={fontLoadState.revision}
             />
           ))}
           {components.map((component, componentIndex) => (
@@ -1596,6 +1595,7 @@ function TemplateV2KonvaSlideComponent({
               onComponentDragMove={handleComponentDragMove}
               onComponentDragEnd={handleComponentDragEnd}
               onElementChange={updateElement}
+              fontRevision={fontLoadState.revision}
             />
           ))}
           {isEditMode ? (

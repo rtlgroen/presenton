@@ -97,6 +97,15 @@ const IDLE_LOADING_STATE: LoadingState = {
   extra_info: "",
 };
 
+const WHEEL_PAGE_THRESHOLD_PX = 48;
+const WHEEL_PAGE_LOCK_MS = 360;
+
+function wheelDeltaToPixels(delta: number, mode: number, pageSize: number) {
+  if (mode === 1) return delta * 16;
+  if (mode === 2) return delta * pageSize;
+  return delta;
+}
+
 const PresentationPage: React.FC<PresentationPageProps> = ({
   presentation_id,
 }) => {
@@ -128,6 +137,11 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
   >(() => new Set());
   const [error, setError] = useState(false);
   const slidesScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const selectedSlideRef = useRef(0);
+  const wheelDeltaRef = useRef(0);
+  const wheelDirectionRef = useRef(0);
+  const wheelPagingLockedRef = useRef(false);
+  const wheelUnlockTimeoutRef = useRef<number | null>(null);
   const router = useRouter();
   const shouldPreloadTemplateV2Presentation =
     searchParams.get("editor") === "v2";
@@ -136,10 +150,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
     (state: RootState) => state.presentationGeneration
   );
   const slidesLength = presentationData?.slides?.length ?? 0;
-  const lastStreamingSlideIndex =
-    slidesLength > 0
-      ? presentationData?.slides?.[slidesLength - 1]?.index
-      : undefined;
   const isTemplateV2Presentation =
     hasTemplateV2Layouts(presentationData?.layout) ||
     hasTemplateV2Slides(presentationData?.slides);
@@ -164,6 +174,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
     isPresentMode,
     stream,
     currentSlide: presentSlideFromUrl,
+    scrollToSlide,
     handleSlideClick,
     toggleFullscreen,
     handlePresentExit,
@@ -225,6 +236,18 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
   }, [loading, stream]);
 
   useEffect(() => {
+    selectedSlideRef.current = selectedSlide;
+  }, [selectedSlide]);
+
+  useEffect(() => {
+    return () => {
+      if (wheelUnlockTimeoutRef.current != null) {
+        window.clearTimeout(wheelUnlockTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isStreaming) return;
 
     const scrollContainer = slidesScrollContainerRef.current;
@@ -236,22 +259,11 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
         return;
       }
 
-      if (lastStreamingSlideIndex === undefined) return;
-
-      const slideElement = document.getElementById(
-        `slide-${lastStreamingSlideIndex}`
-      );
-      if (!slideElement) return;
-
-      slideElement.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-        inline: "nearest",
-      });
+      scrollToSlide(slidesLength - 1, 2, "smooth");
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isStreaming, lastStreamingSlideIndex, slidesLength]);
+  }, [isStreaming, scrollToSlide, slidesLength]);
 
   useEffect(() => {
     trackEvent(MixpanelEvent.Presentation_Editor_Viewed, {
@@ -352,6 +364,67 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
 
   const totalSlides = presentationData?.slides?.length ?? 0;
   const highlightedSlideIndex = glowingSlideIndex;
+
+  const handleSlidesWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (loading || error || totalSlides <= 1 || event.defaultPrevented) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest(
+          "input, textarea, select, [contenteditable='true'], [data-inline-edit-ignore='true']"
+        )
+      ) {
+        return;
+      }
+
+      const pageSize = event.currentTarget.clientHeight || window.innerHeight;
+      const deltaY = wheelDeltaToPixels(event.deltaY, event.deltaMode, pageSize);
+      const deltaX = wheelDeltaToPixels(event.deltaX, event.deltaMode, pageSize);
+      if (Math.abs(deltaY) <= Math.abs(deltaX) || Math.abs(deltaY) < 1) {
+        return;
+      }
+
+      event.preventDefault();
+      if (wheelPagingLockedRef.current) return;
+
+      const direction = deltaY > 0 ? 1 : -1;
+      if (wheelDirectionRef.current !== direction) {
+        wheelDirectionRef.current = direction;
+        wheelDeltaRef.current = 0;
+      }
+
+      wheelDeltaRef.current += deltaY;
+      if (Math.abs(wheelDeltaRef.current) < WHEEL_PAGE_THRESHOLD_PX) {
+        return;
+      }
+
+      wheelDeltaRef.current = 0;
+      const currentSlide = selectedSlideRef.current;
+      const nextSlide = Math.min(
+        Math.max(currentSlide + direction, 0),
+        totalSlides - 1
+      );
+      if (nextSlide === currentSlide) return;
+
+      wheelPagingLockedRef.current = true;
+      selectedSlideRef.current = nextSlide;
+      setSelectedSlide(nextSlide);
+      scrollToSlide(nextSlide, 2, "smooth");
+
+      if (wheelUnlockTimeoutRef.current != null) {
+        window.clearTimeout(wheelUnlockTimeoutRef.current);
+      }
+      wheelUnlockTimeoutRef.current = window.setTimeout(() => {
+        wheelPagingLockedRef.current = false;
+        wheelDeltaRef.current = 0;
+      }, WHEEL_PAGE_LOCK_MS);
+    },
+    [error, loading, scrollToSlide, totalSlides]
+  );
 
   useEffect(() => {
     if (loading || error || totalSlides <= 0) return;
@@ -626,7 +699,9 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           <div className="w-full min-w-0 h-full flex-1 pt-[18px]">
             <div
               ref={slidesScrollContainerRef}
-              className="font-inter h-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain scroll-smooth hide-scrollbar"
+              data-presentation-slides-scroll-container="true"
+              className="font-inter h-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain hide-scrollbar"
+              onWheel={handleSlidesWheel}
             >
               <div className="mx-auto flex h-full min-h-full w-full max-w-[1280px] flex-col items-center">
                 {!presentationData ||
@@ -656,6 +731,9 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                             index={index}
                             presentationId={presentation_id}
                             onSlideAdded={handleEditorSlideNavigation}
+                            theme={presentationData?.theme}
+                            fonts={presentationData?.fonts}
+                            isStreaming={isStreaming}
                             showBlankPromptOverlay={
                               typeof slide?.id === "string" &&
                               blankPromptSlideIds.has(slide.id)
