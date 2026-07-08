@@ -138,6 +138,74 @@ test("renders camelCase image crop scale", async () => {
   assert.match(html, /object-fit:cover/);
   assert.match(html, /object-position:35% 65%/);
   assert.match(html, /transform:scale\(2\.25\)/);
+  assert.match(html, /transform-origin:35% 65%;/);
+  assert.match(
+    html,
+    /<div style="[^"]*overflow:hidden;"><img alt="" src="https:\/\/example\.com\/image\.png" style="display:block;max-width:none;max-height:none;height:100%;width:100%;object-fit:cover;object-position:35% 65%;transform:scale\(2\.25\);transform-origin:35% 65%;"><\/div>/
+  );
+});
+
+test("resets global image sizing for positioned images", async () => {
+  const { templateV2UiToHtmlFragment } = await rendererPromise;
+  const html = templateV2UiToHtmlFragment({
+    background: "#FFFFFF",
+    elements: [
+      {
+        type: "image",
+        data: "/static/images/placeholder.jpg",
+        fit: "fill",
+        position: { x: -133.33, y: -95.16 },
+        size: { width: 500.53, height: 750.79 },
+      },
+    ],
+  });
+
+  assert.ok(html);
+  assert.match(html, /display:block;max-width:none;max-height:none;object-fit:fill/);
+});
+
+test("clips positioned image children that overflow containers", async () => {
+  const { templateV2UiToHtmlFragment } = await rendererPromise;
+  const html = templateV2UiToHtmlFragment({
+    background: "#FFFFFF",
+    elements: [
+      {
+        type: "container",
+        position: { x: 10, y: 10 },
+        size: { width: 100, height: 100 },
+        child: {
+          type: "image",
+          data: "https://example.com/photo.jpg",
+          position: { x: -20, y: 0 },
+          size: { width: 140, height: 100 },
+        },
+      },
+    ],
+  });
+
+  assert.ok(html);
+  assert.match(html, /justify-content:flex-start;overflow:hidden"><img/);
+});
+
+test("matches reference transform order for flipped rotated images", async () => {
+  const { templateV2UiToHtmlFragment } = await rendererPromise;
+  const html = templateV2UiToHtmlFragment({
+    background: "#FFFFFF",
+    elements: [
+      {
+        type: "image",
+        data: "https://example.com/photo.jpg",
+        rotation: 30,
+        flipH: true,
+        position: { x: 0, y: 0 },
+        size: { width: 120, height: 80 },
+      },
+    ],
+  });
+
+  assert.ok(html);
+  assert.match(html, /transform:rotate\(30deg\) scaleX\(-1\)/);
+  assert.doesNotMatch(html, /rotate\(-30deg\)/);
 });
 
 test("uses point colors for single-series chart data", async () => {
