@@ -846,6 +846,76 @@ def test_add_slide_component_expands_tiny_table_block():
     assert table["size"] == {"width": 1024.0, "height": 410.0}
 
 
+def test_add_slide_component_normalizes_table_cell_content_aliases():
+    slide = _slide()
+    tools, _ = _tools(slide)
+    component = {
+        "id": "people-table",
+        "description": "A table with people and departments.",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 1024, "height": 410},
+        "elements": [
+            {
+                "type": "table",
+                "decorative": False,
+                "name": "People table",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": 1024, "height": 410},
+                "headers": [
+                    {"content": "Name"},
+                    {"value": "Age"},
+                    {"text": {"text": "Department"}},
+                ],
+                "rows": [
+                    [
+                        {"content": "Ghanshyam"},
+                        {"value": 30},
+                        {"label": "QA"},
+                    ],
+                    [
+                        {"text": "Sudeep"},
+                        {"content": 33},
+                        {"data": "AI"},
+                    ],
+                ],
+                "min_columns": 1,
+                "max_columns": 6,
+                "min_rows": 1,
+                "max_rows": 10,
+            }
+        ],
+    }
+
+    result = _call(
+        tools,
+        "addComponent",
+        {"index": 0, "component": json.dumps(component)},
+    )
+
+    table = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert [cell["runs"][0]["text"] for cell in table["columns"]] == [
+        "Name",
+        "Age",
+        "Department",
+    ]
+    assert [[cell["runs"][0]["text"] for cell in row] for row in table["rows"]] == [
+        ["Ghanshyam", "30", "QA"],
+        ["Sudeep", "33", "AI"],
+    ]
+
+    elements = _call(
+        tools,
+        "getSlideAtIndex",
+        {"index": 0, "includeFullContent": True},
+    )["result"]["slide"]["ui_summary"]["elements"]
+    added_table = next(element for element in elements if element["name"] == "People table")
+    assert added_table["content"] == {
+        "columns": ["Name", "Age", "Department"],
+        "rows": [["Ghanshyam", "30", "QA"], ["Sudeep", "33", "AI"]],
+    }
+
+
 def test_ui_tool_reports_non_ui_slide():
     slide = _slide()
     slide.ui = None

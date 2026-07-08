@@ -1747,9 +1747,7 @@ class PresentationChatMemoryLayer:
         new_component.setdefault(
             "description", f"Component {new_id} added via assistant."
         )
-        # The renderer reads the flattened top-level `text` in preference to
-        # `runs` for text elements. Keep them consistent so an added block is
-        # actually visible regardless of which field the model populated.
+        # Keep assistant-authored text content in the canonical renderable shape.
         self._sync_ui_text_fields(new_component)
         self._normalize_added_visual_block(new_component)
         self._fit_component_to_stage(new_component)
@@ -1882,12 +1880,7 @@ class PresentationChatMemoryLayer:
 
     @staticmethod
     def _sync_ui_text_fields(node: Any) -> None:
-        """Recursively keep text elements' flattened `text` in sync with `runs`.
-
-        The Konva renderer (rawTextContent in TemplateV2KonvaSlide.tsx) reads the
-        top-level `text` in preference to `runs`, so a text element that only has
-        one of the two would render inconsistently or revert on the next edit.
-        """
+        """Recursively keep assistant-authored text content renderable."""
         if isinstance(node, dict):
             if node.get("type") == "text":
                 runs = node.get("runs")
@@ -1900,11 +1893,139 @@ class PresentationChatMemoryLayer:
                     node["text"] = joined
                 elif isinstance(node.get("text"), str):
                     node["runs"] = [{"text": node["text"]}]
+            elif node.get("type") == "table":
+                PresentationChatMemoryLayer._sync_ui_table_cells(node)
             for value in node.values():
                 PresentationChatMemoryLayer._sync_ui_text_fields(value)
         elif isinstance(node, list):
             for value in node:
                 PresentationChatMemoryLayer._sync_ui_text_fields(value)
+
+    @staticmethod
+    def _sync_ui_table_cells(element: dict[str, Any]) -> None:
+        fallback_font = element.get("font")
+        columns = element.get("columns")
+        if not isinstance(columns, list) and isinstance(element.get("headers"), list):
+            columns = element["headers"]
+        if isinstance(columns, list):
+            element["columns"] = [
+                PresentationChatMemoryLayer._normalized_ui_table_cell(
+                    cell,
+                    fallback_font,
+                )
+                for cell in columns
+            ]
+
+        rows = element.get("rows")
+        if isinstance(rows, list):
+            element["rows"] = [
+                [
+                    PresentationChatMemoryLayer._normalized_ui_table_cell(
+                        cell,
+                        fallback_font,
+                    )
+                    for cell in row
+                ]
+                if isinstance(row, list)
+                else row
+                for row in rows
+            ]
+
+    @staticmethod
+    def _normalized_ui_table_cell(cell: Any, fallback_font: Any) -> dict[str, Any]:
+        if isinstance(cell, dict):
+            normalized = copy.deepcopy(cell)
+            cell_font = normalized.get("font") or fallback_font
+            existing_runs = normalized.get("runs")
+            normalized_runs = (
+                PresentationChatMemoryLayer._normalized_ui_text_runs(
+                    existing_runs,
+                    cell_font,
+                )
+                if isinstance(existing_runs, list)
+                else []
+            )
+            alias_text = PresentationChatMemoryLayer._table_cell_alias_text(normalized)
+            if normalized_runs and (
+                PresentationChatMemoryLayer._runs_plain_text(normalized_runs)
+                or not alias_text
+            ):
+                normalized["runs"] = normalized_runs
+            else:
+                normalized["runs"] = PresentationChatMemoryLayer._replacement_runs_from_existing(
+                    existing_runs,
+                    alias_text,
+                    cell_font,
+                )
+            return normalized
+
+        return {
+            "runs": PresentationChatMemoryLayer._replacement_runs_from_existing(
+                None,
+                PresentationChatMemoryLayer._table_cell_text_value(cell),
+                fallback_font,
+            )
+        }
+
+    @staticmethod
+    def _normalized_ui_text_runs(runs: list[Any], fallback_font: Any) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for run in runs:
+            if isinstance(run, dict):
+                next_run = copy.deepcopy(run)
+                next_run["text"] = PresentationChatMemoryLayer._table_cell_text_value(
+                    next_run.get("text")
+                    if "text" in next_run
+                    else next_run.get("content")
+                    if "content" in next_run
+                    else next_run.get("value")
+                )
+                normalized.append(next_run)
+            else:
+                next_run = {
+                    "text": PresentationChatMemoryLayer._table_cell_text_value(run)
+                }
+                if isinstance(fallback_font, dict):
+                    next_run["font"] = copy.deepcopy(fallback_font)
+                normalized.append(next_run)
+        return normalized
+
+    @staticmethod
+    def _runs_plain_text(runs: list[dict[str, Any]]) -> str:
+        return "".join(str(run.get("text") or "") for run in runs)
+
+    @staticmethod
+    def _table_cell_alias_text(cell: dict[str, Any]) -> str:
+        for key in ("text", "content", "value", "label", "data"):
+            if key in cell:
+                return PresentationChatMemoryLayer._table_cell_text_value(cell[key])
+        return ""
+
+    @staticmethod
+    def _table_cell_text_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (str, int, float, bool)):
+            return str(value)
+        if isinstance(value, list):
+            return "".join(
+                PresentationChatMemoryLayer._table_cell_text_value(item)
+                for item in value
+            )
+        if isinstance(value, dict):
+            runs = value.get("runs")
+            if isinstance(runs, list):
+                text = "".join(
+                    PresentationChatMemoryLayer._table_cell_text_value(run)
+                    for run in runs
+                )
+                if text:
+                    return text
+            for key in ("text", "content", "value", "label", "data"):
+                if key in value:
+                    return PresentationChatMemoryLayer._table_cell_text_value(value[key])
+            return ""
+        return str(value)
 
     @staticmethod
     def _normalize_added_visual_block(component: dict[str, Any]) -> None:

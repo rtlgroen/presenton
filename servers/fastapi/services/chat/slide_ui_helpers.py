@@ -502,10 +502,15 @@ def _element_content(element: dict[str, Any]) -> Any:
         items = element.get("items") if isinstance(element.get("items"), list) else []
         return {"items": [_runs_text(item) for item in items]}
     if element_type == "table":
+        columns = element.get("columns")
+        if not isinstance(columns, list) and isinstance(element.get("headers"), list):
+            columns = element["headers"]
+        if not isinstance(columns, list):
+            columns = []
         return {
-            "columns": [_runs_text(cell.get("runs")) for cell in _dicts(element.get("columns"))],
+            "columns": [_table_value_text(cell) for cell in columns],
             "rows": [
-                [_runs_text(cell.get("runs")) for cell in _dicts(row)]
+                [_table_value_text(cell) for cell in row]
                 for row in element.get("rows", [])
                 if isinstance(row, list)
             ],
@@ -975,11 +980,17 @@ def _replacement_table_cell(value: Any, existing: dict[str, Any] | None) -> dict
 
 def _table_value_text(value: Any) -> str:
     if isinstance(value, dict):
-        if isinstance(value.get("text"), str):
-            return value["text"]
         runs = value.get("runs")
         if isinstance(runs, list):
-            return _runs_text(runs)
+            text = _runs_text(runs)
+            if text:
+                return text
+        for key in ("text", "content", "value", "label", "data"):
+            if key in value:
+                return _table_value_text(value[key])
+        return ""
+    if isinstance(value, list):
+        return "".join(_table_value_text(item) for item in value)
     if value is None:
         return ""
     return str(value)
