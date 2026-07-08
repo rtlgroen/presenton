@@ -73,7 +73,7 @@ const DashboardSidebar = () => {
                                 <span className="text-[11px] text-slate-800">Templates</span>
                             </div>
                         </Link>
-                        <Link
+                        {/* <Link
                             prefetch={false}
                             href={`/theme`}
                             className={[
@@ -87,7 +87,7 @@ const DashboardSidebar = () => {
                                 <Palette className={`h-4 w-4 ${pathname === "/theme" ? "text-[#5146E5]" : "text-slate-600"}`} />
                                 <span className="text-[11px] text-slate-800">Themes</span>
                             </div>
-                        </Link>
+                        </Link> */}
                     </div>
                 </nav>
             </div>

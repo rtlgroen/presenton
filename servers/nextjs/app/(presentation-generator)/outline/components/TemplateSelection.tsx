@@ -1,39 +1,40 @@
 "use client";
-import React, { useEffect, useMemo, useCallback, memo } from "react";
-
-
+import React, { useCallback, useEffect, memo, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-
 import { CheckCircle2, Loader2 } from "lucide-react";
-
-import CreateCustomTemplate from "../../(dashboard)/templates/components/CreateCustomTemplate";
-import { CustomTemplateCard } from "./CustomTemplateCard";
+import { toast } from "sonner";
+import TemplateService, { TemplateListItem } from "../../services/api/template";
 import {
   TemplatePreviewStage,
   LayoutsBadge,
-  InbuiltTemplatePreview,
+  TemplateThumbnailPreview,
 } from "../../components/TemplatePreviewComponents";
+import { partitionTemplatesByDefault } from "../../utils/partitionTemplates";
+import CreateCustomTemplate from "../../(dashboard)/templates/components/CreateCustomTemplate";
 
-const BuiltInTemplateCard = memo(function BuiltInTemplateCard({
+const TemplateCard = memo(function TemplateCard({
   template,
   isSelected,
   onSelect,
 }: {
-  template: TemplateLayoutsWithSettings;
+  template: TemplateListItem;
   isSelected: boolean;
-  onSelect: (template: TemplateLayoutsWithSettings) => void;
+  onSelect: (templateId: string) => void;
 }) {
-  const handleClick = useCallback(() => onSelect(template), [onSelect, template]);
+  const handleClick = useCallback(
+    () => onSelect(template.id),
+    [onSelect, template.id]
+  );
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key !== "Enter" && event.key !== " ") {
         return;
       }
       event.preventDefault();
-      onSelect(template);
+      onSelect(template.id);
     },
-    [onSelect, template]
+    [onSelect, template.id]
   );
 
   return (
@@ -60,131 +61,164 @@ const BuiltInTemplateCard = memo(function BuiltInTemplateCard({
         </span>
       )}
       <TemplatePreviewStage>
-        <LayoutsBadge count={template.layouts.length} />
-        <InbuiltTemplatePreview layouts={template.layouts} templateId={template.id} isOutline={true} />
+        <LayoutsBadge count={template.layout_count ?? 0} />
+        <TemplateThumbnailPreview
+          thumbnail={template.thumbnail}
+          templateName={template.name}
+        />
       </TemplatePreviewStage>
       <div className="flex items-center justify-between px-6 py-5 bg-white border-t border-[#EDEEEF] relative z-40">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-bold text-gray-900 capitalize font-syne">
             {template.name}
           </h3>
-          <p className="text-xs text-gray-600 line-clamp-2 font-syne">
-            {template.description}
-          </p>
+          {template.description && (
+            <p className="text-xs text-gray-600 line-clamp-2 font-syne">
+              {template.description}
+            </p>
+          )}
         </div>
       </div>
     </Card>
   );
 });
 
-interface TemplateSelectionProps {
-  selectedTemplateId: string | null;
-  onSelectTemplateId: (templateId: string) => void;
-  useTemplateV2Templates?: boolean;
-}
-
-const TemplateSelection: React.FC<TemplateSelectionProps> = memo(function TemplateSelection({
+function TemplateSection({
+  title,
+  templates,
   selectedTemplateId,
   onSelectTemplateId,
-  useTemplateV2Templates = false,
+  showCreateCard = false,
+}: {
+  title: string;
+  templates: TemplateListItem[];
+  selectedTemplateId: string | null;
+  onSelectTemplateId: (templateId: string) => void;
+  showCreateCard?: boolean;
 }) {
-  useEffect(() => {
-    const existingScript = document.querySelector(
-      'script[src*="tailwindcss.com"]'
-    );
-    if (!existingScript) {
-      const script = document.createElement("script");
-      script.src = "https://cdn.tailwindcss.com";
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }, []);
+  if (!showCreateCard && templates.length === 0) {
+    return null;
+  }
 
-  const { templates: customTemplates, loading: customLoading } = useCustomTemplateSummaries({
-    useTemplateV2: useTemplateV2Templates,
-  });
-
-  const handleCustomSelect = useCallback(
-    (template: TemplateLayoutsWithSettings | string) => onSelectTemplate(template),
-    [onSelectTemplate]
-  );
-
-  const handleBuiltInSelect = useCallback(
-    (template: TemplateLayoutsWithSettings) => onSelectTemplate(template),
-    [onSelectTemplate]
-  );
-
-  const selectedCustomId = useMemo(
-    () => (typeof selectedTemplate === "string" ? selectedTemplate : null),
-    [selectedTemplate]
-  );
-
-  const selectedBuiltInId = useMemo(
-    () => (typeof selectedTemplate !== "string" ? selectedTemplate?.id ?? null : null),
-    [selectedTemplate]
-  );
-
-  const customTemplateCards = useMemo(() => {
-    if (customLoading) {
-      return (
-        <div className="flex items-center justify-center py-12 font-syne">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <span className="ml-3 text-gray-600">Loading custom templates...</span>
-        </div>
-      );
-    }
-    if (customTemplates.length === 0) {
-      return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          <CreateCustomTemplate />
-        </div>
-      );
-    }
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {customTemplates.map((template: CustomTemplates) => (
-          <CustomTemplateCard
+  return (
+    <div>
+      <h3 className="text-base font-semibold text-gray-900 mb-3 font-syne">
+        {title}
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {showCreateCard && <CreateCustomTemplate />}
+        {templates.map((template) => (
+          <TemplateCard
             key={template.id}
             template={template}
-            onSelectTemplate={handleCustomSelect}
-            selectedTemplate={selectedCustomId}
+            isSelected={selectedTemplateId === template.id}
+            onSelect={onSelectTemplateId}
           />
         ))}
       </div>
-    );
-  }, [customLoading, customTemplates, handleCustomSelect, selectedCustomId]);
-
-  const builtInTemplateCards = useMemo(
-    () =>
-      templates.map((template: TemplateLayoutsWithSettings) => (
-        <BuiltInTemplateCard
-          key={template.id}
-          template={template}
-          isSelected={selectedBuiltInId === template.id}
-          onSelect={handleBuiltInSelect}
-        />
-      )),
-    [selectedBuiltInId, handleBuiltInSelect]
-  );
-
-  return (
-    <div className="space-y-[30px] mb-4">
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-gray-900 font-syne">
-            {useTemplateV2Templates ? "Templates V2" : "Custom"}
-          </h3>
-        </div>
-        {customTemplateCards}
-      </div>
-      <div>
-        <h3 className="text-base font-semibold text-gray-900 mb-3 font-syne">In Built</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {builtInTemplateCards}
-        </div>
-      </div>
     </div>
   );
-});
+}
+
+interface TemplateSelectionProps {
+  selectedTemplateId: string | null;
+  onSelectTemplateId: (templateId: string) => void;
+}
+
+const TemplateSelection: React.FC<TemplateSelectionProps> = memo(
+  function TemplateSelection({ selectedTemplateId, onSelectTemplateId }) {
+    const [templates, setTemplates] = useState<TemplateListItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const existingScript = document.querySelector(
+        'script[src*="tailwindcss.com"]'
+      );
+      if (!existingScript) {
+        const script = document.createElement("script");
+        script.src = "https://cdn.tailwindcss.com";
+        script.async = true;
+        document.head.appendChild(script);
+      }
+    }, []);
+
+    useEffect(() => {
+      let cancelled = false;
+
+      const loadTemplates = async () => {
+        setLoading(true);
+        try {
+          const response = await TemplateService.getTemplateSummaries();
+          if (!cancelled) {
+            setTemplates(response.items ?? []);
+          }
+        } catch (error) {
+          console.error("Failed to load templates", error);
+          if (!cancelled) {
+            toast.error("Failed to load templates");
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        }
+      };
+
+      loadTemplates();
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+
+    const { defaultTemplates, customTemplates } = useMemo(
+      () => partitionTemplatesByDefault(templates),
+      [templates]
+    );
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12 font-syne">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <span className="ml-3 text-gray-600">Loading templates...</span>
+        </div>
+      );
+    }
+
+    if (templates.length === 0) {
+      return (
+        <div className="space-y-[30px] mb-4">
+          <TemplateSection
+            title="Custom"
+            templates={[]}
+            selectedTemplateId={selectedTemplateId}
+            onSelectTemplateId={onSelectTemplateId}
+            showCreateCard
+          />
+          <div className="flex items-center justify-center py-8 font-syne text-gray-600">
+            No templates available.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-[30px] mb-4">
+        <TemplateSection
+          title="Custom"
+          templates={customTemplates}
+          selectedTemplateId={selectedTemplateId}
+          onSelectTemplateId={onSelectTemplateId}
+          showCreateCard
+        />
+        <TemplateSection
+          title="Built-in"
+          templates={defaultTemplates}
+          selectedTemplateId={selectedTemplateId}
+          onSelectTemplateId={onSelectTemplateId}
+        />
+      </div>
+    );
+  }
+);
 
 export default TemplateSelection;

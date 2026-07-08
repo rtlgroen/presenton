@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,15 +10,19 @@ import { MixpanelEvent, trackEvent } from "@/utils/mixpanel";
 import TemplateService from "../../services/api/template";
 import Header from "../../(dashboard)/dashboard/components/Header";
 import { notify } from "@/components/ui/sonner";
-import { CustomTemplateLayout, useCustomTemplateDetails, useTemplateV2Details } from "@/app/hooks/useCustomTemplates";
-import { templates as templateGroups, getTemplatesByTemplateName } from "@/app/presentation-templates";
 import { setupImageUrlConverter } from "@/utils/image-url-converter";
-import { normalizeTemplateV2Fonts } from "@/components/slide-editor/importing/template-v2-import";
-import { TemplateV2LayoutPreview } from "../../custom-template/components/EachSlide/TemplateV2LayoutPreview";
+import {
+  extractTemplateV2Layouts,
+  normalizeTemplateV2Fonts,
+  type TemplateV2ImportResponse,
+  type TemplateV2Layout,
+} from "@/components/slide-editor/importing/template-v2-import";
 import { useFontLoader as loadFontAssets } from "../../hooks/useFontLoad";
+import SlideScale from "../../components/PresentationRender";
 
-type GroupLayoutPreviewProps = {
-  useKonvaTemplateV2Preview?: boolean;
+type TemplateDetail = TemplateV2ImportResponse & {
+  is_default?: boolean;
+  layout_count?: number;
 };
 
 function hashKey(value: string) {
@@ -29,13 +33,74 @@ function hashKey(value: string) {
   return Math.abs(hash).toString(36);
 }
 
+function getRenderableLayouts(template: TemplateDetail | null): TemplateV2Layout[] {
+  if (!template) return [];
+  const layouts = extractTemplateV2Layouts(template.layouts);
+  if (layouts.length > 0) return layouts;
+  return extractTemplateV2Layouts(template.raw_layouts);
+}
+
+function useTemplateDetails(templateId: string) {
+  const [template, setTemplate] = useState<TemplateDetail | null>(null);
+  const [loading, setLoading] = useState(Boolean(templateId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!templateId) {
+      setTemplate(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTemplate = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await TemplateService.getTemplateDetails(templateId);
+        if (!cancelled) {
+          setTemplate(data as TemplateDetail);
+        }
+      } catch (loadError) {
+        console.error("Failed to load template", loadError);
+        if (!cancelled) {
+          setTemplate(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Failed to load template"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadTemplate();
+    return () => {
+      cancelled = true;
+    };
+  }, [templateId]);
+
+  const layouts = useMemo(
+    () => getRenderableLayouts(template),
+    [template]
+  );
+
+  return { template, layouts, loading, error };
+}
+
 function TemplatePreviewLoadingState() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       <div className="flex items-center justify-center py-24">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        <span className="ml-3 text-gray-600">Compiling templates...</span>
+        <span className="ml-3 text-gray-600">Loading template...</span>
       </div>
     </div>
   );
@@ -84,7 +149,7 @@ function TemplatePreviewNotFoundState({ onBack }: { onBack: () => void }) {
 
 function TemplatePreviewHeader({
   canDelete,
-  isTemplateV2,
+  isDefaultTemplate,
   layoutCount,
   onDelete,
   pathname,
@@ -92,7 +157,7 @@ function TemplatePreviewHeader({
   templateName,
 }: {
   canDelete: boolean;
-  isTemplateV2: boolean;
+  isDefaultTemplate: boolean;
   layoutCount: number;
   onDelete: () => void;
   pathname: string;
@@ -100,8 +165,8 @@ function TemplatePreviewHeader({
   templateName: string;
 }) {
   return (
-    <header className=" z-30">
-      <div className=" mx-auto px-6 pb-[30px]">
+    <header className="z-30">
+      <div className="mx-auto px-6 pb-[30px]">
         <div className="flex items-center justify-between mb-4 max-w-[1440px] mx-auto">
           {canDelete && (
             <div className="flex items-center justify-end ml-auto mr-0 gap-4">
@@ -111,7 +176,7 @@ function TemplatePreviewHeader({
                 onClick={() => {
                   trackEvent(
                     MixpanelEvent.TemplatePreview_Delete_Templates_Button_Clicked,
-                    { pathname },
+                    { pathname }
                   );
                   trackEvent(MixpanelEvent.TemplatePreview_Delete_Templates_API_Call);
                   onDelete();
@@ -130,15 +195,15 @@ function TemplatePreviewHeader({
             <h1 className="text-[64px] font-bold text-gray-900">
               {templateName}
             </h1>
-            {canDelete && (
+            {isDefaultTemplate && (
               <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-sm">
-                {isTemplateV2 ? "Templates V2" : "Custom"}
+                Built-in
               </span>
             )}
           </div>
           <p className="text-gray-600 text-xl">
-            {layoutCount} layout{layoutCount !== 1 ? "s" : ""} •{" "}
-            {templateDescription}
+            {layoutCount} layout{layoutCount !== 1 ? "s" : ""}
+            {templateDescription ? ` • ${templateDescription}` : ""}
           </p>
         </div>
       </div>
@@ -146,104 +211,100 @@ function TemplatePreviewHeader({
   );
 }
 
-function StaticTemplateLayouts({
-  templateParams,
-  templates,
+function TemplateLayoutPreview({
+  layout,
+  templateId,
+  index,
+  fonts,
 }: {
-  templateParams: string;
-  templates: any[];
+  layout: TemplateV2Layout;
+  templateId: string;
+  index: number;
+  fonts?: Record<string, string>;
 }) {
+  const layoutId =
+    typeof layout.id === "string" && layout.id.trim()
+      ? layout.id.trim()
+      : `slide-${hashKey(JSON.stringify(layout))}`;
+
+  const slide = {
+    id: `${templateId}-${layoutId}`,
+    ui: layout,
+    layout: layoutId,
+    layout_group: "template-v2",
+    index,
+  };
+
   return (
-    <div
-      className="space-y-3   w-[1305px] p-2.5 bg-[#FFFFFF1A] rounded-[20px]  border border-[#EDECEC]  mx-auto"
-      style={{
-        boxShadow: "0 0 20px 0 rgba(122, 90, 248, 0.16) inset",
-      }}
-    >
-      {templates.map((template: any, index: number) => {
-        const LayoutComponent = template.component;
-
-        return (
-          <div
-            key={`${templateParams}-${template.layoutId}`}
-            id={template.layoutId}
-            className="overflow-hidden   rounded-tl-[10px] border border-[#EDEEEF] rounded-tr-[10px]"
-          >
-            <div className=" px-4 py-6 bg-white border-b border-[#EDEEEF] ">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="px-3 py-1 bg-[#7A5AF8] text-white  font-syne  rounded-full text-sm font-medium">
-                    {index + 1 < 10 ? `0${index + 1}` : index + 1}
-                  </span>
-                  <h3 className="text-xl font-semibold text-gray-900 mt-3">
-                    {template.layoutName}
-                  </h3>
-                  <p className="text-sm text-gray-500 mt-1 ">
-                    {template.layoutDescription}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="  flex justify-center overflow-x-auto">
-              <div
-                className="flex-shrink-0"
-                style={{ width: "1280px", height: "720px" }}
-              >
-                <LayoutComponent data={template.sampleData} />
-              </div>
-            </div>
+    <div className="main-slide relative flex w-full items-center justify-center">
+      <div className="group relative w-full font-syne">
+        <div className="relative w-full overflow-x-auto">
+          <div className="mx-auto w-fit">
+            <SlideScale
+              slide={slide}
+              fonts={fonts}
+              isEditMode={false}
+              isClickable={false}
+              fixedSize
+              renderIndex={index}
+            />
           </div>
-        );
-      })}
+        </div>
+      </div>
     </div>
   );
 }
 
-function TemplateV2LayoutList({
+function TemplateLayoutList({
   layouts,
-  templateV2Id,
-  useKonvaTemplateV2Preview,
+  templateId,
   fonts,
 }: {
-  layouts: any[];
-  templateV2Id: string;
-  useKonvaTemplateV2Preview: boolean;
+  layouts: TemplateV2Layout[];
+  templateId: string;
   fonts?: Record<string, string>;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center w-full gap-10 aspect-video mx-auto">
+    <div className="mx-auto flex w-full max-w-[1330px] flex-col gap-10 px-6 pb-12">
       {layouts.map((layout, index) => {
         const layoutKey =
-          layout.id || layout.description || hashKey(JSON.stringify(layout));
+          (typeof layout.id === "string" && layout.id) ||
+          (typeof layout.description === "string" && layout.description) ||
+          hashKey(JSON.stringify(layout));
+
         return (
           <Card
-            key={`${templateV2Id}-${layoutKey}`}
-            id={layout.id || `slide-${index + 1}`}
+            key={`${templateId}-${layoutKey}`}
+            id={typeof layout.id === "string" ? layout.id : `slide-${index + 1}`}
             className="overflow-hidden shadow-md"
           >
             <div className="bg-white px-6 py-4 border-b">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">
-                    {layout.id || `Slide ${index + 1}`}
+                    {typeof layout.id === "string"
+                      ? layout.id
+                      : `Slide ${index + 1}`}
                   </h3>
-                  <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-                    {layout.description}
-                  </p>
+                  {typeof layout.description === "string" && layout.description && (
+                    <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+                      {layout.description}
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-end justify-end ">
+              <div className="flex items-end justify-end">
                 <span className="px-3 py-1 text-gray-600 rounded text-sm font-mono">
-                  {templateV2Id}:{layout.id || index + 1}
+                  {templateId}:{typeof layout.id === "string" ? layout.id : index + 1}
                 </span>
               </div>
             </div>
 
-            <div className="p-6 flex justify-center overflow-x-auto">
-              <TemplateV2LayoutPreview
+            <div className="w-full bg-white">
+              <TemplateLayoutPreview
                 layout={layout}
-                useKonvaRenderer={useKonvaTemplateV2Preview}
+                templateId={templateId}
+                index={index}
                 fonts={fonts}
               />
             </div>
@@ -254,215 +315,115 @@ function TemplateV2LayoutList({
   );
 }
 
-function CustomTemplateLayoutList({
-  layouts,
-  templateParams,
-}: {
-  layouts: CustomTemplateLayout[];
-  templateParams: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center w-full gap-10 aspect-video mx-auto">
-      {layouts.map((layout: CustomTemplateLayout) => {
-        const LayoutComponent = layout.component;
-        return (
-          <Card
-            key={`${templateParams}-${layout.layoutId}`}
-            id={layout.layoutId}
-            className="overflow-hidden shadow-md"
-          >
-            <div className="bg-white px-6 py-4 border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">
-                    {layout.rawLayoutName}
-                  </h3>
-                  <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-                    {layout.layoutDescription}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-end justify-end ">
-                <span className="px-3 py-1  text-gray-600 rounded text-sm font-mono">
-                  {templateParams}:{layout.layoutId}
-                </span>
-              </div>
-            </div>
-
-            <div className=" p-6 flex justify-center overflow-x-auto">
-              <div
-                className="flex-shrink-0"
-                style={{ width: "1280px", height: "720px" }}
-              >
-                <LayoutComponent data={layout.sampleData} />
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-const GroupLayoutPreview = ({
-  useKonvaTemplateV2Preview = false,
-}: GroupLayoutPreviewProps) => {
+const GroupLayoutPreview = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  const templateParams = searchParams.get("slug") || "";
-  const templateV2Id = searchParams.get("templateV2Id") || "";
-  const isTemplateV2 = Boolean(templateV2Id);
+  const templateId =
+    searchParams.get("id") || searchParams.get("templateV2Id") || "";
 
-  const isCustom = !isTemplateV2 && templateParams.startsWith("custom-");
-  const customTemplateId = isCustom ? templateParams.split("custom-")[1] : null;
+  const { template, layouts, loading, error } = useTemplateDetails(templateId);
 
-  const staticTemplates = !isCustom && !isTemplateV2 ? getTemplatesByTemplateName(templateParams) : [];
-  const staticGroup = !isCustom && !isTemplateV2 ? templateGroups.find((g: { id: string }) => g.id === templateParams) : null;
-
-  const {
-    template: customTemplate,
-    loading: customLoading,
-    error: customError,
-  } = useCustomTemplateDetails({ id: templateParams?.split("custom-")[1] || "", name: "", description: "" });
-  const {
-    template: templateV2,
-    layouts: templateV2Layouts,
-    loading: templateV2Loading,
-    error: templateV2Error,
-  } = useTemplateV2Details(templateV2Id);
-  const templateV2Fonts = React.useMemo(() => {
-    if (!isTemplateV2 || !templateV2) return undefined;
-    return normalizeTemplateV2Fonts(
-      templateV2 as Parameters<typeof normalizeTemplateV2Fonts>[0],
-    );
-  }, [isTemplateV2, templateV2]);
+  const templateFonts = useMemo(() => {
+    if (!template) return undefined;
+    return normalizeTemplateV2Fonts(template);
+  }, [template]);
 
   useEffect(() => {
-    const existingScript = document.querySelector('script[src*="tailwindcss.com"]');
+    const existingScript = document.querySelector(
+      'script[src*="tailwindcss.com"]'
+    );
     if (!existingScript) {
       const script = document.createElement("script");
       script.src = "https://cdn.tailwindcss.com";
       script.async = true;
       document.head.appendChild(script);
     }
-  }, [templateParams]);
+  }, []);
 
   useEffect(() => {
-    if (!templateV2Fonts) return;
-    loadFontAssets(templateV2Fonts);
-  }, [templateV2Fonts]);
+    if (!templateFonts) return;
+    loadFontAssets(templateFonts);
+  }, [templateFonts]);
 
-  // Keep backend-served assets on the active origin in Docker/nginx preview mode.
   useEffect(() => {
     const observer = setupImageUrlConverter();
     return () => observer?.disconnect();
   }, []);
 
-  const handleDeleteCustomTemplate = async () => {
-    if (!customTemplateId) return;
+  const handleBack = useCallback(() => {
+    router.push("/templates");
+  }, [router]);
+
+  const handleDeleteTemplate = useCallback(async () => {
+    if (!templateId) return;
 
     const confirmed = window.confirm(
       "Are you sure you want to delete this template? This action cannot be undone."
     );
     if (!confirmed) return;
 
-    const success = await TemplateService.deleteCustomTemplate(customTemplateId);
+    const success = await TemplateService.deleteTemplate(templateId);
     if (success.success) {
       notify.success("Template deleted", "The template was deleted successfully.");
       router.push("/templates");
     } else {
-      notify.error("Could not delete template", "Something went wrong while deleting the template.");
+      notify.error(
+        "Could not delete template",
+        "Something went wrong while deleting the template."
+      );
     }
-  };
+  }, [router, templateId]);
 
-  const handleDeleteTemplateV2 = async () => {
-    if (!templateV2Id) return;
+  if (!templateId) {
+    return <TemplatePreviewNotFoundState onBack={handleBack} />;
+  }
 
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this template? This action cannot be undone."
-    );
-    if (!confirmed) return;
-
-    const success = await TemplateService.deleteTemplateV2(templateV2Id);
-    if (success.success) {
-      notify.success("Template deleted", "The template was deleted successfully.");
-      router.push("/templates");
-    } else {
-      notify.error("Could not delete template", "Something went wrong while deleting the template.");
-    }
-  };
-
-  if ((isCustom && customLoading) || (isTemplateV2 && templateV2Loading)) {
+  if (loading) {
     return <TemplatePreviewLoadingState />;
   }
 
-  if ((isCustom && customError) || (isTemplateV2 && templateV2Error)) {
+  if (error) {
     return (
-      <TemplatePreviewErrorState
-        error={customError || templateV2Error}
-        onBack={() => router.push("/templates")}
-      />
+      <TemplatePreviewErrorState error={error} onBack={handleBack} />
     );
   }
 
-  if (
-    (!isCustom && !isTemplateV2 && (!staticGroup || staticTemplates.length === 0)) ||
-    (isCustom && !customTemplate) ||
-    (isTemplateV2 && !templateV2)
-  ) {
-    return (
-      <TemplatePreviewNotFoundState onBack={() => router.push("/templates")} />
-    );
+  if (!template) {
+    return <TemplatePreviewNotFoundState onBack={handleBack} />;
   }
 
-  const templateName = isTemplateV2
-    ? templateV2?.name || "Custom Template"
-    : isCustom ? customTemplate?.template.name || "Custom Template" : staticGroup?.name || "";
-  const templateDescription = isCustom
-    ? customTemplate?.template.description || ""
-    : isTemplateV2 ? templateV2?.description || "" : staticGroup?.description || "";
-  const layoutCount = isTemplateV2
-    ? templateV2Layouts.length
-    : isCustom
-    ? customTemplate?.layouts.length || 0
-    : staticTemplates.length;
+  const templateName =
+    (typeof template.name === "string" && template.name) || "Template";
+  const templateDescription =
+    (typeof template.description === "string" && template.description) || "";
+  const layoutCount = layouts.length;
+  const canDelete = !template.is_default;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       <TemplatePreviewHeader
-        canDelete={isCustom || isTemplateV2}
-        isTemplateV2={isTemplateV2}
+        canDelete={canDelete}
+        isDefaultTemplate={Boolean(template.is_default)}
         layoutCount={layoutCount}
-        onDelete={isTemplateV2 ? handleDeleteTemplateV2 : handleDeleteCustomTemplate}
+        onDelete={handleDeleteTemplate}
         pathname={pathname}
         templateDescription={templateDescription}
         templateName={templateName}
       />
 
       <div className="mx-auto h-full mb-4">
-        {!isCustom && !isTemplateV2 && (
-          <StaticTemplateLayouts
-            templateParams={templateParams}
-            templates={staticTemplates}
-          />
-        )}
-
-        {isTemplateV2 && (
-          <TemplateV2LayoutList
-            layouts={templateV2Layouts}
-            templateV2Id={templateV2Id}
-            useKonvaTemplateV2Preview={useKonvaTemplateV2Preview}
-            fonts={templateV2Fonts}
-          />
-        )}
-
-        {isCustom && customTemplate && (
-          <CustomTemplateLayoutList
-            layouts={customTemplate.layouts}
-            templateParams={templateParams}
+        {layouts.length === 0 ? (
+          <div className="flex items-center justify-center py-24 text-gray-600">
+            This template has no layouts yet.
+          </div>
+        ) : (
+          <TemplateLayoutList
+            layouts={layouts}
+            templateId={templateId}
+            fonts={templateFonts}
           />
         )}
       </div>
