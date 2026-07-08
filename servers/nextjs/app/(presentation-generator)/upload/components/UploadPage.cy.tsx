@@ -59,20 +59,10 @@ describe('<UploadPage />', () => {
     cy.viewport(1440, 900)
 
     // Reset any previous interceptions
-    cy.intercept('POST', '**/ppt/generate*', {
+    cy.intercept('POST', '**/ppt/presentation/create', {
       statusCode: 200,
       body: { id: 'test-id' }
     }).as('createPresentation')
-
-    cy.intercept('POST', '**/ppt/titles/generate*', {
-      statusCode: 200,
-      body: { id: 'test-id', titles: ['Title 1', 'Title 2'] }
-    }).as('generateTitles')
-
-    cy.intercept('POST', '**/ppt/create', {
-      statusCode: 200,
-      body: { id: 'test-id' }
-    }).as('getQuestions')
 
     cy.mount(<UploadPage />)
   })
@@ -122,11 +112,6 @@ describe('<UploadPage />', () => {
       const testPrompt = 'Create a presentation about AI'
       cy.get('[data-testid="prompt-input"]').type(testPrompt)
       cy.get('[data-testid="prompt-input"]').should('have.value', testPrompt)
-    })
-
-    it('should toggle research mode', () => {
-      cy.get('[data-testid="research-mode-switch"]').click()
-      cy.get('[data-testid="research-mode-switch"]').should('have.attr', 'aria-checked', 'true')
     })
   })
 
@@ -206,61 +191,34 @@ describe('<UploadPage />', () => {
   describe('Validation', () => {
     it('should show error when no prompt or documents provided', () => {
       // Click next without entering prompt or uploading files
-      cy.contains('button', 'Next').click()
+      cy.contains('button', 'Get Started').click()
       // Check for error toast
-      checkToast('No Prompt or Document Provided')
-    })
-    it('should show error when no prompt provided but research mode is on', () => {
-      cy.get('[data-testid="research-mode-switch"]').click({ force: true })
-      cy.get('[data-testid="research-mode-switch"]').should('have.attr', 'aria-checked', 'true')
-      cy.contains('button', 'Next').click()
-      checkToast('No Prompt or Document Provided')
+      checkToast('Input required')
     })
   })
 
   describe('Generation Flow', () => {
-    it('should proceed to theme page with prompt-only configuration', () => {
+    it('should proceed to outline page with prompt-only configuration', () => {
       // Enter prompt
       cy.get('[data-testid="prompt-input"]').type('Create a presentation about AI')
 
       // Click generate
-      cy.contains('button', 'Next').click()
+      cy.contains('button', 'Get Started').click()
 
-      // Wait for API calls with longer timeout
-      cy.wait('@getQuestions', { timeout: 10000 })
-      cy.wait('@generateTitles', { timeout: 10000 })
+      // Wait for API call with longer timeout
+      cy.wait('@createPresentation', { timeout: 10000 })
 
-      // Verify navigation to theme page
-      cy.get('@router.push').should('be.calledWith', '/theme')
+      // Verify navigation to outline page
+      cy.get('@router.push').should('be.calledWith', '/outline')
     })
 
-    it('should proceed to documents-preview with research mode', () => {
-      // Enable research mode
-      cy.get('[data-testid="research-mode-switch"]').click({ force: true })
-
-      // Enter prompt
-      cy.get('[data-testid="prompt-input"]').type('Research about AI technology')
-
-      // Intercept research report generation
-      cy.intercept('POST', '**/ppt/report/generate', {
-        statusCode: 200,
-        body: { content: 'Research report content' }
-      }).as('researchReport')
-
-      // Click generate
-      cy.contains('button', 'Next').click()
-
-      // Wait for research API call
-      cy.wait('@researchReport', { timeout: 10000 })
-
-      // Verify navigation to documents-preview page
-      cy.get('@router.push').should('be.calledWith', '/documents-preview')
-    })
-
-    it('should proceed to documents-preview with uploaded document', () => {
+    it('should proceed to outline page with uploaded document', () => {
       // Upload a document
       cy.fixture('example.txt').as('testFile')
       cy.get('[data-testid="file-upload-input"]').selectFile('@testFile', { force: true })
+
+      cy.get('[data-testid="language-select"]').click({ force: true })
+      cy.get('[role="option"]').contains(/^English$/).click()
 
       // Enter prompt
       cy.get('[data-testid="prompt-input"]').type('Analyze this document')
@@ -268,48 +226,53 @@ describe('<UploadPage />', () => {
       // Intercept document upload and decomposition
       cy.intercept('POST', '**/ppt/files/upload', {
         statusCode: 200,
-        body: {
-          documents: ['doc1'],
-          images: []
-        }
+        body: ['/tmp/uploads/example.txt']
       }).as('uploadDoc')
 
       cy.intercept('POST', '**/ppt/files/decompose', {
         statusCode: 200,
-        body: {
-          documents: { doc1: 'content' },
-          images: {},
-          charts: {},
-          tables: {}
-        }
+        body: [
+          {
+            name: 'example.txt',
+            file_path: '/tmp/decomposed/example.txt'
+          }
+        ]
       }).as('decomposeDoc')
 
       // Click generate
-      cy.contains('button', 'Next').click()
+      cy.contains('button', 'Get Started').click()
 
-      // Wait for upload and decompose API calls
+      // Wait for upload, decompose, and outline creation API calls
       cy.wait('@uploadDoc', { timeout: 10000 })
       cy.wait('@decomposeDoc', { timeout: 10000 })
+      cy.wait('@createPresentation', { timeout: 10000 })
+        .its('request.body')
+        .should('include', {
+          content: 'Analyze this document',
+          language: 'English'
+        })
+        .and('have.property', 'file_paths')
+        .and('deep.equal', ['/tmp/decomposed/example.txt'])
 
-      // Verify navigation to documents-preview page
-      cy.get('@router.push').should('be.calledWith', '/documents-preview')
+      // Verify navigation to outline page
+      cy.get('@router.push').should('be.calledWith', '/outline')
     })
   })
 
   describe('Error Handling', () => {
     it('should handle API errors gracefully', () => {
       // Setup API to return error
-      cy.intercept('POST', '**/ppt/create', {
+      cy.intercept('POST', '**/ppt/presentation/create', {
         statusCode: 500,
         body: { error: 'Internal Server Error' }
       }).as('apiError')
 
       // Enter prompt and try to generate
       cy.get('[data-testid="prompt-input"]').type('Test presentation')
-      cy.contains('button', 'Next').click()
+      cy.contains('button', 'Get Started').click()
 
       // Check for error toast
-      checkToast('Failed to generate presentation')
+      checkToast('Generation failed')
     })
   })
 })

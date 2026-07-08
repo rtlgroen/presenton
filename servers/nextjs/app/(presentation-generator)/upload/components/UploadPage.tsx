@@ -117,6 +117,21 @@ const getSelectedImageQuality = (config?: LLMConfig): string => {
   return "";
 };
 
+const getDocumentPaths = (files: unknown): string[] => {
+  if (!Array.isArray(files)) {
+    return [];
+  }
+
+  return files
+    .flat()
+    .map((file) =>
+      file && typeof file === "object" && "file_path" in file
+        ? (file as { file_path?: unknown }).file_path
+        : null
+    )
+    .filter((filePath): filePath is string => typeof filePath === "string");
+};
+
 const UploadPage = () => {
   const router = useRouter();
   const pathname = usePathname();
@@ -317,19 +332,52 @@ const UploadPage = () => {
       );
     }
     const responses = await Promise.all(promises);
+    const documentPaths = getDocumentPaths(responses);
+
+    setLoadingState({
+      isLoading: true,
+      message: "Generating presentation outline...",
+      showProgress: true,
+      duration: 40,
+      extra_info: "",
+    });
+
+    const createResponse = await PresentationGenerationApi.createPresentation({
+      content: config?.prompt ?? "",
+      version: "v1-standard",
+      n_slides: parseLimitedSlideCount(config?.slides),
+      file_paths: documentPaths,
+      language: selectedLanguage,
+      tone: config?.tone,
+      verbosity: config?.verbosity,
+      instructions: config?.instructions || null,
+      include_table_of_contents: !!config?.includeTableOfContents,
+      include_title_slide: !!config?.includeTitleSlide,
+      web_search: !!config?.webSearch,
+    });
+
     dispatch(setPptGenUploadState({
       config,
       files: responses,
     }));
-    dispatch(clearOutlines())
+    dispatch(clearOutlines());
+    dispatch(setPresentationId(createResponse.id));
     trackEvent(MixpanelEvent.Upload_Documents_Processed, {
       ...getUploadSnapshotProps(),
       uploaded_documents_count: documents.length,
       decompose_job_count: responses.length,
-      destination: "/documents-preview",
+      extracted_document_count: documentPaths.length,
+      destination: "/outline",
     });
-    trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/documents-preview" });
-    router.push("/documents-preview");
+    trackEvent(MixpanelEvent.Upload_Outline_Generation_Requested, {
+      ...getUploadSnapshotProps(),
+      presentation_id: createResponse.id,
+      uploaded_documents_count: documents.length,
+      extracted_document_count: documentPaths.length,
+      destination: "/outline",
+    });
+    trackEvent(MixpanelEvent.Navigation, { from: pathname, to: "/outline" });
+    router.push("/outline");
   };
 
   /**
