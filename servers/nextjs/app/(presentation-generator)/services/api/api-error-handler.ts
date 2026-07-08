@@ -1,3 +1,9 @@
+import {
+  isChatGptAuthRequiredResponse,
+  normalizeChatGptAuthMessage,
+  requestChatGptReauth,
+} from "@/utils/chatgptAuth";
+
 // API Error Response Interface
 interface ApiErrorResponse {
   detail?: unknown;
@@ -56,7 +62,7 @@ export class ApiResponseHandler {
       // Try to parse JSON response
       try {
         return await response.json();
-      } catch (error) {
+      } catch {
         // If JSON parsing fails but response is ok, return empty object
         return {};
       }
@@ -77,9 +83,24 @@ export class ApiResponseHandler {
       } else if (errorData.error) {
         errorMessage = errorData.error;
       }
-    } catch (parseError) {
+
+      if (isChatGptAuthRequiredResponse(response, errorData, errorMessage)) {
+        errorMessage = normalizeChatGptAuthMessage(errorMessage);
+        requestChatGptReauth({
+          message: errorMessage,
+          source: "api-response",
+        });
+      }
+    } catch {
       // If JSON parsing fails, use status-based messages
       errorMessage = this.getStatusBasedErrorMessage(response.status, defaultErrorMessage);
+      if (isChatGptAuthRequiredResponse(response, null, errorMessage)) {
+        errorMessage = normalizeChatGptAuthMessage(errorMessage);
+        requestChatGptReauth({
+          message: errorMessage,
+          source: "api-response",
+        });
+      }
     }
 
     // Throw error with appropriate message
@@ -109,9 +130,24 @@ export class ApiResponseHandler {
         } else if (errorData.error) {
           errorMessage = errorData.error;
         }
-      } catch (parseError) {
+
+        if (isChatGptAuthRequiredResponse(response, errorData, errorMessage)) {
+          errorMessage = normalizeChatGptAuthMessage(errorMessage);
+          requestChatGptReauth({
+            message: errorMessage,
+            source: "api-response-result",
+          });
+        }
+      } catch {
         // If JSON parsing fails, use status-based messages
         errorMessage = this.getStatusBasedErrorMessage(response.status, defaultErrorMessage);
+        if (isChatGptAuthRequiredResponse(response, null, errorMessage)) {
+          errorMessage = normalizeChatGptAuthMessage(errorMessage);
+          requestChatGptReauth({
+            message: errorMessage,
+            source: "api-response-result",
+          });
+        }
       }
 
       return {
@@ -157,4 +193,4 @@ export class ApiResponseHandler {
   }
 }
 
-export type { ApiErrorResponse }; 
+export type { ApiErrorResponse };

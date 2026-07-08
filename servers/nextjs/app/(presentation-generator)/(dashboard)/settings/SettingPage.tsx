@@ -25,6 +25,10 @@ import {
 import { ImagesApi } from "@/app/(presentation-generator)/services/api/images";
 import { getApiUrl } from "@/utils/api";
 import LogoutButton from "@/components/Auth/LogoutButton";
+import {
+  CHATGPT_AUTH_REQUIRED_EVENT,
+  requestChatGptReauth,
+} from "@/utils/chatgptAuth";
 
 const STOCK_IMAGE_PROVIDERS = new Set(["pexels", "pixabay"]);
 
@@ -63,6 +67,21 @@ const SettingsPage = () => {
     },
     []
   );
+
+  useEffect(() => {
+    setLlmConfig(userConfigState.llm_config);
+  }, [userConfigState.llm_config]);
+
+  useEffect(() => {
+    const handleChatGptReauth = () => {
+      setSelectedProvider("text-provider");
+    };
+
+    window.addEventListener(CHATGPT_AUTH_REQUIRED_EVENT, handleChatGptReauth);
+    return () => {
+      window.removeEventListener(CHATGPT_AUTH_REQUIRED_EVENT, handleChatGptReauth);
+    };
+  }, []);
 
   const selectSettingsSection = (section: SettingsSection) => {
     trackEvent(MixpanelEvent.Settings_Tab_Switched, {
@@ -132,7 +151,10 @@ const SettingsPage = () => {
     if (llmConfig.LLM === 'codex') {
       const isAuthenticated = await checkCurrentAuthStatus();
       if (!isAuthenticated) {
-        notify.error("Sign in required", "Please sign in to ChatGPT to continue.");
+        requestChatGptReauth({
+          message: "Please sign in to ChatGPT again from Settings.",
+          source: "settings-save",
+        });
         return;
       }
     }
