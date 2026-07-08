@@ -23,9 +23,11 @@ import {
 } from "@/components/slide-editor/toolbar/numericInput";
 import {
   DEFAULT_CHART_COLORS,
+  appendChartColorTarget,
   chartColorTargetMode,
   chartDataFromSeriesWithColors,
   chartSupportsMultipleSeries,
+  extendChartColors,
   resolvedChartColorTargets,
   resolvedChartCategories,
   updateChartColorTarget,
@@ -506,11 +508,26 @@ function ChartSeriesColorControls({
             />
           </button>
         ))}
+        {targets.length < 12 ? (
+          <button
+            type="button"
+            aria-label="Add chart color"
+            className="grid h-8 w-8 place-items-center rounded-full border border-dashed border-[#B8A3F8] bg-white text-[#7C51F8] transition hover:bg-[#F7F3FF]"
+            title="Add chart color"
+            onClick={() => onChange(appendChartColorTarget(chart))}
+          >
+            <Plus size={15} strokeWidth={2.2} />
+          </button>
+        ) : null}
       </div>
       {openTarget && paletteAnchor && typeof document !== "undefined"
         ? createPortal(
           <ChartColorPaletteCard
             colors={targets.map((target) => target.color)}
+            onAddColor={() => {
+              onChange(appendChartColorTarget(chart));
+              setPaletteAnchor(null);
+            }}
             onChange={(color) =>
               onChange(updateChartColorTarget(chart, openTarget.index, color))
             }
@@ -721,15 +738,16 @@ function ChartDataModal({
       categories: normalizedCategories,
       series: normalized,
     });
-    const colorCount = Math.min(
-      12,
-      Math.max(1, nextColors.length, chart.colors?.length ?? 0),
+    const minimumColorCount = Math.max(
+      1,
+      nextColors.length,
+      chart.colors?.length ?? 0,
+      colorMode === "series" ? normalized.length : 1,
     );
-    const colors = Array.from({ length: colorCount }, (_, index) =>
-      nextColors[index] ??
-      chart.colors?.[index] ??
-      (index === 0 ? chart.color : null) ??
-      DEFAULT_CHART_COLORS[index % DEFAULT_CHART_COLORS.length],
+    const colors = extendChartColors(
+      nextColors.length > 0 ? nextColors : chart.colors,
+      minimumColorCount,
+      chart.color ?? DEFAULT_CHART_COLORS[0],
     );
 
     onChange({
@@ -840,6 +858,7 @@ function ChartDataModal({
                 chartPath={chartPath}
                 series={series}
                 colors={chart.colors ?? []}
+                fallbackColor={chart.color}
                 onUpdate={updateData}
               />
             </main>
@@ -865,9 +884,11 @@ function EditableDataTable({
   onUpdate,
   series,
   colors,
+  fallbackColor,
 }: {
   allowMultipleSeries: boolean;
   categories: string[];
+  fallbackColor?: string | null;
   chartPath: string;
   onUpdate: (
     categories: string[],
@@ -990,16 +1011,17 @@ function EditableDataTable({
     clearValueDrafts();
   };
   const addSeries = () => {
+    const nextSeries = [
+      ...safeSeries,
+      {
+        name: `Series ${safeSeries.length + 1}`,
+        values: normalizeValues([], safeCategories.length),
+      },
+    ];
     onUpdate(
       safeCategories,
-      [
-        ...safeSeries,
-        {
-          name: `Series ${safeSeries.length + 1}`,
-          values: normalizeValues([], safeCategories.length),
-        },
-      ],
-      colors,
+      nextSeries,
+      extendChartColors(colors, nextSeries.length, fallbackColor),
     );
     clearValueDrafts();
   };
