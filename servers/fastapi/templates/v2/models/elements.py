@@ -199,6 +199,7 @@ class Image(BaseModel):  # Konva Image
     fit: Optional[ImageFit] = None
     focus_x: Optional[float] = None
     focus_y: Optional[float] = None
+    crop_scale: Optional[float] = None
     border_radius: Optional[BorderRadius] = None
     clip_path: Optional[str] = None
     color: Optional[str] = None
@@ -300,6 +301,7 @@ class Chart(BaseModel):
     categories: Optional[list[str]] = None
     series: Optional[list[ChartSeries]] = None
     data_labels: Optional[bool] = None
+    legend: Optional[bool] = None
     x_axis_grid: Optional[bool] = None
     y_axis_grid: Optional[bool] = None
     grid_color: Optional[str] = None
@@ -308,6 +310,16 @@ class Chart(BaseModel):
     # Schema
     decorative: bool
     name: str
+
+    @model_validator(mode="after")
+    def _pie_and_donut_use_only_first_series(self) -> "Chart":
+        if (
+            self.chart_type in {ChartType.PIE, ChartType.DONUT}
+            and self.series
+            and len(self.series) > 1
+        ):
+            self.series = self.series[:1]
+        return self
 
     @model_validator(mode="after")
     def _size_must_be_visible_when_explicit(self) -> "Chart":

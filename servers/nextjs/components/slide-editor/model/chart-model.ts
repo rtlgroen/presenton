@@ -12,6 +12,12 @@ import {
 } from "@/components/slide-editor/model/core";
 
 export function rawChartToEditorChart(element: RawElement): ChartElement {
+  const legacyData = readArray(element.data)
+    .map((value) => legacyChartDatum(value))
+    .filter(
+      (value): value is { color?: string; label: string; value: number } =>
+        value != null,
+    );
   const categories = readArray(element.categories).map(String);
   const series = readArray(element.series)
     .map((value, index): ChartSeries | null => {
@@ -29,29 +35,57 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
       };
     })
     .filter((value): value is ChartSeries => value != null);
+  const normalizedInputSeries =
+    series.length > 0
+      ? series
+      : legacyData.length > 0
+        ? [
+            {
+              name: readString(element.title) ?? "Series 1",
+              values: legacyData.map((item) => item.value),
+            },
+          ]
+        : [];
+  const inputCategories =
+    categories.length > 0
+      ? categories
+      : legacyData.map((item, index) => item.label || `Item ${index + 1}`);
+  const chartType = rawChartType(element.chart_type ?? element.chartType);
+  const supportedSeries =
+    chartType === "pie" || chartType === "donut"
+      ? normalizedInputSeries.slice(0, 1)
+      : normalizedInputSeries;
   const normalizedSeries =
-    series.length > 0 ? series : [{ name: "Series 1", values: [0] }];
+    supportedSeries.length > 0
+      ? supportedSeries
+      : [{ name: "Series 1", values: [0] }];
   const categoryLength = Math.max(
-    categories.length,
+    inputCategories.length,
     ...normalizedSeries.map((item) => item.values.length),
   );
   const normalizedCategories =
-    categories.length > 0
+    inputCategories.length > 0
       ? Array.from(
           { length: categoryLength },
-          (_, index) => categories[index] ?? `Item ${index + 1}`,
+          (_, index) => inputCategories[index] ?? `Item ${index + 1}`,
         )
       : Array.from({ length: categoryLength }, (_, index) => `Item ${index + 1}`);
+  const legacyColors = legacyData
+    .map((item) => item.color)
+    .filter((value): value is string => Boolean(value));
   const colors = readArray(element.colors).map(String);
-  const chartType = rawChartType(element.chart_type ?? element.chartType);
   const chartColors =
-    colors.length > 0 ? colors : [readString(element.color) ?? "7C51F8"];
+    colors.length > 0
+      ? colors
+      : legacyColors.length > 0
+        ? legacyColors
+        : [readString(element.color) ?? "7C51F8"];
   const firstSeries = normalizedSeries[0];
   const data = normalizedCategories.slice(0, 8).map((label, index) => ({
     label,
     value: firstSeries.values[index] ?? 0,
     color: normalizedSeries.length === 1
-      ? chartColors[index] ?? chartColors[0]
+      ? chartColors[index % chartColors.length] ?? chartColors[0]
       : chartColors[0],
   }));
 
@@ -72,6 +106,35 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
     x_axis_title: element.x_axis_title ?? element.xAxisTitle,
     y_axis_title: element.y_axis_title ?? element.yAxisTitle,
     data_labels: element.data_labels ?? element.dataLabels,
+    legend: element.legend ?? element.showLegend,
+  };
+}
+
+function legacyChartDatum(value: unknown) {
+  const directValue = readNumber(value);
+  if (directValue != null) {
+    return {
+      label: "",
+      value: directValue,
+    };
+  }
+
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as UnknownRecord)
+      : null;
+  if (!record) return null;
+
+  const numericValue =
+    readNumber(record.value) ??
+    readNumber(record.data) ??
+    readNumber(record.y);
+  if (numericValue == null) return null;
+
+  return {
+    color: readString(record.color) ?? undefined,
+    label: readString(record.label) ?? readString(record.name) ?? "",
+    value: numericValue,
   };
 }
 
@@ -84,25 +147,34 @@ export function editorChartToRawChart(source: RawElement, chart: UnknownRecord) 
     size: source.size,
     rotation: source.rotation,
     layout: source.layout,
-    chart_type: chart.chartType ?? chart.chart_type ?? source.chart_type,
+    chart_type: chart.chart_type ?? chart.chartType ?? source.chart_type,
     colors: chart.colors ?? source.colors,
-    axis_color: chart.axisColor ?? chart.axis_color ?? source.axis_color,
-    grid_color: chart.gridColor ?? chart.grid_color ?? source.grid_color,
-    x_axis: chart.xAxis ?? chart.x_axis ?? source.x_axis,
-    y_axis: chart.yAxis ?? chart.y_axis ?? source.y_axis,
+    axis_color: chart.axis_color ?? chart.axisColor ?? source.axis_color,
+    grid_color: chart.grid_color ?? chart.gridColor ?? source.grid_color,
+    x_axis: chart.x_axis ?? chart.xAxis ?? source.x_axis,
+    y_axis: chart.y_axis ?? chart.yAxis ?? source.y_axis,
     x_axis_grid:
-      chart.xAxisGrid ??
       chart.x_axis_grid ??
+      chart.xAxisGrid ??
       source.x_axis_grid ??
       source.xAxisGrid,
     y_axis_grid:
-      chart.yAxisGrid ??
       chart.y_axis_grid ??
+      chart.yAxisGrid ??
       source.y_axis_grid ??
       source.yAxisGrid,
-    x_axis_title: chart.xAxisTitle ?? chart.x_axis_title ?? source.x_axis_title,
-    y_axis_title: chart.yAxisTitle ?? chart.y_axis_title ?? source.y_axis_title,
-    data_labels: chart.dataLabels ?? chart.data_labels ?? source.data_labels,
+    x_axis_title: hasOwn(chart, "x_axis_title")
+      ? chart.x_axis_title
+      : chart.xAxisTitle ?? source.x_axis_title ?? source.xAxisTitle,
+    y_axis_title: hasOwn(chart, "y_axis_title")
+      ? chart.y_axis_title
+      : chart.yAxisTitle ?? source.y_axis_title ?? source.yAxisTitle,
+    data_labels: chart.data_labels ?? chart.dataLabels ?? source.data_labels,
+    legend:
+      chart.legend ??
+      chart.showLegend ??
+      source.legend ??
+      source.showLegend,
   };
 }
 
@@ -112,5 +184,20 @@ function withoutRemovedChartFields(element: UnknownRecord) {
   delete sanitized.dataLabelsColor;
   delete sanitized.labelColor;
   delete sanitized.grid;
+  delete sanitized.axisColor;
+  delete sanitized.chartType;
+  delete sanitized.dataLabels;
+  delete sanitized.gridColor;
+  delete sanitized.showLegend;
+  delete sanitized.xAxis;
+  delete sanitized.xAxisGrid;
+  delete sanitized.xAxisTitle;
+  delete sanitized.yAxis;
+  delete sanitized.yAxisGrid;
+  delete sanitized.yAxisTitle;
   return sanitized;
+}
+
+function hasOwn(record: UnknownRecord, key: string) {
+  return Object.prototype.hasOwnProperty.call(record, key);
 }

@@ -1,6 +1,9 @@
 import { useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+const SLIDES_SCROLL_CONTAINER_SELECTOR =
+  "[data-presentation-slides-scroll-container='true']";
+
 export const usePresentationNavigation = (
   presentationId: string,
   selectedSlide: number,
@@ -16,23 +19,39 @@ export const usePresentationNavigation = (
     searchParams.get("slide") || `${selectedSlide}` || "0"
   );
 
-  const scrollToSlide = useCallback((index: number, attempts = 2) => {
+  const scrollToSlide = useCallback((
+    index: number,
+    attempts = 2,
+    behavior: ScrollBehavior = "auto",
+  ) => {
     const slideElement = document.getElementById(`slide-${index}`);
     if (slideElement) {
-      slideElement.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      const scrollContainer = slideElement.closest<HTMLElement>(
+        SLIDES_SCROLL_CONTAINER_SELECTOR
+      );
+      if (scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const slideRect = slideElement.getBoundingClientRect();
+        const top =
+          slideRect.top - containerRect.top + scrollContainer.scrollTop;
+
+        scrollContainer.scrollTo({ top, behavior });
+        return;
+      }
+
+      slideElement.scrollIntoView({ behavior, block: "start" });
       return;
     }
     if (attempts > 0) {
-      window.requestAnimationFrame(() => scrollToSlide(index, attempts - 1));
+      window.requestAnimationFrame(() =>
+        scrollToSlide(index, attempts - 1, behavior)
+      );
     }
   }, []);
 
   const handleSlideClick = useCallback((index: number) => {
     setSelectedSlide(index);
-    window.requestAnimationFrame(() => scrollToSlide(index));
+    window.requestAnimationFrame(() => scrollToSlide(index, 2, "auto"));
   }, [scrollToSlide, setSelectedSlide]);
 
   useEffect(() => {
@@ -84,6 +103,7 @@ export const usePresentationNavigation = (
     isPresentMode,
     stream,
     currentSlide,
+    scrollToSlide,
     handleSlideClick,
     toggleFullscreen,
     handlePresentExit,

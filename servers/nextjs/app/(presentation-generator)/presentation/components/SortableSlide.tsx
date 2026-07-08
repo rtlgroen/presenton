@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Slide } from '../../types/slide';
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import { SlideThumbnailCard } from './SlideThumbnailCard';
 interface SortableSlideProps {
     slide: Slide;
@@ -12,7 +12,7 @@ interface SortableSlideProps {
     presentationVersion?: unknown;
 }
 
-export function SortableSlide({
+export const SortableSlide = memo(function SortableSlide({
     slide,
     index,
     selectedSlide,
@@ -47,7 +47,7 @@ export function SortableSlide({
         // Only trigger click if not dragging
         if (!isDragging) {
             lastClickTime.current = now;
-            onSlideClick(slide.index);
+            onSlideClick(index);
         }
     };
 
@@ -65,4 +65,12 @@ export function SortableSlide({
             onClick={handleClick}
         />
     );
-}
+}, (previous, next) =>
+    previous.slide === next.slide &&
+    previous.index === next.index &&
+    previous.onSlideClick === next.onSlideClick &&
+    previous.fonts === next.fonts &&
+    previous.presentationVersion === next.presentationVersion &&
+    (previous.selectedSlide === previous.index) ===
+    (next.selectedSlide === next.index)
+);

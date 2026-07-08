@@ -118,6 +118,8 @@ export function TiptapInlineTextEditor({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pendingRunsFrameRef = useRef<number | null>(null);
   const pendingRunsEditorRef = useRef<Editor | null>(null);
+  const toolbarPointerDownRef = useRef(false);
+  const toolbarPointerDownTimeoutRef = useRef<number | null>(null);
   const callbacksRef = useLatestRef({
     onBlurOutside,
     onCommitShortcut,
@@ -260,8 +262,18 @@ export function TiptapInlineTextEditor({
       ) {
         return;
       }
-      flushPendingRuns();
-      callbacksRef.current.onBlurOutside();
+      window.setTimeout(() => {
+        if (toolbarPointerDownRef.current) return;
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          active.closest("[data-inline-edit-ignore='true']")
+        ) {
+          return;
+        }
+        flushPendingRuns();
+        callbacksRef.current.onBlurOutside();
+      }, 0);
     },
   });
 
@@ -316,7 +328,20 @@ export function TiptapInlineTextEditor({
       const targetElement =
         target instanceof Element ? target : target.parentElement;
       if (targetElement?.closest("[data-inline-edit-ignore='true']")) {
+        toolbarPointerDownRef.current = true;
+        if (toolbarPointerDownTimeoutRef.current != null) {
+          window.clearTimeout(toolbarPointerDownTimeoutRef.current);
+        }
+        toolbarPointerDownTimeoutRef.current = window.setTimeout(() => {
+          toolbarPointerDownRef.current = false;
+          toolbarPointerDownTimeoutRef.current = null;
+        }, 200);
         return;
+      }
+      toolbarPointerDownRef.current = false;
+      if (toolbarPointerDownTimeoutRef.current != null) {
+        window.clearTimeout(toolbarPointerDownTimeoutRef.current);
+        toolbarPointerDownTimeoutRef.current = null;
       }
       flushPendingRuns();
       callbacksRef.current.onBlurOutside();
@@ -333,8 +358,12 @@ export function TiptapInlineTextEditor({
       if (pendingRunsFrameRef.current != null) {
         window.cancelAnimationFrame(pendingRunsFrameRef.current);
       }
+      if (toolbarPointerDownTimeoutRef.current != null) {
+        window.clearTimeout(toolbarPointerDownTimeoutRef.current);
+      }
       pendingRunsFrameRef.current = null;
       pendingRunsEditorRef.current = null;
+      toolbarPointerDownTimeoutRef.current = null;
     };
   }, []);
 

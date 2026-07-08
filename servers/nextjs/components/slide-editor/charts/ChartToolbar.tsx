@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { BarChart3, Palette } from "lucide-react";
 import type { ChartSlideElement } from "@/components/slide-editor/state/state";
-import { updateChartColorTarget } from "@/components/slide-editor/charts/chart-data";
+import {
+  appendChartColorTarget,
+  resolvedChartColorTargets,
+  updateChartColorTarget,
+} from "@/components/slide-editor/charts/chart-data";
 import { ChartColorPaletteCard } from "@/components/slide-editor/charts/ChartColorPalette";
 import {
   FloatingToolbar,
@@ -26,7 +30,11 @@ export function ChartToolbar({
   onChange: (index: number, element: ChartSlideElement) => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const chartColor = element.colors?.[0] ?? element.color ?? "7F22FE";
+  const [activeColorIndex, setActiveColorIndex] = useState(0);
+  const colorTargets = resolvedChartColorTargets(element);
+  const activeTarget =
+    colorTargets.find((target) => target.index === activeColorIndex) ??
+    colorTargets[0];
 
   return (
     <FloatingToolbar
@@ -88,6 +96,8 @@ export function ChartToolbar({
       <div style={{ position: "relative" }}>
         <button
           type="button"
+          aria-expanded={paletteOpen}
+          aria-label="Chart colors"
           title="Chart colors"
           onClick={() => setPaletteOpen((current) => !current)}
           style={{
@@ -97,14 +107,24 @@ export function ChartToolbar({
         >
           <Palette size={16} strokeWidth={2} />
         </button>
-        {paletteOpen ? (
+        {paletteOpen && activeTarget ? (
           <FloatingToolbarPanel>
             <ChartColorPaletteCard
-              value={chartColor}
+              colors={colorTargets.map((target) => target.color)}
+              onAddColor={() => {
+                const nextIndex = Math.min(11, colorTargets.length);
+                setActiveColorIndex(nextIndex);
+                onChange(index, appendChartColorTarget(element));
+              }}
               onChange={(color) =>
-                onChange(index, updateChartColorTarget(element, 0, color))
+                onChange(
+                  index,
+                  updateChartColorTarget(element, activeTarget.index, color),
+                )
               }
               onClose={() => setPaletteOpen(false)}
+              onSelectIndex={setActiveColorIndex}
+              selectedIndex={activeTarget.index}
             />
           </FloatingToolbarPanel>
         ) : null}

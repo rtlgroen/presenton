@@ -753,6 +753,7 @@ function adaptImage(raw: UnknownRecord): SlideElement {
     fit: readEnum(raw, ["contain", "cover", "fill"], "fit"),
     focus_x: readNumber(raw, "focus_x"),
     focus_y: readNumber(raw, "focus_y"),
+    crop_scale: readNumber(raw, "crop_scale"),
     border_radius: adaptBorderRadius(readRecord(raw, "border_radius")),
     clippath: readString(raw.clippath ?? raw.clipPath ?? raw.clip_path),
     color: readString(raw.color),
@@ -842,18 +843,6 @@ function adaptChart(raw: UnknownRecord): SlideElement {
   const series = readArray(raw, "series")
     .map(adaptChartSeries)
     .filter((item): item is ChartSeries => item != null);
-  const colors = readArray(raw, "colors")
-    .map(readColor)
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 12);
-  const color = colors[0] ?? null;
-  const data = chartDataFromSeriesWithColors(
-    categories,
-    series,
-    colors,
-    series.length <= 1,
-  ).slice(0, 8);
-  const dataLabels = readBoolean(raw, "data_labels");
   const chartType =
     readEnum(
       raw,
@@ -874,6 +863,22 @@ function adaptChart(raw: UnknownRecord): SlideElement {
       "chart_type",
     ) ??
     "bar";
+  const supportedSeries =
+    chartType === "pie" || chartType === "donut"
+      ? series.slice(0, 1)
+      : series;
+  const colors = readArray(raw, "colors")
+    .map(readColor)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 12);
+  const color = colors[0] ?? null;
+  const data = chartDataFromSeriesWithColors(
+    categories,
+    supportedSeries,
+    colors,
+    supportedSeries.length <= 1,
+  ).slice(0, 8);
+  const dataLabels = readBoolean(raw, "data_labels");
 
   return {
     ...baseElement(raw),
@@ -885,6 +890,7 @@ function adaptChart(raw: UnknownRecord): SlideElement {
     axis_color: readColor(readValue(raw, "axis_color")),
     grid_color: readColor(readValue(raw, "grid_color")),
     data_labels: dataLabels,
+    legend: readBoolean(raw, "legend"),
     colors,
     x_axis: readBoolean(raw, "x_axis"),
     y_axis: readBoolean(raw, "y_axis"),
@@ -901,7 +907,7 @@ function adaptChart(raw: UnknownRecord): SlideElement {
         80,
       ) || null,
     categories,
-    series,
+    series: supportedSeries,
     source: truncateString(readString(raw.source) ?? "", 120) || null,
   };
 }

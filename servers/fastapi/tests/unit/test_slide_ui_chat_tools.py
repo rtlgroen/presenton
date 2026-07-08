@@ -81,11 +81,36 @@ def _slide():
 class _FakeSlideSession:
     def __init__(self, slide: SlideModel):
         self.slide = slide
+        self.presentation = PresentationModel(
+            id=slide.presentation,
+            version=PresentationVersion.V1_STANDARD,
+            content="deck",
+            n_slides=1,
+            language="English",
+            theme={
+                "id": "test-theme",
+                "name": "Test Theme",
+                "data": {
+                    "colors": {
+                        "background_text": "#111827",
+                        "stroke": "#E5E7EB",
+                        "graph_0": "#123456",
+                        "graph_1": "#234567",
+                        "graph_2": "#345678",
+                    }
+                },
+            },
+        )
         self.commit_count = 0
         self.added: list = []
 
     async def scalar(self, *_args, **_kwargs):
         return self.slide
+
+    async def get(self, model, key):
+        if model is PresentationModel and key == self.presentation.id:
+            return self.presentation
+        return None
 
     def add(self, obj):
         self.added.append(obj)
@@ -147,6 +172,33 @@ def test_update_slide_element_edits_ui_text():
     # The renderer reads the flattened top-level `text` in preference to `runs`,
     # so it must be kept in sync or the edit is invisible / gets reverted.
     assert element["text"] == "New title"
+    assert session.commit_count == 1
+
+
+def test_update_slide_element_accepts_stringified_null_optionals():
+    slide = _slide()
+    tools, session = _tools(slide)
+
+    result = _call(
+        tools,
+        "updateElement",
+        {
+            "index": 0,
+            "elementPath": "components[0].elements[0]",
+            "text": "New title",
+            "items": "null",
+            "tableCell": "null",
+            "chart": "null",
+            "table": "null",
+            "element": "null",
+            "position": "null",
+            "size": "null",
+        },
+    )
+
+    assert result["ok"] is True
+    assert result["result"]["updated"] is True
+    assert slide.ui["components"][0]["elements"][0]["text"] == "New title"
     assert session.commit_count == 1
 
 
@@ -375,7 +427,7 @@ def test_get_slide_elements_reports_visible_flex_and_resizes_it():
     assert session.commit_count == 1
 
 
-def test_update_slide_element_accepts_chart_data_alias_and_type():
+def test_update_slide_element_updates_new_chart_model_fields():
     slide = _slide()
     slide.ui["components"].append(
         {
@@ -402,22 +454,31 @@ def test_update_slide_element_accepts_chart_data_alias_and_type():
             "index": 0,
             "elementPath": "components[2].elements[0]",
             "chart": {
-                "type": "bar",
+                "chartType": "line",
                 "title": "GHG Emissions 2024-2025",
                 "categories": ["CO2", "CH4", "N2O"],
                 "series": [
-                    {"name": "2024 Gt", "data": [36.4, 2.1, 0.8]},
-                    {"name": "2025 Gt", "data": [36.7, 2.3, 0.84]},
+                    {"name": "2024 Gt", "values": [36.4, 2.1, 0.8]},
+                    {"name": "2025 Gt", "values": [36.7, 2.3, 0.84]},
                 ],
+                "dataLabels": True,
+                "legend": True,
+                "xAxisTitle": "Gas",
+                "yAxisTitle": "Emissions (Gt)",
             },
         },
     )
 
     chart = slide.ui["components"][2]["elements"][0]
     assert result["ok"] is True
+    assert chart["chart_type"] == "line"
     assert chart["title"] == "GHG Emissions 2024-2025"
     assert chart["series"][0]["values"] == [36.4, 2.1, 0.8]
-    assert "data" not in chart["series"][0]
+    assert chart["data_labels"] is True
+    assert chart["legend"] is True
+    assert chart["x_axis_title"] == "Gas"
+    assert chart["y_axis_title"] == "Emissions (Gt)"
+    assert chart["colors"][:3] == ["#123456", "#234567", "#345678"]
     assert session.commit_count == 1
 
 
@@ -776,6 +837,349 @@ def test_add_slide_component_expands_tiny_chart_block():
     assert chart_component["size"] == {"width": 1024.0, "height": 460.0}
     assert chart["position"] == {"x": 0, "y": 0}
     assert chart["size"] == {"width": 1024.0, "height": 460.0}
+    assert chart["colors"][:3] == ["#123456", "#234567", "#345678"]
+    assert chart["color"] == "#123456"
+    assert chart["axis_color"] == "#111827"
+    assert chart["grid_color"] == "#E5E7EB"
+
+
+def test_add_slide_element_converts_data_only_chart_on_first_insert():
+    slide = _slide()
+    tools, session = _tools(slide)
+    chart = {
+        "type": "chart",
+        "decorative": False,
+        "name": "Goals chart",
+        "title": "Goals",
+        "position": {"x": 128, "y": 108},
+        "size": {"width": 1024, "height": 460},
+        "chart_type": "bar",
+        "data": [
+            {"label": "Messi", "value": "600 goals"},
+            {"label": "Ronaldo", "value": 800},
+        ],
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(chart)},
+    )
+
+    added_chart = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert added_chart["categories"] == ["Messi", "Ronaldo"]
+    assert added_chart["series"] == [{"name": "Goals", "values": [600, 800]}]
+    assert [
+        {key: item[key] for key in ("label", "value")}
+        for item in added_chart["data"]
+    ] == [
+        {"label": "Messi", "value": 600},
+        {"label": "Ronaldo", "value": 800},
+    ]
+    assert session.commit_count == 1
+
+
+def test_add_slide_element_accepts_object_payload_for_json_string_field():
+    slide = _slide()
+    tools, session = _tools(slide)
+    chart = {
+        "type": "chart",
+        "decorative": False,
+        "name": "Goals chart",
+        "title": "Goals",
+        "position": {"x": 128, "y": 108},
+        "size": {"width": 1024, "height": 460},
+        "chart_type": "bar",
+        "data": [
+            {"label": "Messi", "value": 600},
+            {"label": "Ronaldo", "value": 800},
+        ],
+    }
+
+    result = _run(
+        tools.execute_tool_call(
+            AssistantToolCall(
+                id="call_1",
+                name="addElement",
+                arguments=json.dumps({"index": 0, "element": chart}),
+            )
+        )
+    )
+
+    added_chart = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert result["repair"]["applied"] is True
+    assert "Converted element from object" in result["repair"]["notes"][0]
+    assert added_chart["categories"] == ["Messi", "Ronaldo"]
+    assert added_chart["series"] == [{"name": "Goals", "values": [600, 800]}]
+    assert session.commit_count == 1
+
+
+def test_add_slide_element_repairs_fenced_jsonish_element_payload():
+    slide = _slide()
+    tools, session = _tools(slide)
+    chart = """```json
+{type:'chart', decorative:false, name:'Goals chart', title:'Goals',
+ position:{x:128, y:108}, size:{width:1024, height:460}, chart_type:'bar',
+ data:[{label:'Messi', value:600}, {label:'Ronaldo', value:800}]}
+```"""
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": chart},
+    )
+
+    added_chart = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert result["repair"]["applied"] is True
+    assert any(
+        "Repaired JSON string field element" in note
+        for note in result["repair"]["notes"]
+    )
+    assert added_chart["categories"] == ["Messi", "Ronaldo"]
+    assert added_chart["series"] == [{"name": "Goals", "values": [600, 800]}]
+    assert session.commit_count == 1
+
+
+@patch.object(PresentationChatMemoryLayer, "generate_image", new_callable=AsyncMock)
+def test_add_slide_element_uses_generated_asset_for_blank_image_insert(mock_generate_image):
+    mock_generate_image.return_value = "/app_data/images/nepal-flag.png"
+    slide = _slide()
+    tools, session = _tools(slide)
+    tools.set_turn_context("User message: Can you add an image with a Nepali flag")
+
+    generated = _call(
+        tools,
+        "generateAssets",
+        {"assets": [{"kind": "image", "prompt": "Nepal flag"}]},
+    )
+    image = {
+        "type": "image",
+        "decorative": False,
+        "name": "Nepal flag",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 420, "height": 280},
+    }
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(image)},
+    )
+
+    added_image = slide.ui["components"][-1]["elements"][0]
+    assert generated["ok"] is True
+    assert result["ok"] is True
+    assert result["repair"]["applied"] is True
+    assert added_image["data"] == "/app_data/images/nepal-flag.png"
+    assert added_image["prompt"] == "Nepal flag"
+    assert added_image["is_icon"] is False
+    assert session.commit_count == 1
+
+
+def test_add_slide_element_normalizes_image_url_alias_on_insert():
+    slide = _slide()
+    tools, session = _tools(slide)
+    image = {
+        "type": "image",
+        "decorative": False,
+        "name": "Nepal flag",
+        "image_url": "/app_data/images/nepal-flag.png",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 420, "height": 280},
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(image)},
+    )
+
+    added_image = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert added_image["data"] == "/app_data/images/nepal-flag.png"
+    assert added_image["is_icon"] is False
+    assert session.commit_count == 1
+
+
+@patch.object(PresentationChatMemoryLayer, "generate_image", new_callable=AsyncMock)
+def test_add_slide_element_replaces_prompt_like_image_data_with_generated_asset(
+    mock_generate_image,
+):
+    mock_generate_image.return_value = "/app_data/images/nepal-flag.png"
+    slide = _slide()
+    tools, session = _tools(slide)
+    tools.set_turn_context("User message: Can you add an image with a Nepali flag")
+    _call(
+        tools,
+        "generateAssets",
+        {"assets": [{"kind": "image", "prompt": "Nepal flag"}]},
+    )
+    image = {
+        "type": "image",
+        "decorative": False,
+        "name": "Nepal flag",
+        "data": "Nepali flag image",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 420, "height": 280},
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(image)},
+    )
+
+    added_image = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert result["repair"]["applied"] is True
+    assert added_image["data"] == "/app_data/images/nepal-flag.png"
+    assert session.commit_count == 1
+
+
+def test_add_slide_element_rejects_blank_image_insert():
+    slide = _slide()
+    tools, session = _tools(slide)
+    image = {
+        "type": "image",
+        "decorative": False,
+        "name": "Blank image",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 420, "height": 280},
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(image)},
+    )
+
+    assert result["ok"] is False
+    assert "Image elements must include" in result["error"]
+    assert result["recovery"]["retryable"] is True
+    assert "data" in result["recovery"]["expected"]["image"]
+    assert len(slide.ui["components"]) == 2
+    assert session.commit_count == 0
+
+
+def test_add_slide_element_rejects_blank_chart_insert():
+    slide = _slide()
+    tools, session = _tools(slide)
+    chart = {
+        "type": "chart",
+        "decorative": False,
+        "name": "Blank chart",
+        "position": {"x": 128, "y": 108},
+        "size": {"width": 1024, "height": 460},
+        "chart_type": "bar",
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(chart)},
+    )
+
+    assert result["ok"] is False
+    assert "numeric data" in result["error"]
+    assert result["recovery"]["retryable"] is True
+    assert "categories" in result["recovery"]["expected"]["chart"]
+    assert len(slide.ui["components"]) == 2
+    assert session.commit_count == 0
+
+
+def test_add_slide_element_repairs_blank_chart_from_user_message_data():
+    slide = _slide()
+    tools, session = _tools(slide)
+    tools.set_turn_context(
+        "UI context: the currently selected slide is slide 16 "
+        "(zero-based index 15).\n"
+        "User message: Add a chart with no.of goals the messi and ronaldo "
+        "have in their lifetime.\n"
+        "messi 600 goals and ronaldo 800 goals"
+    )
+    chart = {
+        "type": "chart",
+        "decorative": False,
+        "name": "Blank chart",
+        "position": {"x": 128, "y": 108},
+        "size": {"width": 1024, "height": 460},
+        "chart_type": "bar",
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(chart)},
+    )
+
+    added_chart = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert added_chart["title"] == "Goals"
+    assert added_chart["categories"] == ["Messi", "Ronaldo"]
+    assert added_chart["series"] == [{"name": "Goals", "values": [600, 800]}]
+    assert session.commit_count == 1
+
+
+def test_add_slide_element_repairs_blank_table_from_user_message_data():
+    slide = _slide()
+    tools, session = _tools(slide)
+    tools.set_turn_context(
+        "User message: Add a table with first row with Name, Age, Department. "
+        "Data: Ghanshyam, 30, QA; Sudeep, 33, AI"
+    )
+    table = {
+        "type": "table",
+        "decorative": False,
+        "name": "People table",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 1024, "height": 410},
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(table)},
+    )
+
+    added_table = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert [cell["runs"][0]["text"] for cell in added_table["columns"]] == [
+        "Name",
+        "Age",
+        "Department",
+    ]
+    assert [[cell["runs"][0]["text"] for cell in row] for row in added_table["rows"]] == [
+        ["Ghanshyam", "30", "QA"],
+        ["Sudeep", "33", "AI"],
+    ]
+    assert session.commit_count == 1
+
+
+def test_add_slide_element_rejects_blank_table_insert():
+    slide = _slide()
+    tools, session = _tools(slide)
+    table = {
+        "type": "table",
+        "decorative": False,
+        "name": "Blank table",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 1024, "height": 410},
+    }
+
+    result = _call(
+        tools,
+        "addElement",
+        {"index": 0, "element": json.dumps(table)},
+    )
+
+    assert result["ok"] is False
+    assert "Table elements must include" in result["error"]
+    assert result["recovery"]["retryable"] is True
+    assert "columns" in result["recovery"]["expected"]["table"]
+    assert len(slide.ui["components"]) == 2
+    assert session.commit_count == 0
 
 
 def test_add_slide_component_expands_tiny_table_block():
@@ -817,6 +1221,76 @@ def test_add_slide_component_expands_tiny_table_block():
     assert table_component["size"] == {"width": 1024.0, "height": 410.0}
     assert table["position"] == {"x": 0, "y": 0}
     assert table["size"] == {"width": 1024.0, "height": 410.0}
+
+
+def test_add_slide_component_normalizes_table_cell_content_aliases():
+    slide = _slide()
+    tools, _ = _tools(slide)
+    component = {
+        "id": "people-table",
+        "description": "A table with people and departments.",
+        "position": {"x": 128, "y": 120},
+        "size": {"width": 1024, "height": 410},
+        "elements": [
+            {
+                "type": "table",
+                "decorative": False,
+                "name": "People table",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": 1024, "height": 410},
+                "headers": [
+                    {"content": "Name"},
+                    {"value": "Age"},
+                    {"text": {"text": "Department"}},
+                ],
+                "rows": [
+                    [
+                        {"content": "Ghanshyam"},
+                        {"value": 30},
+                        {"label": "QA"},
+                    ],
+                    [
+                        {"text": "Sudeep"},
+                        {"content": 33},
+                        {"data": "AI"},
+                    ],
+                ],
+                "min_columns": 1,
+                "max_columns": 6,
+                "min_rows": 1,
+                "max_rows": 10,
+            }
+        ],
+    }
+
+    result = _call(
+        tools,
+        "addComponent",
+        {"index": 0, "component": json.dumps(component)},
+    )
+
+    table = slide.ui["components"][-1]["elements"][0]
+    assert result["ok"] is True
+    assert [cell["runs"][0]["text"] for cell in table["columns"]] == [
+        "Name",
+        "Age",
+        "Department",
+    ]
+    assert [[cell["runs"][0]["text"] for cell in row] for row in table["rows"]] == [
+        ["Ghanshyam", "30", "QA"],
+        ["Sudeep", "33", "AI"],
+    ]
+
+    elements = _call(
+        tools,
+        "getSlideAtIndex",
+        {"index": 0, "includeFullContent": True},
+    )["result"]["slide"]["ui_summary"]["elements"]
+    added_table = next(element for element in elements if element["name"] == "People table")
+    assert added_table["content"] == {
+        "columns": ["Name", "Age", "Department"],
+        "rows": [["Ghanshyam", "30", "QA"], ["Sudeep", "33", "AI"]],
+    }
 
 
 def test_ui_tool_reports_non_ui_slide():

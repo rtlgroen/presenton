@@ -75,8 +75,8 @@ function hasTemplateV2Layouts(layout: unknown): boolean {
   if (Array.isArray(layouts)) return true;
   return Boolean(
     layouts &&
-      typeof layouts === "object" &&
-      Array.isArray((layouts as any).layouts)
+    typeof layouts === "object" &&
+    Array.isArray((layouts as any).layouts)
   );
 }
 
@@ -142,7 +142,7 @@ const PresentationHeader = ({
   );
   const isSlideEditorImportEnabled = isEnabledFeatureFlag(
     process.env.NEXT_PUBLIC_USE_SLIDE_EDITOR_IMPORT ??
-      process.env.USE_SLIDE_EDITOR_IMPORT
+    process.env.USE_SLIDE_EDITOR_IMPORT
   );
   const firstSlideLayout =
     typeof presentationData?.slides?.[0]?.layout === "string"
@@ -150,11 +150,11 @@ const PresentationHeader = ({
       : "";
   const shouldShowThemeSelector = Boolean(
     presentationData &&
-      !isSlideEditorImportEnabled &&
-      !hasTemplateV2Slides(presentationData.slides) &&
-      !hasTemplateV2Layouts(presentationData.layout) &&
-      presentationData.slides &&
-      !firstSlideLayout.includes("custom")
+    !isSlideEditorImportEnabled &&
+    !hasTemplateV2Slides(presentationData.slides) &&
+    !hasTemplateV2Layouts(presentationData.layout) &&
+    presentationData.slides &&
+    !firstSlideLayout.includes("custom")
   );
 
   useEffect(() => {
@@ -265,9 +265,9 @@ const PresentationHeader = ({
       );
       setIsExporting(true);
       // Save the presentation data before exporting
-      await PresentationGenerationApi.updatePresentationContent(
-        presentationData
-      );
+      // await PresentationGenerationApi.updatePresentationContent(
+      //   presentationData
+      // );
       const safePptxFileName = buildSafeExportFileName(
         presentationData?.title,
         "pptx"
@@ -330,9 +330,9 @@ const PresentationHeader = ({
       );
       setIsExporting(true);
       // Save the presentation data before exporting
-      await PresentationGenerationApi.updatePresentationContent(
-        presentationData
-      );
+      // await PresentationGenerationApi.updatePresentationContent(
+      //   presentationData
+      // );
       const safePdfFileName = buildSafeExportFileName(
         presentationData?.title,
         "pdf"
@@ -407,9 +407,8 @@ const PresentationHeader = ({
             setOpen(false);
           }}
           variant="ghost"
-          className={`  rounded-none px-0 w-full text-xs flex justify-start text-black hover:bg-transparent ${
-            mobile ? "bg-white py-6 border-none rounded-lg" : ""
-          }`}
+          className={`  rounded-none px-0 w-full text-xs flex justify-start text-black hover:bg-transparent ${mobile ? "bg-white py-6 border-none rounded-lg" : ""
+            }`}
         >
           PDF
           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -420,9 +419,8 @@ const PresentationHeader = ({
             setOpen(false);
           }}
           variant="ghost"
-          className={`w-full flex px-0 justify-start text-xs text-black hover:bg-transparent  ${
-            mobile ? "bg-white py-6" : ""
-          }`}
+          className={`w-full flex px-0 justify-start text-xs text-black hover:bg-transparent  ${mobile ? "bg-white py-6" : ""
+            }`}
         >
           PPTX
           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -539,10 +537,10 @@ const PresentationHeader = ({
             </div>
           )}
           {shouldShowThemeSelector && (
-              <ThemeSelector
-                current_theme={presentationData?.theme || {}}
-                themes={themes}
-              />
+            <ThemeSelector
+              current_theme={presentationData?.theme || {}}
+              themes={themes}
+            />
           )}
 
           <div className="flex items-center gap-2 bg-[#F6F6F9] px-3.5 h-[38px] border border-[#EDECEC] rounded-[80px]">
@@ -583,9 +581,8 @@ const PresentationHeader = ({
             <ToolTip content="Present">
               <button
                 onClick={() => {
-                  const to = `?id=${presentation_id}&mode=present&slide=${
-                    currentSlide || 0
-                  }`;
+                  const to = `?id=${presentation_id}&mode=present&slide=${currentSlide || 0
+                    }`;
                   trackEvent(MixpanelEvent.Presentation_Mode_Entered, {
                     pathname,
                     presentation_id,

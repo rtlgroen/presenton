@@ -1,7 +1,5 @@
-import React, { useEffect } from "react";
+import React, { memo, useEffect } from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import { useSelector } from "react-redux";
-import { RootState } from "@/store/store";
 import SlideScale from "../../components/PresentationRender";
 import SlideActionBar from "./SlideActionBar";
 
@@ -21,6 +19,9 @@ interface SlideContentProps {
   onBlankPromptOverlayDismiss?: () => void;
   showTemplatePromptOverlay?: boolean;
   onTemplatePromptOverlayDismiss?: () => void;
+  theme?: unknown;
+  fonts?: unknown;
+  isStreaming?: boolean | null;
 }
 
 const SlideContent = ({
@@ -33,11 +34,11 @@ const SlideContent = ({
   onBlankPromptOverlayDismiss,
   showTemplatePromptOverlay = false,
   onTemplatePromptOverlayDismiss,
+  theme,
+  fonts,
+  isStreaming = false,
 }: SlideContentProps) => {
   const slideLayout = typeof slide?.layout === "string" ? slide.layout : "";
-  const { presentationData, isStreaming } = useSelector(
-    (state: RootState) => state.presentationGeneration
-  );
 
   const slideLayoutGroup =
     typeof slide?.layout_group === "string" ? slide.layout_group : "";
@@ -47,7 +48,6 @@ const SlideContent = ({
     ? slideLayoutGroup
     : slideLayoutGroup || slideLayoutTemplateId;
   const isTemplateV2Slide = slideTemplateId.startsWith("template-v2");
-  const slideIndex = typeof slide?.index === "number" ? slide.index : index;
 
   useEffect(() => {
     if (slideLayout.includes("custom")) {
@@ -65,7 +65,7 @@ const SlideContent = ({
 
   return (
     <div
-      id={`slide-${slideIndex}`}
+      id={`slide-${index}`}
       className="main-slide relative flex w-full items-center justify-center max-md:mb-4"
     >
       {isStreaming && (
@@ -98,8 +98,8 @@ const SlideContent = ({
         <div className="relative">
           <SlideScale
             slide={slide}
-            theme={presentationData?.theme || null}
-            fonts={presentationData?.fonts}
+            theme={theme ?? null}
+            fonts={fonts}
             renderIndex={index}
             showBlankPromptOverlay={showBlankPromptOverlay}
             onBlankPromptOverlayDismiss={onBlankPromptOverlayDismiss}
@@ -110,7 +110,7 @@ const SlideContent = ({
         <div className="my-4 hidden w-full md:block">
           <SlideActionBar
             slide={slide}
-            selectedSlide={slideIndex}
+            selectedSlide={index}
             presentationId={presentationId}
             onSlideSelected={onSlideAdded ?? (() => undefined)}
             revealOnGroupHover
@@ -121,4 +121,17 @@ const SlideContent = ({
   );
 };
 
-export default SlideContent;
+export default memo(
+  SlideContent,
+  (previous, next) =>
+    previous.slide === next.slide &&
+    previous.index === next.index &&
+    previous.presentationId === next.presentationId &&
+    previous.onSlideAdded === next.onSlideAdded &&
+    previous.isChatEditing === next.isChatEditing &&
+    previous.showBlankPromptOverlay === next.showBlankPromptOverlay &&
+    previous.showTemplatePromptOverlay === next.showTemplatePromptOverlay &&
+    previous.theme === next.theme &&
+    previous.fonts === next.fonts &&
+    previous.isStreaming === next.isStreaming,
+);

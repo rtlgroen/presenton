@@ -16,7 +16,6 @@ import {
   Check,
   ChevronDown,
   Italic,
-  Link,
   List,
   ListOrdered,
   Repeat2,
@@ -509,15 +508,6 @@ export function TextToolbar({
               />
             </ToolbarButton>
           </div>
-          <Divider />
-          <ToolbarButton
-            title="Link"
-            controlId="link"
-            hoveredControl={hoveredControl}
-            setHoveredControl={setHoveredControl}
-          >
-            <Link size={18} strokeWidth={2.4} aria-hidden="true" />
-          </ToolbarButton>
           <Divider />
           <div style={textToolbarStyles.settingsControlWrap}>
             <ToolbarButton

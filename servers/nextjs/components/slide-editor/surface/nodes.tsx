@@ -211,6 +211,7 @@ export function RawComponentNode({
   onComponentDragMove,
   onComponentDragEnd,
   onElementChange,
+  fontRevision,
 }: {
   component: RawComponent;
   componentIndex: number;
@@ -242,6 +243,7 @@ export function RawComponentNode({
     selection: ElementSelection,
     updater: (element: RawElement) => RawElement,
   ) => void;
+  fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
   const box = componentBox(component);
@@ -365,6 +367,7 @@ export function RawComponentNode({
           onElementChange={onElementChange}
           parentBox={box}
           layoutManaged={false}
+          fontRevision={fontRevision}
         />
       ))}
     </Group>
@@ -389,7 +392,8 @@ export const MemoizedRawComponentNode = memo(
       previous.onComponentDragMove !== next.onComponentDragMove ||
       previous.onComponentDragEnd !== next.onComponentDragEnd ||
       previous.onElementChange !== next.onElementChange ||
-      previous.selectedTableCell !== next.selectedTableCell
+      previous.selectedTableCell !== next.selectedTableCell ||
+      previous.fontRevision !== next.fontRevision
     ) {
       return false;
     }
@@ -420,6 +424,7 @@ function RawElementNode({
   parentBox,
   renderBox,
   layoutManaged = false,
+  fontRevision,
 }: {
   element: RawElement;
   componentIndex: number;
@@ -447,6 +452,7 @@ function RawElementNode({
   parentBox: Box;
   renderBox?: Box | null;
   layoutManaged?: boolean;
+  fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
   const box = renderBox ?? elementBox(element);
@@ -573,6 +579,7 @@ function RawElementNode({
           selectedTableCell={selectedCell}
           onTableCellSelect={handleTableCellSelect}
           onTableCellEdit={handleTableCellEdit}
+          fontRevision={fontRevision}
         />
       )}
       {laidOutChildren.map(({ child, index, box: childBox, layoutManaged }) => (
@@ -598,6 +605,7 @@ function RawElementNode({
           }}
           renderBox={childBox}
           layoutManaged={layoutManaged}
+          fontRevision={fontRevision}
         />
       ))}
     </Group>
@@ -610,6 +618,7 @@ export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
     previous.componentIndex !== next.componentIndex ||
     previous.isEditMode !== next.isEditMode ||
     previous.layoutManaged !== next.layoutManaged ||
+    previous.fontRevision !== next.fontRevision ||
     previous.selectedTableCell !== next.selectedTableCell ||
     previous.setNodeRef !== next.setNodeRef ||
     previous.onSelect !== next.onSelect ||
@@ -665,6 +674,7 @@ function RawElementVisual({
   selectedTableCell,
   onTableCellSelect,
   onTableCellEdit,
+  fontRevision,
 }: {
   element: RawElement;
   width: number;
@@ -673,7 +683,9 @@ function RawElementVisual({
   selectedTableCell: TableCellSelection | null;
   onTableCellSelect: (rowIndex: number, colIndex: number) => void;
   onTableCellEdit: (rowIndex: number, colIndex: number) => void;
+  fontRevision: number;
 }) {
+  void fontRevision;
   const type = readString(element.type);
   if (isBoxVisualType(type)) {
     const fill = colorWithOpacity(
@@ -779,8 +791,12 @@ function RawElementVisual({
     );
   }
   if (type === "chart") {
+    const legendState = Object.prototype.hasOwnProperty.call(element, "legend")
+      ? String(element.legend)
+      : String(element.showLegend ?? "auto");
     return (
       <RawChartElement
+        key={`chart-legend-${legendState}`}
         element={element}
         width={width}
         height={height}
@@ -803,7 +819,8 @@ const MemoizedRawElementVisual = memo(
     previous.interactive === next.interactive &&
     previous.selectedTableCell === next.selectedTableCell &&
     previous.onTableCellSelect === next.onTableCellSelect &&
-    previous.onTableCellEdit === next.onTableCellEdit,
+    previous.onTableCellEdit === next.onTableCellEdit &&
+    previous.fontRevision === next.fontRevision,
 );
 
 function RawRichTextElement({
@@ -1027,6 +1044,7 @@ function RawImageElement({
   const fit = readString(element.fit) ?? "contain";
   const focusX = clamp(readNumber(element.focus_x) ?? 50, 0, 100) / 100;
   const focusY = clamp(readNumber(element.focus_y) ?? 50, 0, 100) / 100;
+  const cropScale = clamp(readNumber(element.crop_scale) ?? 1, 1, 6);
   const flipH = readBoolean(element.flip_h) === true;
   const flipV = readBoolean(element.flip_v) === true;
   const clipPath = imageClipPath(element);
@@ -1048,20 +1066,24 @@ function RawImageElement({
 
   if (fit === "cover") {
     if (naturalRatio > boxRatio) {
-      const cropWidth = loaded.height * boxRatio;
+      const baseCropWidth = loaded.height * boxRatio;
+      const cropWidth = Math.min(loaded.width, baseCropWidth / cropScale);
+      const cropHeight = Math.min(loaded.height, loaded.height / cropScale);
       crop = {
         x: Math.max(0, (loaded.width - cropWidth) * focusX),
-        y: 0,
-        width: Math.min(loaded.width, cropWidth),
-        height: loaded.height,
+        y: Math.max(0, (loaded.height - cropHeight) * focusY),
+        width: cropWidth,
+        height: cropHeight,
       };
     } else {
-      const cropHeight = loaded.width / boxRatio;
+      const baseCropHeight = loaded.width / boxRatio;
+      const cropWidth = Math.min(loaded.width, loaded.width / cropScale);
+      const cropHeight = Math.min(loaded.height, baseCropHeight / cropScale);
       crop = {
-        x: 0,
+        x: Math.max(0, (loaded.width - cropWidth) * focusX),
         y: Math.max(0, (loaded.height - cropHeight) * focusY),
-        width: loaded.width,
-        height: Math.min(loaded.height, cropHeight),
+        width: cropWidth,
+        height: cropHeight,
       };
     }
   } else if (fit === "contain") {

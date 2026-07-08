@@ -3,31 +3,54 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type Konva from "konva";
 import { Transformer } from "react-konva";
+import {
+  EDITOR_STAGE_HEIGHT,
+  EDITOR_STAGE_WIDTH,
+} from "@/components/slide-editor/types";
 
 const CORNER_HANDLE_SIZE = 14;
 const EDGE_HANDLE_LENGTH = 28;
 const EDGE_HANDLE_THICKNESS = 9;
 const ROTATION_HANDLE_SIZE = 28;
-const ROTATION_HANDLE_INSET = 6;
-const ROTATION_ICON_SCALE = 1.2;
-const ROTATION_ICON_PATH =
-  "M11.0835 5.83331C11.0835 6.87166 10.7756 7.8867 10.1987 8.75006C9.62184 9.61341 8.8019 10.2863 7.84259 10.6837C6.88327 11.081 5.82767 11.185 4.80927 10.9824C3.79087 10.7799 2.85541 10.2798 2.12119 9.54562C1.38696 8.8114 0.886948 7.87594 0.684376 6.85754C0.481803 5.83914 0.585771 4.78354 0.983131 3.82422C1.38049 2.86491 2.0534 2.04498 2.91675 1.4681C3.78011 0.89122 4.79515 0.583313 5.8335 0.583313C7.3035 0.583313 8.70933 1.16665 9.76516 2.18165L11.0835 3.49998";
+const ROTATION_HANDLE_GAP = 12;
+const ROTATION_HANDLE_VIEWPORT_MARGIN = 3;
+const ROTATION_ANCHOR_OFFSET = ROTATION_HANDLE_SIZE / 2 + ROTATION_HANDLE_GAP;
+const ROTATION_ICON_SIZE = 18;
+const ROTATION_ICON_VIEWBOX_SIZE = 24;
+const REFRESH_CW_ICON_PATHS = [
+  "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8",
+  "M21 3v5h-5",
+  "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",
+  "M8 16H3v5",
+];
 const SHADOW_EVENT_NAMESPACE = ".presentonSelectionShadows";
+const ROTATION_ANCHOR_EVENT_NAMESPACE = ".presentonSelectionRotationAnchor";
 const MULTI_SELECTION_GROUP_DASH = [5, 5];
 const MULTI_SELECTION_MEMBER_DASH = [7, 4];
-let rotationIconPath: Path2D | null = null;
+let refreshCwIconPaths: Path2D[] | null = null;
 
 type SelectionKind = "component" | "multi-component" | "element" | null;
+
+type RotationAnchorSide = "top" | "bottom" | "right" | "left";
 
 type RotationAnchorPlacement = {
   angle: number;
   offset: number;
+  side: RotationAnchorSide;
 };
 
 const DEFAULT_ROTATION_ANCHOR_PLACEMENT: RotationAnchorPlacement = {
-  angle: 45,
-  offset: -(ROTATION_HANDLE_SIZE / 2 + ROTATION_HANDLE_INSET),
+  angle: 0,
+  offset: ROTATION_ANCHOR_OFFSET,
+  side: "top",
 };
+
+const ROTATION_ANCHOR_CANDIDATES: RotationAnchorPlacement[] = [
+  DEFAULT_ROTATION_ANCHOR_PLACEMENT,
+  { angle: 180, offset: ROTATION_ANCHOR_OFFSET, side: "bottom" },
+  { angle: 90, offset: ROTATION_ANCHOR_OFFSET, side: "right" },
+  { angle: -90, offset: ROTATION_ANCHOR_OFFSET, side: "left" },
+];
 
 type TemplateV2SelectionTransformersProps = {
   nodeRefs: RefObject<Map<string, Konva.Node>>;
@@ -48,15 +71,21 @@ function drawRotationHandle(context: Konva.Context, shape: Konva.Shape) {
 
   context.save();
   context.setAttr("strokeStyle", "#111111");
-  context.setAttr("lineWidth", 1.16667);
+  context.setAttr("lineWidth", 2);
   context.setAttr("lineCap", "round");
   context.setAttr("lineJoin", "round");
-  context.translate(center - 7, center - 7);
-  context.scale(ROTATION_ICON_SCALE, ROTATION_ICON_SCALE);
-  if (!rotationIconPath && typeof Path2D !== "undefined") {
-    rotationIconPath = new Path2D(ROTATION_ICON_PATH);
+  context.translate(
+    center - ROTATION_ICON_SIZE / 2,
+    center - ROTATION_ICON_SIZE / 2,
+  );
+  context.scale(
+    ROTATION_ICON_SIZE / ROTATION_ICON_VIEWBOX_SIZE,
+    ROTATION_ICON_SIZE / ROTATION_ICON_VIEWBOX_SIZE,
+  );
+  if (!refreshCwIconPaths && typeof Path2D !== "undefined") {
+    refreshCwIconPaths = REFRESH_CW_ICON_PATHS.map((path) => new Path2D(path));
   }
-  if (rotationIconPath) context.stroke(rotationIconPath);
+  refreshCwIconPaths?.forEach((path) => context.stroke(path));
   context.restore();
 }
 
@@ -196,39 +225,76 @@ function rotationAnchorPlacementForNode(
 ): RotationAnchorPlacement {
   if (!node) return DEFAULT_ROTATION_ANCHOR_PLACEMENT;
 
-  const width = Math.abs(node.width() * node.scaleX());
-  const height = Math.abs(node.height() * node.scaleY());
+  const width = Math.abs(node.width());
+  const height = Math.abs(node.height());
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return DEFAULT_ROTATION_ANCHOR_PLACEMENT;
   }
 
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const inset = ROTATION_HANDLE_SIZE / 2 + ROTATION_HANDLE_INSET;
-  const targetX = width > inset * 2 ? width - inset : width / 2;
-  const targetY = height > inset * 2 ? inset : height / 2;
-  const dx = targetX - centerX;
-  const dy = targetY - centerY;
-  const distanceToTarget = Math.hypot(dx, dy);
-  if (distanceToTarget < 0.5) return DEFAULT_ROTATION_ANCHOR_PLACEMENT;
+  const absoluteTransform = node.getAbsoluteTransform().copy();
+  const scoredPlacements = ROTATION_ANCHOR_CANDIDATES.map((placement) => {
+    const anchorCenter = localRotationAnchorCenter(width, height, placement);
+    const absoluteCenter = absoluteTransform.point(anchorCenter);
+    return {
+      placement,
+      overflow: rotationAnchorOverflow(absoluteCenter),
+    };
+  });
+  const visiblePlacement = scoredPlacements.find(
+    ({ overflow }) => overflow.total === 0,
+  );
+  if (visiblePlacement) return visiblePlacement.placement;
 
-  const dirX = dx / distanceToTarget;
-  const dirY = dy / distanceToTarget;
-  let distanceToEdge = Infinity;
-  if (dirY < 0) distanceToEdge = Math.min(distanceToEdge, -centerY / dirY);
-  else if (dirY > 0) {
-    distanceToEdge = Math.min(distanceToEdge, (height - centerY) / dirY);
+  return scoredPlacements.reduce((best, current) =>
+    current.overflow.total < best.overflow.total ? current : best,
+  ).placement;
+}
+
+function localRotationAnchorCenter(
+  width: number,
+  height: number,
+  placement: RotationAnchorPlacement,
+) {
+  switch (placement.side) {
+    case "bottom":
+      return { x: width / 2, y: height + placement.offset };
+    case "right":
+      return { x: width + placement.offset, y: height / 2 };
+    case "left":
+      return { x: -placement.offset, y: height / 2 };
+    case "top":
+    default:
+      return { x: width / 2, y: -placement.offset };
   }
-  if (dirX < 0) distanceToEdge = Math.min(distanceToEdge, -centerX / dirX);
-  else if (dirX > 0) {
-    distanceToEdge = Math.min(distanceToEdge, (width - centerX) / dirX);
-  }
-  if (!Number.isFinite(distanceToEdge)) return DEFAULT_ROTATION_ANCHOR_PLACEMENT;
+}
+
+function rotationAnchorOverflow(point: { x: number; y: number }) {
+  const clearance = ROTATION_HANDLE_SIZE / 2 + ROTATION_HANDLE_VIEWPORT_MARGIN;
+  const left = Math.max(0, clearance - point.x);
+  const top = Math.max(0, clearance - point.y);
+  const right = Math.max(0, point.x + clearance - EDITOR_STAGE_WIDTH);
+  const bottom = Math.max(0, point.y + clearance - EDITOR_STAGE_HEIGHT);
 
   return {
-    angle: (Math.atan2(dirX, -dirY) * 180) / Math.PI,
-    offset: distanceToTarget - distanceToEdge,
+    left,
+    top,
+    right,
+    bottom,
+    total: left + top + right + bottom,
   };
+}
+
+function applyRotationAnchorPlacement(
+  transformer: Konva.Transformer | null,
+  node: Konva.Node | null | undefined,
+) {
+  if (!transformer) return;
+
+  const placement = rotationAnchorPlacementForNode(node);
+  transformer.rotateAnchorAngle(placement.angle);
+  transformer.rotateAnchorOffset(placement.offset);
+  transformer.forceUpdate();
+  transformer.getLayer()?.batchDraw();
 }
 
 export function TemplateV2SelectionTransformers({
@@ -279,6 +345,15 @@ export function TemplateV2SelectionTransformers({
       applyContextBoundaryStyle(contextTransformer);
     }
 
+    const selectedRotationNode =
+      selectionKind === "component" && selectedNodes.length === 1
+        ? selectedNodes[0]
+        : null;
+    const refreshRotationAnchorPlacement = () => {
+      applyRotationAnchorPlacement(selectedTransformer, selectedRotationNode);
+    };
+    refreshRotationAnchorPlacement();
+
     selectedTransformer?.getLayer()?.batchDraw();
 
     const transformers = [selectedTransformer, contextTransformer];
@@ -294,9 +369,26 @@ export function TemplateV2SelectionTransformers({
       node.on(`dragstart${SHADOW_EVENT_NAMESPACE}`, disableShadows);
       node.on(`dragend${SHADOW_EVENT_NAMESPACE}`, enableShadows);
     });
+    selectedRotationNode?.on(
+      `dragstart${ROTATION_ANCHOR_EVENT_NAMESPACE}`,
+      refreshRotationAnchorPlacement,
+    );
+    selectedRotationNode?.on(
+      `dragmove${ROTATION_ANCHOR_EVENT_NAMESPACE}`,
+      refreshRotationAnchorPlacement,
+    );
+    selectedRotationNode?.on(
+      `dragend${ROTATION_ANCHOR_EVENT_NAMESPACE}`,
+      refreshRotationAnchorPlacement,
+    );
+    selectedRotationNode?.on(
+      `transformend${ROTATION_ANCHOR_EVENT_NAMESPACE}`,
+      refreshRotationAnchorPlacement,
+    );
 
     return () => {
       dragNodes.forEach((node) => node.off(SHADOW_EVENT_NAMESPACE));
+      selectedRotationNode?.off(ROTATION_ANCHOR_EVENT_NAMESPACE);
       enableShadows();
     };
   }, [

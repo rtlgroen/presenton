@@ -202,6 +202,7 @@ export type ImageElement = ElementBase & {
   fit?: ImageFit | null;
   focus_x?: number | null;
   focus_y?: number | null;
+  crop_scale?: number | null;
   border_radius?: BorderRadius | null;
   clippath?: string | null;
   clip_path?: string | null;
@@ -285,6 +286,7 @@ export type ChartElement = ElementBase & {
   categories?: string[] | null;
   series?: ChartSeries[] | null;
   data_labels?: boolean | null;
+  legend?: boolean | null;
   source?: string | null;
 };
 

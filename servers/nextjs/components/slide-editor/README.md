@@ -686,34 +686,38 @@ Rendering:
   - `cover` shown as "Fill" in the toolbar.
   - `contain`.
   - `fill` shown as "Stretch".
-- It supports crop focus through `focus_x` and `focus_y`.
+- It supports crop focus through `focus_x` and `focus_y`, with optional
+  crop zoom through `crop_scale`.
 - It supports `flip_h`, `flip_v`, `opacity`, `border_radius`, and icon color
   masking.
 
 Crop model:
 
 - The persisted crop data is not a pixel crop rectangle.
-- It is `fit: "cover"` plus `focus_x` and `focus_y` percentages.
-- The toolbar shows a visual focus-point crop overlay and commits the final
-  focus point once when the user applies or releases the crop interaction.
+- It is `fit: "cover"` plus `focus_x`, `focus_y`, and optional `crop_scale`.
+- The toolbar shows a Canva-style fixed crop window with a draggable/scalable
+  image box outside it. It commits the final focus and zoom when the user
+  applies or releases the crop interaction.
 
 `ImageToolbar.tsx` owns:
 
 - Fit dropdown.
 - Replace image action.
-- Crop/focus overlay.
+- Crop window and source image scaling overlay.
 - Horizontal/vertical flip.
 - Opacity.
 - Border radius.
 
 Important functions:
 
-- `cropControlsPosition()`: Keeps crop controls inside the canvas and below
+- `cropActionsPosition()`: Keeps crop actions inside the canvas and below
   the main image toolbar.
-- `normalizeCropPoint()`: Clamps focus to `0..100`.
-- `commitCrop()`: Writes `fit: "cover"`, `focus_x`, and `focus_y`.
-- `CropOverlay()`: Shows live image preview, grid, and focus handle.
-- `CropControls()`: Shows focus presets, sliders, reset/apply/close.
+- `normalizeCropDraft()`: Clamps focus to `0..100` and crop scale to bounds.
+- `commitCrop()`: Writes `fit: "cover"`, `focus_x`, `focus_y`, and
+  `crop_scale`.
+- `CropOverlay()`: Shows the fixed crop window, outside shade, draggable image,
+  and resize handles.
+- `CropActions()`: Shows reset/apply/close.
 
 Image replacement:
 
@@ -970,9 +974,12 @@ Data helpers:
 
 Editing:
 
-- `ChartToolbar` provides quick chart actions and opens the full editor.
+- `ChartToolbar` provides chart type and color shortcuts.
 - `openChartEditor()` dispatches `TEMPLATE_V2_CHART_EDITOR_EVENT`.
-- `ChartEditorContent` edits data, labels, series, colors, and chart type.
+- `ChartEditorContent` provides the Presentation Actions Data and Customize
+  tabs and the expanded data table.
+- `ChartCustomizePanel` is shared by Presentation Actions and the expanded
+  chart editor. It edits title, values, colors, axes, and X/Y grids.
 - When finished, chart editor dispatches `TEMPLATE_V2_CHART_UPDATE_EVENT`.
 - `TemplateV2KonvaSlide` listens for update events and writes data to the
   currently selected chart.

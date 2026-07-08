@@ -136,10 +136,6 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
     (state: RootState) => state.presentationGeneration
   );
   const slidesLength = presentationData?.slides?.length ?? 0;
-  const lastStreamingSlideIndex =
-    slidesLength > 0
-      ? presentationData?.slides?.[slidesLength - 1]?.index
-      : undefined;
   const isTemplateV2Presentation =
     hasTemplateV2Layouts(presentationData?.layout) ||
     hasTemplateV2Slides(presentationData?.slides);
@@ -164,6 +160,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
     isPresentMode,
     stream,
     currentSlide: presentSlideFromUrl,
+    scrollToSlide,
     handleSlideClick,
     toggleFullscreen,
     handlePresentExit,
@@ -236,26 +233,11 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
         return;
       }
 
-      if (lastStreamingSlideIndex === undefined) return;
-
-      const slideElement = document.getElementById(
-        `slide-${lastStreamingSlideIndex}`
-      );
-      if (!slideElement) return;
-
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const slideRect = slideElement.getBoundingClientRect();
-      const slideTop =
-        slideRect.top - containerRect.top + scrollContainer.scrollTop;
-
-      scrollContainer.scrollTo({
-        top: Math.max(slideTop, 0),
-        behavior: "smooth",
-      });
+      scrollToSlide(slidesLength - 1, 2, "smooth");
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isStreaming, lastStreamingSlideIndex, slidesLength]);
+  }, [isStreaming, scrollToSlide, slidesLength]);
 
   useEffect(() => {
     trackEvent(MixpanelEvent.Presentation_Editor_Viewed, {
@@ -570,6 +552,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
           <div className="w-full min-w-0 h-full flex-1 pt-[18px]">
             <div
               ref={slidesScrollContainerRef}
+              data-presentation-slides-scroll-container="true"
               className="font-inter h-full overflow-y-auto hide-scrollbar scroll-pt-[18px]"
             >
               <div className="w-full max-w-[1280px] min-h-full mx-auto flex flex-col items-center pb-8">
@@ -600,6 +583,9 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
                             index={index}
                             presentationId={presentation_id}
                             onSlideAdded={handleEditorSlideNavigation}
+                            theme={presentationData?.theme}
+                            fonts={presentationData?.fonts}
+                            isStreaming={isStreaming}
                             showBlankPromptOverlay={
                               typeof slide?.id === "string" &&
                               blankPromptSlideIds.has(slide.id)

@@ -131,7 +131,6 @@ import {
   selectionWithComponentToggle,
   setComponentPositionsInUi,
   surfaceSelectionTarget,
-  positionFromNodeInParent,
   unclampedPositionFromNodeInParent,
   updateComponentInUi,
   updateElementInUi,
@@ -194,6 +193,7 @@ function TemplateV2KonvaSlideComponent({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null);
   const nodeRefs = useRef(new Map<string, Konva.Node>());
+  const contentLayerRef = useRef<Konva.Layer | null>(null);
   const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageUploadRef = useRef<ElementSelection | null>(null);
   const undoStackRef = useRef<RawUi[]>([]);
@@ -383,13 +383,14 @@ function TemplateV2KonvaSlideComponent({
     () => surfaceSelectionTarget(uiDraft, selection, surfaceSlideIndex),
     [selection, surfaceSlideIndex, uiDraft],
   );
-  const contentLayerKey = isEditMode
-    ? `template-v2-edit-layer:${fontLoadState.revision}`
-    : `fonts:${fontLoadState.revision}`;
-
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+
+  useEffect(() => {
+    if (!fontLoadState.ready) return;
+    contentLayerRef.current?.batchDraw();
+  }, [fontLoadState.ready, fontLoadState.revision]);
 
   useEffect(() => {
     selectedComponentIndexesRef.current = selectedComponentIndexes;
@@ -841,6 +842,26 @@ function TemplateV2KonvaSlideComponent({
     );
   }, [slideId, surfaceSlideIndex]);
 
+  const deleteComponentAtIndex = useCallback(
+    (componentIndex: number) => {
+      const components = [...readArray(currentUiRef.current.components)];
+      if (componentIndex < 0 || componentIndex >= components.length) return;
+      components.splice(componentIndex, 1);
+      commitUi({ ...currentUiRef.current, components });
+      setSelection(null);
+      clearTableCellSelection();
+      clearInlineEdit();
+      setIconEditorSelection(null);
+      closeChartEditor();
+    },
+    [
+      clearInlineEdit,
+      clearTableCellSelection,
+      closeChartEditor,
+      commitUi,
+    ],
+  );
+
   const deleteSelection = useCallback(() => {
     if (!selection) return;
     commitUi(deleteSelectionFromUi(currentUiRef.current, selection));
@@ -888,6 +909,26 @@ function TemplateV2KonvaSlideComponent({
       activateSurface(result.selection);
     },
     [activateSurface, clearInlineEdit, clearTableCellSelection, commitUi],
+  );
+
+  const duplicateComponentAtIndex = useCallback(
+    (componentIndex: number) => {
+      const clipboardComponent = componentForClipboardSelection(
+        currentUiRef.current,
+        { kind: "component", componentIndex },
+      );
+      if (!clipboardComponent) return;
+      pasteClipboardPayload(
+        createTemplateV2ClipboardPayload(
+          clipboardComponent.components.map((item) => ({
+            data: item.component,
+            absoluteBox: item.box,
+          })),
+        ),
+        16,
+      );
+    },
+    [pasteClipboardPayload],
   );
 
   const duplicateSelection = useCallback(() => {
@@ -1098,12 +1139,11 @@ function TemplateV2KonvaSlideComponent({
     ungroupComponentAtIndex(componentIndex);
   }, [layoutToolbarTarget, ungroupComponentAtIndex]);
 
-  const reorderSelectedComponentLayer = useCallback(
-    (action: ComponentLayerAction) => {
-      if (selection?.kind !== "component") return;
+  const reorderComponentLayerAtIndex = useCallback(
+    (componentIndex: number, action: ComponentLayerAction) => {
       const result = reorderComponentLayer(
         readArray(currentUiRef.current.components),
-        selection.componentIndex,
+        componentIndex,
         action,
       );
       if (!result) return;
@@ -1126,9 +1166,53 @@ function TemplateV2KonvaSlideComponent({
       clearInlineEdit,
       clearTableCellSelection,
       commitUi,
-      selection,
     ],
   );
+
+  const reorderSelectedComponentLayer = useCallback(
+    (action: ComponentLayerAction) => {
+      if (selection?.kind !== "component") return;
+      reorderComponentLayerAtIndex(selection.componentIndex, action);
+    },
+    [reorderComponentLayerAtIndex, selection],
+  );
+
+  const tableSelectionActions = useMemo(() => {
+    if (
+      selection?.kind !== "element" ||
+      readString(selectedElement?.type) !== "table"
+    ) {
+      return null;
+    }
+
+    if (selection.componentIndex >= 0) {
+      const componentIndex = selection.componentIndex;
+      return {
+        componentCount: components.length,
+        componentIndex,
+        deleteLabel: "Delete Component",
+        onDelete: () => deleteComponentAtIndex(componentIndex),
+        onDuplicate: () => duplicateComponentAtIndex(componentIndex),
+        onLayerAction: (action: ComponentLayerAction) =>
+          reorderComponentLayerAtIndex(componentIndex, action),
+      };
+    }
+
+    return {
+      deleteLabel: "Delete Table",
+      onDelete: deleteSelection,
+      onDuplicate: duplicateSelection,
+    };
+  }, [
+    components.length,
+    deleteComponentAtIndex,
+    deleteSelection,
+    duplicateComponentAtIndex,
+    duplicateSelection,
+    reorderComponentLayerAtIndex,
+    selectedElement,
+    selection,
+  ]);
 
   const openImageUpload = useCallback(
     (elementSelection: ElementSelection) => {
@@ -1468,11 +1552,7 @@ function TemplateV2KonvaSlideComponent({
         <Layer listening={false}>
           <Rect width={STAGE_WIDTH} height={STAGE_HEIGHT} fill={backgroundColor(uiDraft)} />
         </Layer>
-        <Layer
-          key={contentLayerKey}
-          listening={fontLoadState.ready}
-          visible={fontLoadState.ready}
-        >
+        <Layer ref={contentLayerRef} listening={isEditMode}>
           {rootElements.map((element, elementIndex) => (
             <MemoizedRawElementNode
               key={`root:${rawElementKey(element, elementIndex)}`}
@@ -1490,6 +1570,7 @@ function TemplateV2KonvaSlideComponent({
               onElementChange={updateElement}
               parentBox={STAGE_BOX}
               layoutManaged={false}
+              fontRevision={fontLoadState.revision}
             />
           ))}
           {components.map((component, componentIndex) => (
@@ -1514,6 +1595,7 @@ function TemplateV2KonvaSlideComponent({
               onComponentDragMove={handleComponentDragMove}
               onComponentDragEnd={handleComponentDragEnd}
               onElementChange={updateElement}
+              fontRevision={fontLoadState.revision}
             />
           ))}
           {isEditMode ? (
@@ -1561,6 +1643,7 @@ function TemplateV2KonvaSlideComponent({
           path={keyForSelection(selection)}
           scale={1}
           selectedTableCell={selectedTableCell}
+          tableSelectionActions={tableSelectionActions}
           templateFonts={templateFonts}
           textSelectionRange={
             inlineEdit &&
