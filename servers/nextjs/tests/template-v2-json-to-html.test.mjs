@@ -165,6 +165,88 @@ test("uses point colors for single-series chart data", async () => {
   assert.equal(dataset.borderColor, "#111111");
 });
 
+test("serializes one-ended bar radius metadata for vertical bar charts", async () => {
+  const { templateV2UiToHtmlFragment } = await rendererPromise;
+  const html = templateV2UiToHtmlFragment({
+    background: "#FFFFFF",
+    elements: [
+      {
+        type: "chart",
+        chart_type: "bar",
+        data: [
+          { label: "Loss", value: -15 },
+          { label: "Growth", value: 42 },
+        ],
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 180 },
+      },
+    ],
+  });
+  const config = chartConfigFromHtml(html);
+  const dataset = config.data.datasets[0];
+
+  assert.deepEqual(dataset.presentonBarRadius, {
+    horizontal: false,
+    radius: 7,
+  });
+  assert.equal("borderRadius" in dataset, false);
+  assert.equal(dataset.borderSkipped, false);
+});
+
+test("serializes one-ended bar radius metadata for horizontal bar charts", async () => {
+  const { templateV2UiToHtmlFragment } = await rendererPromise;
+  const html = templateV2UiToHtmlFragment({
+    background: "#FFFFFF",
+    elements: [
+      {
+        type: "chart",
+        chart_type: "horizontal_bar",
+        data: [
+          { label: "Loss", value: -15 },
+          { label: "Growth", value: 42 },
+        ],
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 180 },
+      },
+    ],
+  });
+  const config = chartConfigFromHtml(html);
+  const dataset = config.data.datasets[0];
+
+  assert.deepEqual(dataset.presentonBarRadius, {
+    horizontal: true,
+    radius: 7,
+  });
+  assert.equal("borderRadius" in dataset, false);
+  assert.equal(dataset.borderSkipped, false);
+});
+
+test("keeps stacked bar charts on Chart.js skipped-edge radius", async () => {
+  const { templateV2UiToHtmlFragment } = await rendererPromise;
+  const html = templateV2UiToHtmlFragment({
+    background: "#FFFFFF",
+    elements: [
+      {
+        type: "chart",
+        chart_type: "stacked_bar",
+        categories: ["Q1", "Q2"],
+        series: [
+          { name: "Plan", values: [10, 20] },
+          { name: "Actual", values: [12, 24] },
+        ],
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 180 },
+      },
+    ],
+  });
+  const config = chartConfigFromHtml(html);
+  const dataset = config.data.datasets[0];
+
+  assert.equal(dataset.borderRadius, 7);
+  assert.equal(dataset.borderSkipped, "start");
+  assert.equal("presentonBarRadius" in dataset, false);
+});
+
 test("uses legacy seriesColors when chart colors are absent", async () => {
   const { templateV2UiToHtmlFragment } = await rendererPromise;
   const html = templateV2UiToHtmlFragment({

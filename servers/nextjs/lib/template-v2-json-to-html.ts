@@ -959,6 +959,8 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
       data.series.length === 1 && data.colors.length
         ? categoryColors(series, data.colors)
         : null;
+    const barChart = isBarChart(chartKind);
+    const stackedBarChart = isStackedChart(chartKind);
     const dataset: JsonRecord = {
       label: series.name,
       data: series.values,
@@ -970,14 +972,14 @@ function chartDatasets(chartKind: ChartKind, data: NormalizedChartData): JsonRec
             : perCategoryColors ?? color,
       borderColor: color,
       borderWidth: lineLike ? 3 : 0,
-      borderRadius: isBarChart(chartKind) ? 7 : undefined,
-      borderSkipped: isBarChart(chartKind)
-        ? isStackedChart(chartKind)
-          ? "start"
-          : false
-        : undefined,
+      borderRadius: barChart && stackedBarChart ? 7 : undefined,
+      borderSkipped: barChart ? (stackedBarChart ? "start" : false) : undefined,
       fill: chartKind === "area",
       maxBarThickness: 62,
+      presentonBarRadius:
+        barChart && !stackedBarChart
+          ? { horizontal: isHorizontalChart(chartKind), radius: 7 }
+          : undefined,
       pointBackgroundColor: perCategoryColors ?? color,
       pointBorderColor: "#FFFFFF",
       pointBorderWidth: lineLike ? 1.5 : 0,
@@ -1567,6 +1569,8 @@ function chartValue(raw){if(typeof raw==="number")return raw;if(raw&&typeof raw=
 function formatValue(value){if(!Number.isFinite(value))return "";if(Math.abs(value)>=1000&&typeof Intl!=="undefined"&&Intl.NumberFormat)return Intl.NumberFormat("en",{notation:"compact"}).format(value);return Math.abs(value)%1===0?String(value):String(Math.round(value*10)/10).replace(/\\.0$/,"")}
 function formatAxisTick(value){var numeric=Number(value);return Number.isFinite(numeric)?formatValue(numeric):String(value)}
 function hydrateScales(scales){if(!scales)return;Object.keys(scales).forEach(function(key){var scale=scales[key];if(!scale)return;if(scale.ticks&&scale.ticks.presentonFormat){scale.ticks.callback=formatAxisTick;delete scale.ticks.presentonFormat}if(scale.r&&scale.r.ticks&&scale.r.ticks.presentonFormat){scale.r.ticks.callback=formatAxisTick;delete scale.r.ticks.presentonFormat}})}
+function barBorderRadius(rawValue,horizontal,radius){var value=chartValue(rawValue);if(horizontal){return value<0?{bottomLeft:radius,bottomRight:0,topLeft:radius,topRight:0}:{bottomLeft:0,bottomRight:radius,topLeft:0,topRight:radius}}return value<0?{bottomLeft:radius,bottomRight:radius,topLeft:0,topRight:0}:{bottomLeft:0,bottomRight:0,topLeft:radius,topRight:radius}}
+function hydrateBarBorderRadii(config){var datasets=config&&config.data&&Array.isArray(config.data.datasets)?config.data.datasets:[];datasets.forEach(function(dataset){var options=dataset&&dataset.presentonBarRadius;if(!options)return;var radius=readNumber(options.radius);dataset.borderRadius=function(context){return barBorderRadius(context&&context.raw,!!options.horizontal,radius==null?7:radius)};delete dataset.presentonBarRadius})}
 function datasetBackgroundColor(dataset,index){var bg=dataset&&dataset.backgroundColor;var color=Array.isArray(bg)?bg[index]:bg;return typeof color==="string"?color:null}
 function clamp(value,min,max){return Math.min(Math.max(value,min),max)}
 function parseColor(color){if(!color)return null;var hex=String(color).match(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/);if(hex){var raw=hex[1].length===3?hex[1].split("").map(function(ch){return ch+ch}).join(""):hex[1];var value=Number.parseInt(raw,16);return[(value>>16)&255,(value>>8)&255,value&255,1]}var rgb=String(color).match(/^rgba?\\(([^)]+)\\)$/i);if(!rgb)return null;var channels=rgb[1].split(",").map(function(part){return Number(part.trim())});if(channels.length<3||channels.slice(0,3).some(Number.isNaN))return null;return[clamp(channels[0],0,255),clamp(channels[1],0,255),clamp(channels[2],0,255),clamp(Number.isFinite(channels[3])?channels[3]:1,0,1)]}
@@ -1583,7 +1587,7 @@ function drawBarLabel(args){var ctx=args.ctx;var element=args.element;var x=read
 function drawPointLabel(args){var ctx=args.ctx;var point=chartElementPoint(args.element);if(!point)return;var radius=pointRadius(args.element);var textWidth=ctx.measureText(args.label).width;var textHeight=args.fontSize*1.15;var direction=args.lineLike?lineDirection(args.metaElements,args.index,args.datasetIndex):(args.index+args.datasetIndex)%2===0?-1:1;var vertical=radius+textHeight/2+5;var horizontal=radius+textWidth/2+5;var candidates=[{x:point.x,y:point.y+direction*vertical},{x:point.x,y:point.y-direction*vertical},{x:point.x+horizontal,y:point.y},{x:point.x-horizontal,y:point.y},{x:point.x+horizontal,y:point.y+direction*vertical},{x:point.x-horizontal,y:point.y+direction*vertical},{x:point.x+horizontal,y:point.y-direction*vertical},{x:point.x-horizontal,y:point.y-direction*vertical},{x:point.x,y:point.y+direction*vertical*1.7},{x:point.x,y:point.y-direction*vertical*1.7}];for(var i=0;i<candidates.length;i++){var candidate=candidates[i];var bounds=labelBounds(candidate.x,candidate.y,textWidth,textHeight);if(!fitsChartArea(bounds,args.chartArea))continue;if(args.occupied.some(function(existing){return boundsOverlap(bounds,existing)}))continue;args.occupied.push(bounds);ctx.fillStyle=args.outsideColor;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(args.label,candidate.x,candidate.y);return}}
 function isPointType(type){return type==="line"||type==="scatter"||type==="bubble"||type==="radar"}
 var dataLabelPlugin={id:"presentonDataLabels",afterDatasetsDraw:function(chart,args,options){if(!options||!options.enabled)return;var ctx=chart.ctx;var fontSize=options.fontSize||11;var outsideColor=options.color||"#475467";ctx.save();ctx.font="600 "+fontSize+"px "+(options.fontFamily||"Inter, Arial, sans-serif");ctx.textAlign="center";ctx.textBaseline="middle";var occupied=[];chart.data.datasets.forEach(function(dataset,datasetIndex){var meta=chart.getDatasetMeta(datasetIndex);if(meta.hidden)return;var metaType=String(meta.type||"");meta.data.forEach(function(element,index){var raw=Array.isArray(dataset.data)?dataset.data[index]:0;var value=chartValue(raw);var label=formatValue(value);if(!label)return;if(metaType==="bar"){drawBarLabel({color:datasetBackgroundColor(dataset,index),ctx:ctx,element:element,fontSize:fontSize,horizontal:!!options.horizontal,label:label,outsideColor:outsideColor,value:value});return}if(isPointType(metaType)){drawPointLabel({chartArea:chart.chartArea,ctx:ctx,datasetIndex:datasetIndex,element:element,fontSize:fontSize,index:index,label:label,lineLike:metaType==="line"||metaType==="radar",metaElements:meta.data,occupied:occupied,outsideColor:outsideColor});return}var position=typeof element.tooltipPosition==="function"?element.tooltipPosition(true):null;if(!position)return;ctx.fillStyle=metaType==="pie"||metaType==="doughnut"||metaType==="polarArea"?contrastTextColor(datasetBackgroundColor(dataset,index),outsideColor):outsideColor;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(label,position.x||0,position.y||0)})});ctx.restore()}};
-function render(){if(!window.Chart){finish("error","Chart.js failed to load");return}try{var Chart=window.Chart;Chart.register(dataLabelPlugin);document.querySelectorAll("canvas[data-presenton-chart]").forEach(function(canvas){var configText=canvas.getAttribute("data-chart-config");if(!configText)return;var config=JSON.parse(configText);config.options=config.options||{};config.options.animation=false;config.options.responsive=false;config.options.maintainAspectRatio=false;hydrateScales(config.options.scales);var existing=typeof Chart.getChart==="function"?Chart.getChart(canvas):null;if(existing)existing.destroy();var chart=new Chart(canvas,config);if(typeof chart.update==="function")chart.update("none")});requestAnimationFrame(function(){finish("ready")})}catch(error){finish("error",error&&error.message?error.message:String(error))}}
+function render(){if(!window.Chart){finish("error","Chart.js failed to load");return}try{var Chart=window.Chart;Chart.register(dataLabelPlugin);document.querySelectorAll("canvas[data-presenton-chart]").forEach(function(canvas){var configText=canvas.getAttribute("data-chart-config");if(!configText)return;var config=JSON.parse(configText);config.options=config.options||{};config.options.animation=false;config.options.responsive=false;config.options.maintainAspectRatio=false;hydrateScales(config.options.scales);hydrateBarBorderRadii(config);var existing=typeof Chart.getChart==="function"?Chart.getChart(canvas):null;if(existing)existing.destroy();var chart=new Chart(canvas,config);if(typeof chart.update==="function")chart.update("none")});requestAnimationFrame(function(){finish("ready")})}catch(error){finish("error",error&&error.message?error.message:String(error))}}
 if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",render,{once:true})}else{render()}
 })();
 `;

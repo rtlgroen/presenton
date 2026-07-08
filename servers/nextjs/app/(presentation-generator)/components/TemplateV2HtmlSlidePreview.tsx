@@ -150,6 +150,61 @@ function hydrateScales(scales: unknown): void {
   });
 }
 
+function barBorderRadius(rawValue: unknown, horizontal: boolean, radius = 7) {
+  const value = chartValue(rawValue);
+
+  if (horizontal) {
+    return value < 0
+      ? {
+          bottomLeft: radius,
+          bottomRight: 0,
+          topLeft: radius,
+          topRight: 0,
+        }
+      : {
+          bottomLeft: 0,
+          bottomRight: radius,
+          topLeft: 0,
+          topRight: radius,
+        };
+  }
+
+  return value < 0
+    ? {
+        bottomLeft: radius,
+        bottomRight: radius,
+        topLeft: 0,
+        topRight: 0,
+      }
+    : {
+        bottomLeft: 0,
+        bottomRight: 0,
+        topLeft: radius,
+        topRight: radius,
+      };
+}
+
+function hydrateBarBorderRadii(config: ChartConfiguration): void {
+  const datasets = Array.isArray(config.data?.datasets)
+    ? config.data.datasets
+    : [];
+
+  datasets.forEach((dataset) => {
+    const record = dataset as {
+      borderRadius?: unknown;
+      presentonBarRadius?: unknown;
+    };
+    const options = readRecord(record.presentonBarRadius);
+    if (!Object.keys(options).length) return;
+
+    const horizontal = Boolean(options.horizontal);
+    const radius = readNumber(options.radius) ?? 7;
+    record.borderRadius = (context: { raw?: unknown }) =>
+      barBorderRadius(context?.raw, horizontal, radius);
+    delete record.presentonBarRadius;
+  });
+}
+
 function datasetBackgroundColor(dataset: unknown, index: number): string | null {
   const backgroundColor = readRecord(dataset).backgroundColor;
   const color = Array.isArray(backgroundColor)
@@ -609,6 +664,7 @@ export function TemplateV2HtmlSlidePreview({
           hydrateScales(
             (config.options as { scales?: unknown } | undefined)?.scales
           );
+          hydrateBarBorderRadii(config);
 
           const chart = new Chart(canvas, config);
           chart.update("none");
