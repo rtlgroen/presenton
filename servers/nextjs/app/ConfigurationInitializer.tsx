@@ -14,6 +14,8 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
   const dispatch = useDispatch();
 
   const route = usePathname();
+  const isSettingsRoute =
+    route === "/settings" || route?.startsWith("/settings/");
   const [isLoading, setIsLoading] = useState(
     () => !route?.startsWith("/pdf-maker")
   );
@@ -129,7 +131,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
         } else {
           setIsLoading(false);
         }
-      } else if (route !== '/') {
+      } else if (route !== '/' && !(isSettingsRoute && llmConfig.LLM === 'codex')) {
         router.push('/');
         setLoadingToFalseAfterNavigatingTo('/');
       } else {

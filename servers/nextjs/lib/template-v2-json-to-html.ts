@@ -455,16 +455,16 @@ function renderItem(item: JsonRecord, mode: RenderMode): string {
 function renderImage(item: JsonRecord, mode: RenderMode): string {
   const source = readString(item.data);
   if (!source) return "";
-  const clipPathStyle = imageClipPathStyle(item);
   const color = normalizeChartColor(readString(item.color));
+  const clipPath = clipPathStyle(item);
   if (color && readBoolean(item.isIcon ?? item.is_icon)) {
     const maskUrl = cssUrl(source);
     const maskSize = imageMaskSize(item.fit);
     return `<div style="${frameStyle(item, mode)}${boxStyle(
       item
-    )}${clipPathStyle}color:${escapeCssColor(
+    )}color:${escapeCssColor(
       color
-    )};background:currentColor;-webkit-mask:${maskUrl} center/${maskSize} no-repeat;mask:${maskUrl} center/${maskSize} no-repeat;"></div>`;
+    )};background:currentColor;-webkit-mask:${maskUrl} center/${maskSize} no-repeat;mask:${maskUrl} center/${maskSize} no-repeat;${clipPath}"></div>`;
   }
   const fit = imageFit(item.fit);
   const focusStyle = imageFocusStyle(item);
@@ -472,16 +472,16 @@ function renderImage(item: JsonRecord, mode: RenderMode): string {
   if (cropTransformStyle) {
     return `<div style="${frameStyle(item, mode)}${boxStyle(
       item
-    )}${clipPathStyle}overflow:hidden;"><img alt="" src="${escapeAttribute(
+    )}${clipPath}overflow:hidden;"><img alt="" src="${escapeAttribute(
       source
-    )}" style="display:block;height:100%;width:100%;object-fit:${fit};${focusStyle}${cropTransformStyle}"></div>`;
+    )}" style="display:block;max-width:none;max-height:none;height:100%;width:100%;object-fit:${fit};${focusStyle}${cropTransformStyle}"></div>`;
   }
   return `<img alt="" src="${escapeAttribute(source)}" style="${frameStyle(
     item,
     mode
-  )}${boxStyle(item)}${clipPathStyle}display:block;object-fit:${imageFit(
-    item.fit
-  )};${imageFocusStyle(item)}">`;
+  )}${boxStyle(
+    item
+  )}display:block;max-width:none;max-height:none;object-fit:${fit};${focusStyle}${clipPath}">`;
 }
 
 function renderText(item: JsonRecord, mode: RenderMode): string {
@@ -573,9 +573,44 @@ function renderContainer(item: JsonRecord, mode: RenderMode): string {
     readString(alignment.vertical)
   )};justify-content:${horizontalAlign(
     readString(alignment.horizontal)
-  )};overflow:visible`;
-  return `<div style="${style}">${child ? renderItem(child, readRecordOrNull(child.position) ? "absolute" : "flow") : ""
-    }</div>`;
+  )};${containerOverflowStyle(item, child)}`;
+  return `<div style="${style}">${
+    child ? renderItem(child, readRecordOrNull(child.position) ? "absolute" : "flow") : ""
+  }</div>`;
+}
+
+function containerOverflowStyle(
+  item: JsonRecord,
+  child: JsonRecord | null
+): string {
+  const overflow = readString(item.overflow);
+  if (overflow === "hidden" || overflow === "visible") {
+    return `overflow:${overflow}`;
+  }
+  if (readBoolean(item.clip)) return "overflow:hidden";
+  if (!child || readString(child.type) !== "image") return "overflow:visible";
+
+  const childHasClipPath = Boolean(readString(child.clip_path ?? child.clipPath));
+  const hasPositionedChild = Boolean(readRecordOrNull(child.position));
+  if (!hasPositionedChild) return "overflow:visible";
+  if (childHasClipPath) return "overflow:hidden";
+
+  const containerBox = readBox(item);
+  const childBox = readBox(child);
+  if (containerBox.width == null || containerBox.height == null) {
+    return "overflow:visible";
+  }
+
+  const epsilon = 0.01;
+  const childOverflows =
+    childBox.x < -epsilon ||
+    childBox.y < -epsilon ||
+    (childBox.width != null &&
+      childBox.x + childBox.width > containerBox.width + epsilon) ||
+    (childBox.height != null &&
+      childBox.y + childBox.height > containerBox.height + epsilon);
+
+  return childOverflows ? "overflow:hidden" : "overflow:visible";
 }
 
 function renderFlex(item: JsonRecord, mode: RenderMode): string {
@@ -1691,9 +1726,8 @@ function transformStyle(item: JsonRecord): string {
   const flipV = readBoolean(item.flip_v ?? item.flipV);
   if (!rotation && !flipH && !flipV) return "";
 
-  const effectiveRotation = flipH !== flipV ? -(rotation ?? 0) : rotation ?? 0;
   const transforms = [];
-  if (effectiveRotation) transforms.push(`rotate(${cssNumber(effectiveRotation)}deg)`);
+  if (rotation) transforms.push(`rotate(${cssNumber(rotation)}deg)`);
   if (flipH) transforms.push("scaleX(-1)");
   if (flipV) transforms.push("scaleY(-1)");
   return `transform:${transforms.join(" ")};transform-origin:center;`;
@@ -2157,79 +2191,9 @@ function imageCropScale(item: JsonRecord): number {
 function imageCropTransformStyle(item: JsonRecord): string {
   const cropScale = imageCropScale(item);
   if (cropScale <= 1) return "";
-  return `transform:scale(${cssNumber(cropScale)});transform-origin:${imageFocusValue(item) ?? "center"
-    };`;
-}
-
-function imageClipPathStyle(item: JsonRecord): string {
-  const raw = readString(item.clippath ?? item.clipPath ?? item.clip_path);
-  const clipPath = raw?.trim();
-  if (!clipPath) return "";
-  const normalized = normalizeSafeImageClipPath(clipPath);
-  if (!normalized) return "";
-  return `clip-path:${normalized};-webkit-clip-path:${normalized};`;
-}
-
-function normalizeSafeImageClipPath(value: string) {
-  const path = /^path\(([\s\S]*)\)$/i.exec(value);
-  if (path) {
-    const data = extractCssPathData(path[1]);
-    return data && isSafeSvgClipPathData(data) ? `path('${data}')` : null;
-  }
-  const rawPath = extractCssPathData(value);
-  if (isSafeSvgClipPathData(rawPath)) return `path('${rawPath}')`;
-  return isSafeCssClipPath(value) ? value : null;
-}
-
-function extractCssPathData(value: string) {
-  const body = value.trim().replace(/^(evenodd|nonzero)\s*,\s*/i, "");
-  const quoted = /^(['"])([\s\S]*)\1$/.exec(body);
-  return quoted ? quoted[2].trim() : body;
-}
-
-function isSafeSvgClipPathData(value: string) {
-  return (
-    /[A-Za-z]/.test(value) &&
-    /^[AaCcHhLlMmQqSsTtVvZz0-9eE\s.,+\-]*$/.test(value)
-  );
-}
-
-function isSafeCssClipPath(value: string) {
-  const trimmed = value.trim();
-  const lower = trimmed.toLowerCase();
-  return (
-    trimmed.length > 0 &&
-    trimmed.length <= 4096 &&
-    !/[;"{}<>\\]/.test(trimmed) &&
-    !lower.includes("javascript:") &&
-    !lower.includes("data:") &&
-    !lower.includes("expression(") &&
-    !lower.includes("var(") &&
-    hasBalancedCssClipPathSyntax(trimmed) &&
-    /(?:path|polygon|inset|circle|ellipse|rect|xywh|url)\(/i.test(trimmed)
-  );
-}
-
-function hasBalancedCssClipPathSyntax(value: string) {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote) {
-      if (char === quote) quote = null;
-      continue;
-    }
-    if (char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === "(") depth += 1;
-    else if (char === ")") {
-      depth -= 1;
-      if (depth < 0) return false;
-    }
-  }
-  return depth === 0 && quote == null;
+  return `transform:scale(${cssNumber(cropScale)});transform-origin:${
+    imageFocusValue(item) ?? "center"
+  };`;
 }
 
 function imageFocusStyle(item: JsonRecord): string {
@@ -2246,6 +2210,43 @@ function imageFocusValue(item: JsonRecord): string | null {
   const focusX = clamp(readNumber(rawX) ?? 50, 0, 100);
   const focusY = clamp(readNumber(rawY) ?? 50, 0, 100);
   return `${cssNumber(focusX)}% ${cssNumber(focusY)}%`;
+}
+
+function clipPathStyle(item: JsonRecord): string {
+  const value = normalizeCssClipPath(
+    readString(item.clippath ?? item.clipPath ?? item.clip_path)
+  );
+  return value ? `clip-path:${value};-webkit-clip-path:${value};` : "";
+}
+
+function normalizeCssClipPath(value: string | null): string | null {
+  if (!value) return null;
+
+  let normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized || normalized.toLowerCase() === "none") return null;
+
+  const doubleQuotedPath = normalized.match(/^path\("([^"]*)"\)$/i);
+  if (doubleQuotedPath) {
+    normalized = `path('${doubleQuotedPath[1]}')`;
+  }
+
+  if (/[";{}<>\\]/.test(normalized)) return null;
+  if (!/^[a-zA-Z0-9\s.,%()+\-_' ]+$/.test(normalized)) return null;
+
+  const functionName = normalized.match(/^([a-z-]+)\(/i)?.[1]?.toLowerCase();
+  if (
+    !functionName ||
+    !["path", "polygon", "circle", "ellipse", "inset"].includes(functionName) ||
+    !normalized.endsWith(")")
+  ) {
+    return null;
+  }
+
+  if (functionName === "path" && !/^path\('[^']*'\)$/i.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
 }
 
 function horizontalAlign(value: string | null): string {

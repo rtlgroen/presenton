@@ -31,6 +31,11 @@ import {
 import { useRouter } from "next/navigation";
 import { syncStoreAfterCodexSignOut } from "@/utils/storeHelpers";
 import { MixpanelEvent, trackEvent } from "@/utils/mixpanel";
+import {
+    isChatGptAuthRequiredResponse,
+    normalizeChatGptAuthMessage,
+    requestChatGptReauth,
+} from "@/utils/chatgptAuth";
 
 interface CodexConfigProps {
     codexModel: string;
@@ -251,7 +256,27 @@ export default function CodexConfig({
             const res = await fetch(getApiUrl("/api/v1/ppt/codex/auth/refresh"), {
                 method: "POST",
             });
-            if (!res.ok) throw new Error("Refresh failed");
+            if (!res.ok) {
+                let errorData: { detail?: unknown; message?: string; error?: string } | null = null;
+                let message = "Your ChatGPT session could not be renewed. Please sign in again.";
+                try {
+                    const parsedError: { detail?: unknown; message?: string; error?: string } = await res.json();
+                    errorData = parsedError;
+                    message =
+                        (typeof parsedError.detail === "string" && parsedError.detail) ||
+                        parsedError.message ||
+                        parsedError.error ||
+                        message;
+                } catch {}
+                if (isChatGptAuthRequiredResponse(res, errorData, message)) {
+                    requestChatGptReauth({
+                        message: normalizeChatGptAuthMessage(message),
+                        source: "codex-refresh",
+                    });
+                    return;
+                }
+                throw new Error(message);
+            }
             const data = await res.json();
             applyProfile(data);
             notify.success(

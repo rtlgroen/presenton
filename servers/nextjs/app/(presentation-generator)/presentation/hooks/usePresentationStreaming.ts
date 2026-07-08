@@ -11,6 +11,10 @@ import { notify } from "@/components/ui/sonner";
 import { MixpanelEvent, trackEvent } from "@/utils/mixpanel";
 import { getApiUrl, normalizeBackendAssetUrls } from "@/utils/api";
 import { store } from "@/store/store";
+import {
+  isChatGptAuthRequiredMessage,
+  requestChatGptReauth,
+} from "@/utils/chatgptAuth";
 
 const MAX_STREAM_RETRIES = 3;
 const STREAM_RETRY_DELAY_MS = 1_000;
@@ -238,13 +242,18 @@ export const usePresentationStreaming = (
       }
     };
 
-    const finalizeFailure = (description: string) => {
+    const finalizeFailure = (
+      description: string,
+      options: { showToast?: boolean } = {}
+    ) => {
       closeEventSource();
       clearRetryTimer();
       setLoading(false);
       dispatch(setStreaming(false));
       setError(true);
-      notify.error("Presentation streaming failed", description);
+      if (options.showToast !== false) {
+        notify.error("Presentation streaming failed", description);
+      }
     };
 
     const scheduleRetry = (reason: string): boolean => {
@@ -479,6 +488,18 @@ export const usePresentationStreaming = (
             window.history.replaceState({}, "", newUrl.toString());
             break;
           case "error":
+            if (isChatGptAuthRequiredMessage(data.detail)) {
+              requestChatGptReauth({
+                message: data.detail,
+                source: "presentation-stream",
+              });
+              finalizeFailure(
+                data.detail ||
+                  "Your ChatGPT session expired. Please sign in again from Settings.",
+                { showToast: false }
+              );
+              break;
+            }
             if (
               !scheduleRetry(
                 data.detail || "server returned stream error response"

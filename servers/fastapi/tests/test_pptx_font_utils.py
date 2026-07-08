@@ -245,9 +245,11 @@ async def test_upload_fonts_and_preview_uses_trimmed_pptx_for_processing(
         max_slides,
         logger,
         session_dir,
+        font_stylesheet_urls=None,
     ):
         del temp_dir, font_paths_for_install, font_mapping, explicit_font_aliases
         del protected_font_names, logger, session_dir
+        assert font_stylesheet_urls == []
         captured["preview_pptx_path"] = modified_pptx_path
         assert max_slides == 50
         assert_slide_count(modified_pptx_path, 50)
@@ -298,6 +300,98 @@ async def test_upload_fonts_and_preview_uses_trimmed_pptx_for_processing(
     assert captured["uploaded_pptx_path"] == captured["font_variant_pptx_path"]
     assert response.pptx_url == captured["font_variant_pptx_path"]
     assert response.modified_pptx_url == captured["font_variant_pptx_path"]
+    assert response.slide_image_urls == [str(slide_path)]
+
+
+@pytest.mark.anyio
+async def test_upload_fonts_and_preview_passes_google_fonts_to_html_preview(
+    monkeypatch,
+    tmp_path,
+):
+    captured = {}
+    slide_path = tmp_path / "slide_1.png"
+    slide_path.write_bytes(b"png")
+
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "_font_variants_by_normalized_name",
+        lambda *_args: {"Open Sans": {"bold"}},
+    )
+
+    async def fake_upload_fonts_and_fix_fonts_in_pptx(
+        pptx_path,
+        temp_dir,
+        original_filename,
+        font_files,
+        original_font_names,
+        logger,
+        session_dir,
+        upload_fonts=True,
+    ):
+        del temp_dir, original_filename, font_files, original_font_names
+        del logger, session_dir, upload_fonts
+        return {"Open Sans"}, {}, {}, [], pptx_path, [], [], {}, [], {}
+
+    async def fake_check_google_font_availability(font_name, variants=None):
+        captured["checked_font"] = font_name
+        captured["checked_variants"] = variants
+        return True
+
+    async def fake_create_slide_previews(
+        modified_pptx_path,
+        temp_dir,
+        font_paths_for_install,
+        font_mapping,
+        explicit_font_aliases,
+        protected_font_names,
+        max_slides,
+        logger,
+        session_dir,
+        font_stylesheet_urls=None,
+    ):
+        del modified_pptx_path, temp_dir, font_paths_for_install, font_mapping
+        del explicit_font_aliases, protected_font_names, max_slides, logger
+        del session_dir
+        captured["font_stylesheet_urls"] = font_stylesheet_urls
+        return [str(slide_path)]
+
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "upload_fonts_and_fix_fonts_in_pptx",
+        fake_upload_fonts_and_fix_fonts_in_pptx,
+    )
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "check_google_font_availability",
+        fake_check_google_font_availability,
+    )
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "create_slide_previews",
+        fake_create_slide_previews,
+    )
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "_public_urls_for_local_paths",
+        lambda paths: list(paths),
+    )
+
+    response = await fonts_and_slides_preview.upload_fonts_and_preview_handler(
+        pptx_file=DummyUploadFile("deck.pptx", content=_fake_pptx_bytes(1)),
+        font_files=[],
+        original_font_names=[],
+        upload_presentation=False,
+        temp_dir=str(tmp_path),
+    )
+
+    expected_url = (
+        "https://fonts.googleapis.com/css2"
+        "?family=Open+Sans:wght@400;700&display=swap"
+    )
+    assert captured["checked_font"] == "Open Sans"
+    assert captured["checked_variants"] == ["bold"]
+    assert captured["font_stylesheet_urls"] == [expected_url]
+    assert response.fonts == {"Open Sans": expected_url}
     assert response.slide_image_urls == [str(slide_path)]
 
 
@@ -530,6 +624,21 @@ def test_font_stylesheet_links_skip_embedded_and_uploaded_fonts():
     assert links.count('rel="stylesheet"') == 1
 
 
+def test_font_css_family_aliases_match_tailwind_underscore_font_values():
+    css = (
+        "@font-face { font-family: 'Hagrid_Text_Heavy'; "
+        "src: url('/app_data/pptx-to-html/session/fonts/hagrid.otf'); }"
+        "@font-face { font-family: 'Aileron'; "
+        "src: url('/app_data/pptx-to-html/session/fonts/aileron.otf'); }"
+    )
+
+    aliases = fonts_and_slides_preview._font_css_family_aliases(css)
+
+    assert 'font-family: "Hagrid Text Heavy"' in aliases
+    assert "hagrid.otf" in aliases
+    assert "Aileron" not in aliases
+
+
 def test_font_face_css_for_local_fonts_includes_family_and_full_names(
     monkeypatch,
     tmp_path,
@@ -583,6 +692,33 @@ def test_localize_preview_asset_urls_rewrites_app_data_http_urls(monkeypatch, tm
     assert localized.count("data:image/png;base64,cG5n") == 2
     assert "http://127.0.0.1:5001/app_data" not in localized
     assert "url('data:image/png;base64,cG5n')" in localized
+
+
+def test_localize_preview_asset_urls_absolutizes_unresolved_app_data_urls(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "resolve_app_path_to_filesystem",
+        lambda _path_or_url: None,
+    )
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "absolute_fastapi_asset_url",
+        lambda path: f"http://backend.test{path}",
+    )
+
+    html = (
+        "@font-face { font-family: 'Aileron'; "
+        "src: url('/app_data/pptx-to-html/session/fonts/aileron.otf'); }"
+    )
+
+    localized = fonts_and_slides_preview._localize_preview_asset_urls(html)
+
+    assert (
+        "url('http://backend.test/app_data/pptx-to-html/session/fonts/aileron.otf')"
+        in localized
+    )
 
 
 def test_localize_preview_asset_urls_leaves_external_urls(monkeypatch):
@@ -649,6 +785,9 @@ async def test_create_slide_previews_from_html_uses_converter_dimensions_and_fon
         font_paths_for_install=[str(font_path)],
         max_slides=1,
         logger=DummyLogger(),
+        font_stylesheet_urls=[
+            "https://fonts.googleapis.com/css2?family=Montserrat:wght@400&display=swap"
+        ],
     )
 
     assert result == [str(rendered_path)]
@@ -660,6 +799,7 @@ async def test_create_slide_previews_from_html_uses_converter_dimensions_and_fon
     html = htmls[0]
     assert ".deck-font { color: black; }" in html
     assert 'font-family: "Khand Bold";' in html
+    assert "fonts.googleapis.com/css2?family=Montserrat" in html
 
 
 @pytest.mark.anyio
@@ -752,10 +892,12 @@ async def test_create_slide_previews_uses_html_render_path(monkeypatch, tmp_path
         font_paths_for_install,
         max_slides,
         logger,
+        font_stylesheet_urls=None,
     ):
         assert modified_pptx_path == "deck.pptx"
         assert font_paths_for_install == ["font.ttf"]
         assert max_slides == 2
+        assert font_stylesheet_urls is None
         return html_paths
 
     async def fake_persist_files_to_session(pairs):
