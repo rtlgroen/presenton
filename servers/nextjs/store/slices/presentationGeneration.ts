@@ -147,6 +147,17 @@ const presentationGenerationSlice = createSlice({
         state.presentationData.n_slides = state.presentationData.slides.length;
       }
     },
+    replaceSlidesWithBlankFallback: (
+      state,
+      action: PayloadAction<{ slideData: any }>
+    ) => {
+      if (state.presentationData) {
+        state.presentationData.slides = [
+          { ...action.payload.slideData, index: 0 },
+        ];
+        state.presentationData.n_slides = 1;
+      }
+    },
     duplicatePresentationSlide: (
       state,
       action: PayloadAction<{ index: number; slideId: string }>
@@ -502,6 +513,7 @@ export const {
   updateSlide,
   updateSlideUi,
   deletePresentationSlide,
+  replaceSlidesWithBlankFallback,
   duplicatePresentationSlide,
   movePresentationSlide,
   updateSlideContent,

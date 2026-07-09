@@ -1361,6 +1361,9 @@ class _FakeSaveSlideSession:
     async def scalars(self, *_args, **_kwargs):
         return list(self.slides)
 
+    async def scalar(self, *_args, **_kwargs):
+        return self.slides[0] if self.slides else None
+
     def add(self, obj):
         self.added.append(obj)
         if isinstance(obj, SlideModel) and obj not in self.slides:
@@ -1374,6 +1377,10 @@ class _FakeSaveSlideSession:
 
     async def refresh(self, _obj):
         return None
+
+    async def delete(self, obj):
+        if isinstance(obj, SlideModel) and obj in self.slides:
+            self.slides.remove(obj)
 
 
 def test_save_slide_for_template_v2_payload_persists_renderable_ui():
@@ -1480,6 +1487,43 @@ def test_chat_add_blank_slide_refuses_more_than_max_slides():
     assert result["slide_count"] == MAX_NUMBER_OF_SLIDES
     assert result["max_slide_count"] == MAX_NUMBER_OF_SLIDES
     assert session.commit_count == 0
+
+
+def test_chat_delete_final_slide_replaces_it_with_blank_fallback():
+    presentation_id = uuid.uuid4()
+    presentation = _template_v2_presentation(presentation_id)
+    presentation.n_slides = 1
+    source_slide = SlideModel(
+        id=uuid.uuid4(),
+        presentation=presentation_id,
+        layout_group="template-v2",
+        layout="thanks",
+        index=0,
+        content={"hero": {"Title": "Thanks"}},
+        properties=None,
+        ui={"id": "thanks", "components": []},
+    )
+    session = _FakeSaveSlideSession(presentation)
+    session.slides = [source_slide]
+    memory = PresentationChatMemoryLayer(session, presentation_id)
+
+    result = _run(memory.delete_slide(index=0))
+
+    assert result["deleted"] is True
+    assert result["blank_fallback"] is True
+    assert result["deleted_slide_id"] == str(source_slide.id)
+    assert len(session.slides) == 1
+    fallback_slide = session.slides[0]
+    assert fallback_slide.id != source_slide.id
+    assert fallback_slide.index == 0
+    assert fallback_slide.layout_group == "template-v2"
+    assert fallback_slide.layout == "__blank_slide__"
+    assert fallback_slide.content == {}
+    assert fallback_slide.speaker_note == ""
+    assert fallback_slide.ui["id"] == "__blank_slide__"
+    assert fallback_slide.ui["components"] == []
+    assert presentation.n_slides == 1
+    assert session.commit_count == 1
 
 
 def test_chat_save_slide_refuses_new_slide_at_max_slides():

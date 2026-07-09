@@ -26,7 +26,6 @@ class ChatMessageResponse(BaseModel):
     conversation_id: uuid.UUID
     response: str
     tool_calls: list[str] = Field(default_factory=list)
-
     model_config = ConfigDict(extra="forbid")
 
 

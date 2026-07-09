@@ -27,13 +27,15 @@ import {
   deletePresentationSlide,
   duplicatePresentationSlide,
   movePresentationSlide,
+  replaceSlidesWithBlankFallback,
 } from "@/store/slices/presentationGeneration";
 import { addToHistory } from "@/store/slices/undoRedoSlice";
 import { RootState } from "@/store/store";
 import { trackEvent, MixpanelEvent } from "@/utils/mixpanel";
 import {
   BLANK_SLIDE_LAYOUT_ID,
-  BLANK_TEMPLATE_V2_LAYOUT,
+  createBlankPresentationSlide,
+  getSlideTemplateId,
 } from "../../_shared/blank-slide";
 import NewSlide from "./NewSlide";
 import { MAX_NUMBER_OF_SLIDES } from "@/utils/presentationLimits";
@@ -54,22 +56,6 @@ interface SlideActionBarProps {
 
 const menuItemClass =
   "flex h-9 cursor-pointer select-none items-center gap-2.5 px-3 text-sm font-normal leading-none text-[#050505] outline-none transition-colors focus:bg-[#F7F6F9] data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:text-[#9B9B9B]";
-
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function getSlideTemplateId(slide: any): string {
-  const layoutGroup =
-    typeof slide?.layout_group === "string" ? slide.layout_group : "";
-  const layout = typeof slide?.layout === "string" ? slide.layout : "";
-  const layoutTemplateId = layout.split(":")[0] || "";
-
-  if (layoutGroup.startsWith("template-v2")) {
-    return layoutGroup;
-  }
-  return layoutGroup || layoutTemplateId;
-}
 
 const SlideActionBar = ({
   slide,
@@ -141,19 +127,13 @@ const SlideActionBar = ({
     }
 
     const slideId = uuidv4();
-    const blankSlide = {
+    const blankSlide = createBlankPresentationSlide({
       id: slideId,
       index: currentIndex,
-      content: {},
-      ...(isTemplateV2Slide
-        ? { ui: cloneJson(BLANK_TEMPLATE_V2_LAYOUT) }
-        : {}),
-      layout_group: templateId,
-      layout: isCustomTemplate
-        ? `${templateId}:${BLANK_SLIDE_LAYOUT_ID}`
-        : BLANK_SLIDE_LAYOUT_ID,
-      presentation: presentationId,
-    };
+      presentationId,
+      templateId,
+      isTemplateV2: isTemplateV2Slide,
+    });
 
     rememberSlides("ADD_BLANK_SLIDE");
     dispatch(addNewSlide({ slideData: blankSlide, index: currentIndex }));
@@ -225,10 +205,27 @@ const SlideActionBar = ({
 
   const handleDeleteSlide = () => {
     if (slideCount <= 1) {
-      notify.warning(
-        "Cannot delete slide",
-        "A presentation must contain at least one slide."
-      );
+      const slideId = uuidv4();
+      const blankSlide = createBlankPresentationSlide({
+        id: slideId,
+        index: 0,
+        presentationId,
+        templateId,
+        isTemplateV2: isTemplateV2Slide,
+      });
+
+      rememberSlides("DELETE_LAST_SLIDE");
+      dispatch(replaceSlidesWithBlankFallback({ slideData: blankSlide }));
+      onSlideSelected(0);
+      trackEvent(MixpanelEvent.Presentation_Slide_Deleted, {
+        pathname,
+        presentation_id: presentationId,
+        slide_id: slide?.id,
+        slide_index: currentIndex,
+        layout: slideLayout,
+        blank_fallback: true,
+        fallback_slide_id: slideId,
+      });
       return;
     }
 

@@ -44,6 +44,22 @@ DEFAULT_SOURCE_DOCUMENT_CHARS = 12000
 MAX_SOURCE_DOCUMENT_CHARS = 30000
 SLIDE_STAGE_WIDTH = 1280.0
 SLIDE_STAGE_HEIGHT = 720.0
+BLANK_SLIDE_LAYOUT_ID = "__blank_slide__"
+BLANK_TEMPLATE_V2_LAYOUT: dict[str, Any] = {
+    "id": BLANK_SLIDE_LAYOUT_ID,
+    "description": "Empty slide.",
+    "background": "#FFFFFF",
+    "components": [],
+    "elements": [
+        {
+            "type": "rectangle",
+            "position": {"x": 0, "y": 0},
+            "size": {"width": 1280, "height": 720},
+            "fill": {"color": "#FFFFFF"},
+            "decorative": True,
+        }
+    ],
+}
 # Keep URL runtime fields during validation because many slide schemas require them.
 # Speaker note is handled separately and should not affect JSON-schema checks.
 RUNTIME_CONTENT_FIELDS = {"__speaker_note__"}
@@ -801,29 +817,16 @@ class PresentationChatMemoryLayer:
             slide.index += 1
             self._sql_session.add(slide)
 
-        blank_ui = {
-            "id": "__blank_slide__",
-            "description": "Empty slide.",
-            "background": "#FFFFFF",
-            "components": [],
-            "elements": [
-                {
-                    "type": "rectangle",
-                    "position": {"x": 0, "y": 0},
-                    "size": {"width": 1280, "height": 720},
-                    "fill": {"color": "#FFFFFF"},
-                    "decorative": True,
-                }
-            ],
-        }
+        presentation.n_slides = len(slides) + 1
+        self._sql_session.add(presentation)
         new_slide = SlideModel(
             presentation=self._presentation_id,
             layout_group=self._resolve_layout_group(presentation=presentation),
-            layout="__blank_slide__",
+            layout=BLANK_SLIDE_LAYOUT_ID,
             index=insert_index,
             content={},
             speaker_note="",
-            ui=blank_ui,
+            ui=self._blank_slide_ui(),
         )
         self._sql_session.add(new_slide)
         await self._sql_session.commit()
@@ -1033,26 +1036,63 @@ class PresentationChatMemoryLayer:
                 "index": target_index,
             }
 
-        await self._sql_session.delete(slide)
-
+        presentation = await self._sql_session.get(PresentationModel, self._presentation_id)
         slides_result = await self._sql_session.scalars(
-            select(SlideModel).where(SlideModel.presentation == self._presentation_id)
+            select(SlideModel)
+            .where(SlideModel.presentation == self._presentation_id)
+            .order_by(SlideModel.index)
         )
         slides = sorted(list(slides_result), key=lambda each: each.index)
+        deleted_slide_id = str(slide.id)
+
+        if len(slides) <= 1:
+            fallback_slide = self._create_blank_slide_from_reference(
+                presentation=presentation,
+                source_slide=slide,
+                index=0,
+            )
+            await self._sql_session.delete(slide)
+            if presentation:
+                presentation.n_slides = 1
+                self._sql_session.add(presentation)
+            self._sql_session.add(fallback_slide)
+            await self._sql_session.commit()
+            await self._sql_session.refresh(fallback_slide)
+
+            return {
+                "deleted": True,
+                "message": "Deleted the final slide and added a blank fallback slide.",
+                "deleted_slide_id": deleted_slide_id,
+                "slide_id": str(fallback_slide.id),
+                "index": 0,
+                "slide_number": 1,
+                "shifted_slide_count": 0,
+                "blank_fallback": True,
+            }
+
+        await self._sql_session.delete(slide)
+
+        remaining_slides = [
+            each_slide for each_slide in slides if each_slide.id != slide.id
+        ]
         shifted_count = 0
-        for each_slide in slides:
+        for each_slide in remaining_slides:
             if each_slide.index <= target_index:
                 continue
             each_slide.index -= 1
             self._sql_session.add(each_slide)
             shifted_count += 1
 
+        if presentation:
+            presentation.n_slides = len(remaining_slides)
+            self._sql_session.add(presentation)
+
         await self._sql_session.commit()
 
         return {
             "deleted": True,
             "message": f"Slide at index {target_index} was deleted successfully.",
-            "deleted_slide_id": str(slide.id),
+            "deleted_slide_id": deleted_slide_id,
             "index": target_index,
             "shifted_slide_count": shifted_count,
         }
@@ -1074,6 +1114,42 @@ class PresentationChatMemoryLayer:
             copy.deepcopy(presentation.theme)
             if presentation and isinstance(presentation.theme, dict)
             else None
+        )
+
+    @staticmethod
+    def _blank_slide_ui() -> dict[str, Any]:
+        return copy.deepcopy(BLANK_TEMPLATE_V2_LAYOUT)
+
+    def _create_blank_slide_from_reference(
+        self,
+        *,
+        presentation: PresentationModel | None,
+        source_slide: SlideModel,
+        index: int,
+    ) -> SlideModel:
+        layout_group = (
+            source_slide.layout_group.strip()
+            if isinstance(source_slide.layout_group, str)
+            else ""
+        )
+        if not layout_group and presentation:
+            layout_group = self._resolve_layout_group(presentation=presentation)
+        if not layout_group:
+            layout_group = "presentation"
+
+        layout = (
+            f"{layout_group}:{BLANK_SLIDE_LAYOUT_ID}"
+            if layout_group.startswith("custom-")
+            else BLANK_SLIDE_LAYOUT_ID
+        )
+        return SlideModel(
+            presentation=self._presentation_id,
+            layout_group=layout_group,
+            layout=layout,
+            index=index,
+            content={},
+            speaker_note="",
+            ui=self._blank_slide_ui(),
         )
 
     @staticmethod

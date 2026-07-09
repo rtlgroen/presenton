@@ -6,7 +6,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { v4 as uuidv4 } from "uuid";
 import { RootState } from "@/store/store";
 import "../../utils/prism-languages";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +28,11 @@ import {
 import { PresentationPageProps } from "../types";
 import { applyPresentationThemeToElement } from "../utils/applyPresentationThemeDom";
 
+import { replaceSlidesWithBlankFallback } from "@/store/slices/presentationGeneration";
+import {
+  createBlankPresentationSlide,
+  getPresentationTemplateId,
+} from "../../_shared/blank-slide";
 import PresentationHeader from "./PresentationHeader";
 import PresentationActions from "./PresentationActions";
 import {
@@ -128,6 +134,7 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
 }) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const dispatch = useDispatch();
   // State management
   const [loading, setLoading] = useState(true);
   const [loadingState, setLoadingState] =
@@ -221,20 +228,22 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
       return;
     }
 
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("stream", "true");
-    if (!params.get("type")) {
-      params.set("type", "standard");
-    }
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    const blankSlide = createBlankPresentationSlide({
+      id: uuidv4(),
+      index: 0,
+      presentationId: presentation_id,
+      templateId: getPresentationTemplateId(presentationData),
+      isTemplateV2: true,
+    });
+    dispatch(replaceSlidesWithBlankFallback({ slideData: blankSlide }));
+    setSelectedSlide(0);
   }, [
+    dispatch,
     error,
     isTemplateV2Presentation,
     loading,
-    pathname,
     presentationData,
-    router,
-    searchParams,
+    presentation_id,
     slidesLength,
     stream,
   ]);
