@@ -700,7 +700,7 @@ function adaptText(raw: UnknownRecord): SlideElement {
     max_length: readNumber(raw, "max_length"),
     min_length: readNumber(raw, "min_length"),
   };
-  return widenSingleLineTextElement(element);
+  return element;
 }
 
 function adaptContainer(raw: UnknownRecord): SlideElement {
@@ -1221,7 +1221,6 @@ function adaptFont(value: UnknownRecord | null): Font | null {
         : null),
     line_height: clampOptional(readNumber(value, "line_height"), 0.8, 2.2),
     letter_spacing: clamp(readNumber(value, "letter_spacing") ?? 0, -200, 600),
-    wrap: readEnum(value, ["word", "char", "none"], "wrap"),
     ellipsis: readBoolean(value, "ellipsis"),
     opacity: clampOptional(readNumber(value, "opacity"), 0, 1),
   });
@@ -1310,35 +1309,6 @@ function adaptTextRuns(value: unknown[], fallbackText?: string | null): TextRun[
 
   if (runs.length > 0) return runs;
   return [{ text: truncateString(fallbackText || "Text", 700) }];
-}
-
-function widenSingleLineTextElement(element: TextElement): TextElement {
-  if (!element.position || !element.size) return element;
-
-  const text = element.runs.map((run) => run.text).join("");
-  const displayText = text.replace(/\*\*|__/g, "").trim();
-  if (!displayText || displayText.includes("\n") || displayText.length > 48) {
-    return element;
-  }
-
-  const wrap = element.font?.wrap;
-  const oneLineBox = (element.size.height ?? 0) <= 70;
-  if (wrap != null && wrap !== "none") return element;
-  if (wrap == null && !oneLineBox) return element;
-
-  const fontSize = element.font?.size ?? 18;
-  const averageGlyphWidth = element.font?.bold ? 0.6 : 0.54;
-  const estimatedWidth = fontSize * averageGlyphWidth * displayText.length;
-  const requiredWidth = round(Math.min(EDITOR_STAGE_WIDTH - element.position.x, estimatedWidth + 16));
-  if (requiredWidth <= element.size.width + 1) return element;
-
-  return {
-    ...element,
-    size: {
-      ...element.size,
-      width: clamp(requiredWidth, element.size.width, EDITOR_STAGE_WIDTH),
-    },
-  };
 }
 
 function adaptTextListItems(value: unknown[]): TextListItem[] {

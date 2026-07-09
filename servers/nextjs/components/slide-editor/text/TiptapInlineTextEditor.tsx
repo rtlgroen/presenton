@@ -32,7 +32,6 @@ type RunStyleAttrs = {
   underline?: boolean | null;
   lineHeight?: number | null;
   letterSpacing?: number | null;
-  wrap?: Font["wrap"] | null;
   opacity?: number | null;
 };
 
@@ -55,7 +54,6 @@ const RunStyle = Mark.create({
       underline: attribute(),
       lineHeight: attribute(),
       letterSpacing: attribute(),
-      wrap: attribute(),
       opacity: attribute(),
     };
   },
@@ -589,7 +587,6 @@ function fontToRunStyleAttrs(font: Font): RunStyleAttrs {
     underline: font.underline,
     lineHeight: font.line_height,
     letterSpacing: font.letter_spacing,
-    wrap: font.wrap,
     opacity: font.opacity,
   };
 }
@@ -605,7 +602,6 @@ function fontFromRunStyleAttrs(attrs: RunStyleAttrs, baseFont: Font): Font {
     underline: attrs.underline ?? baseFont.underline,
     line_height: attrs.lineHeight ?? baseFont.line_height,
     letter_spacing: attrs.letterSpacing ?? baseFont.letter_spacing,
-    wrap: attrs.wrap ?? baseFont.wrap,
     opacity: attrs.opacity ?? baseFont.opacity,
   };
 }
@@ -624,7 +620,6 @@ function runStyleAttrsToCss(attrs: RunStyleAttrs) {
       : null,
     attrs.lineHeight != null ? `line-height:${attrs.lineHeight}` : null,
     attrs.letterSpacing != null ? `letter-spacing:${attrs.letterSpacing}px` : null,
-    attrs.wrap === "none" ? "white-space:pre" : null,
     attrs.opacity != null ? `opacity:${attrs.opacity}` : null,
   ].filter(Boolean);
   return styles.join(";");

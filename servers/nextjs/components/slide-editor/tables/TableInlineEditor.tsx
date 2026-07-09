@@ -97,7 +97,7 @@ export function TableInlineEditor({
     fontSize: textFontSizePx,
     lineHeight: textFont.lineHeight,
     fallback: 1.12,
-    wrap: textFont.wrap,
+    wrap: "word",
   });
   const closeAfterBlur = useCallback(() => {
     window.setTimeout(() => {
@@ -244,7 +244,6 @@ function tableCellFont(
     italic: cellFont.italic ?? tableFont.italic,
     line_height: cellFont.line_height ?? tableFont.lineHeight ?? 1.12,
     letter_spacing: cellFont.letter_spacing ?? tableFont.letterSpacing,
-    wrap: cellFont.wrap ?? tableFont.wrap ?? "word",
     ellipsis: cellFont.ellipsis ?? tableFont.ellipsis,
     opacity: cellFont.opacity ?? tableFont.opacity,
   };

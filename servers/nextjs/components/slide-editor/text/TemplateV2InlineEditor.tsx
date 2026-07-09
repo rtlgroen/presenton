@@ -32,7 +32,6 @@ const DEFAULT_TEXT_EDIT_STYLE: TemplateV2TextEditStyle = {
   underline: false,
   lineHeight: 1.15,
   letterSpacing: 0,
-  wrap: "word",
   opacity: 1,
   horizontal: "left",
   vertical: "top",
@@ -63,10 +62,7 @@ export function TemplateV2InlineEditor({
   const font = style ?? DEFAULT_TEXT_EDIT_STYLE;
   const isCode = kind === "svg";
   const isRichText = kind === "text" || kind === "text-list";
-  const textStyle = useMemo(
-    () => (isRichText ? { ...font, wrap: "word" } : font),
-    [font, isRichText],
-  );
+  const textStyle = font;
   const fontSize = isCode ? 12 : textStyle.size;
   const editorLineHeight = effectiveLineHeight({
     text: draft,
@@ -74,7 +70,7 @@ export function TemplateV2InlineEditor({
     fontSize,
     lineHeight: textStyle.lineHeight,
     fallback: 1.15,
-    wrap: textStyle.wrap,
+    wrap: "word",
   });
   const closeAfterBlur = useCallback(() => {
     window.setTimeout(() => {
@@ -213,13 +209,6 @@ function textEditStyleToFont(font: TemplateV2TextEditStyle): Font {
     underline: font.underline,
     line_height: font.lineHeight,
     letter_spacing: font.letterSpacing,
-    wrap: readFontWrap(font.wrap),
     opacity: font.opacity,
   };
-}
-
-function readFontWrap(value: unknown): Font["wrap"] {
-  return value === "none" || value === "char" || value === "word"
-    ? value
-    : "word";
 }

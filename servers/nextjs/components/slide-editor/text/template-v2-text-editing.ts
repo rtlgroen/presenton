@@ -1,4 +1,4 @@
-import type { Font, TextRun } from "@/components/slide-editor/types";
+import type { TextRun } from "@/components/slide-editor/types";
 import type { TextSelectionRange } from "@/components/slide-editor/text/text-runs";
 import {
   fontFromRecord,
@@ -25,7 +25,6 @@ export type TemplateV2TextEditStyle = {
   underline: boolean;
   lineHeight: number;
   letterSpacing: number;
-  wrap: Font["wrap"] | string;
   opacity: number;
   horizontal: "left" | "center" | "right";
   vertical: "top" | "middle" | "bottom";
@@ -62,7 +61,7 @@ export function measureWordWrappedTextRunsHeight(
   width: number,
   style: TemplateV2TextEditStyle,
 ) {
-  const baseFont: RenderTextRun["font"] = { ...style, wrap: "word" };
+  const baseFont: RenderTextRun["font"] = style;
   const sourceRuns = runs.length > 0 ? runs : [{ text: " ", font: {} }];
   const renderRuns = sourceRuns.map((run) => ({
     text: run.text,
@@ -89,6 +88,13 @@ export function measureWordWrappedTextRunsHeight(
 export function wordWrappedTextRuns(runs: TextRun[]): TextRun[] {
   return runs.map((run) => ({
     ...run,
-    font: { ...run.font, wrap: "word" },
+    font: stripRunFontWrap(run.font),
   }));
+}
+
+function stripRunFontWrap(font: TextRun["font"] | null | undefined) {
+  if (!font) return font;
+  return Object.fromEntries(
+    Object.entries(font).filter(([key]) => key !== "wrap"),
+  ) as TextRun["font"];
 }

@@ -40,15 +40,21 @@ const DEFAULT_FONT: RenderTextFont = {
   underline: false,
   lineHeight: 1.15,
   letterSpacing: 0,
-  wrap: "word",
   opacity: 1,
 };
+const TEXT_RENDER_WRAP = "word";
 const MIN_TRANSFORM_FONT_SIZE = 1;
 const MAX_TRANSFORM_FONT_SIZE = 512;
 const TRANSFORM_FONT_SCALE_EPSILON = 0.001;
 
 const richMeasureCtx: { ctx: CanvasRenderingContext2D | null } = { ctx: null };
 let renderTextMeasureCanvas: HTMLCanvasElement | null = null;
+
+function withoutFontWrap(font: UnknownRecord): UnknownRecord {
+  return Object.fromEntries(
+    Object.entries(font).filter(([key]) => key !== "wrap"),
+  );
+}
 
 export function displayText(text: string) {
   return text
@@ -87,7 +93,6 @@ export function fontFromRecord(
       readNumber(font?.letter_spacing) ??
       readNumber(font?.letterSpacing) ??
       fallback.letterSpacing,
-    wrap: readString(font?.wrap) ?? fallback.wrap,
     opacity: readNumber(font?.opacity) ?? fallback.opacity,
   };
 }
@@ -102,7 +107,6 @@ export function fontToSource(font: RenderTextFont): Font {
     underline: font.underline,
     line_height: font.lineHeight,
     letter_spacing: font.letterSpacing,
-    wrap: readFontWrap(font.wrap),
     opacity: font.opacity,
   };
 }
@@ -127,7 +131,7 @@ export function applyTextStyle(
 ): TemplateV2RawTextElement {
   const sourceFont = asRecord(element.font) ?? {};
   const nextFont = {
-    ...sourceFont,
+    ...withoutFontWrap(sourceFont),
     family: style.family,
     size: style.size,
     color: withHash(style.color) ?? "#111827",
@@ -136,7 +140,6 @@ export function applyTextStyle(
     underline: style.underline,
     line_height: style.lineHeight,
     letter_spacing: style.letterSpacing,
-    wrap: style.wrap,
     opacity: style.opacity,
   };
   const runs = readArray(element.runs);
@@ -305,25 +308,13 @@ export function setRawTextRunsContent(
   };
 }
 
-export function setRawTextWrap(
-  element: TemplateV2RawTextElement,
-  wrap: NonNullable<Font["wrap"]>,
-): TemplateV2RawTextElement {
-  return {
-    ...element,
-    font: {
-      ...(asRecord(element.font) ?? {}),
-      wrap,
-    },
-  };
-}
-
 export function rawInlineTextFontRecord(value: unknown, fallback: unknown) {
   const font = asRecord(value);
   if (!font) return fallback;
+  const fallbackFont = asRecord(fallback) ?? {};
   return {
-    ...(asRecord(fallback) ?? {}),
-    ...font,
+    ...withoutFontWrap(fallbackFont),
+    ...withoutFontWrap(font),
     line_height: font.line_height ?? font.lineHeight,
     letter_spacing: font.letter_spacing ?? font.letterSpacing,
     opacity: font.opacity,
@@ -523,11 +514,11 @@ export function textVisualLocalBox(
     fontSize: font.size,
     lineHeight: font.lineHeight,
     fallback: 1.15,
-    wrap: font.wrap,
+    wrap: TEXT_RENDER_WRAP,
   });
 
   if (renderRunsDifferFromElement) {
-    const lines = layoutRenderTextRuns(renderRuns, box.width, font.wrap);
+    const lines = layoutRenderTextRuns(renderRuns, box.width, TEXT_RENDER_WRAP);
     const lineMetrics = lines.map((line) => ({
       height: lineRenderHeight(line, textLineHeight),
       width: line.reduce((sum, segment) => sum + segment.width, 0),
@@ -540,7 +531,7 @@ export function textVisualLocalBox(
     const left = Math.min(
       0,
       ...lineMetrics.map((metric) =>
-        lineStartX(align, box.width, metric.width, font.wrap === "none"),
+        lineStartX(align, box.width, metric.width, false),
       ),
     );
     const right = Math.max(
@@ -550,7 +541,7 @@ export function textVisualLocalBox(
           align,
           box.width,
           metric.width,
-          font.wrap === "none",
+          false,
         );
         return startX + metric.width;
       }),
@@ -571,7 +562,7 @@ export function textVisualLocalBox(
       align,
       verticalAlign,
       box.height,
-      font.wrap,
+      TEXT_RENDER_WRAP,
     );
     if (tokens.length === 0) return box;
     const left = Math.min(0, ...tokens.map((token) => token.x));
@@ -593,38 +584,19 @@ export function textVisualLocalBox(
     };
   }
 
-  if (font.wrap !== "none") {
-    const textNodeRuns =
-      renderRuns.length > 0 ? renderRuns : [{ text: displayContent, font }];
-    return {
-      ...box,
-      height: Math.max(
-        box.height,
-        measureRenderTextRunsHeight(
-          textNodeRuns,
-          box.width,
-          font.wrap,
-          textLineHeight,
-        ),
-      ),
-    };
-  }
-
-  const textNodeWidth = Math.max(
-    box.width,
-    measureNoWrapTextWidth(displayContent, font),
-  );
-  const textNodeHeight = Math.max(
-    box.height,
-    measureNoWrapTextHeight(displayContent, font, textLineHeight),
-  );
+  const textNodeRuns =
+    renderRuns.length > 0 ? renderRuns : [{ text: displayContent, font }];
   return {
-    x: box.x + lineStartX(align, box.width, textNodeWidth, true),
-    y:
-      box.y +
-      verticalTextStartY(verticalAlign, box.height, textNodeHeight, true),
-    width: textNodeWidth,
-    height: textNodeHeight,
+    ...box,
+    height: Math.max(
+      box.height,
+      measureRenderTextRunsHeight(
+        textNodeRuns,
+        box.width,
+        TEXT_RENDER_WRAP,
+        textLineHeight,
+      ),
+    ),
   };
 }
 
@@ -924,7 +896,7 @@ export function rawFontRecordForEditor(value: unknown) {
   const font = asRecord(value);
   if (!font) return value;
   return {
-    ...font,
+    ...withoutFontWrap(font),
     line_height: font.line_height ?? font.lineHeight,
     letter_spacing: font.letter_spacing ?? font.letterSpacing,
   };
@@ -933,9 +905,10 @@ export function rawFontRecordForEditor(value: unknown) {
 export function editorFontRecordToRaw(value: unknown, fallback: unknown) {
   const font = asRecord(value);
   if (!font) return fallback;
+  const fallbackFont = asRecord(fallback) ?? {};
   return {
-    ...(asRecord(fallback) ?? {}),
-    ...font,
+    ...withoutFontWrap(fallbackFont),
+    ...withoutFontWrap(font),
     line_height: font.line_height ?? font.lineHeight,
     letter_spacing: font.letter_spacing ?? font.letterSpacing,
   };
@@ -944,7 +917,7 @@ export function editorFontRecordToRaw(value: unknown, fallback: unknown) {
 export function rawFontToSource(value: unknown) {
   const font = asRecord(value) ?? {};
   return stripUndefined({
-    ...font,
+    ...withoutFontWrap(font),
     line_height: font.line_height ?? font.lineHeight,
     letter_spacing: font.letter_spacing ?? font.letterSpacing,
     opacity: font.opacity,
@@ -1391,14 +1364,6 @@ function readVerticalAlignment(
   const normalized = readString(value);
   if (normalized === "middle" || normalized === "bottom") return normalized;
   return "top";
-}
-
-function readFontWrap(value: unknown): Font["wrap"] {
-  const normalized = readString(value);
-  if (normalized === "none" || normalized === "char" || normalized === "word") {
-    return normalized;
-  }
-  return "word";
 }
 
 function readArray(value: unknown): unknown[] {

@@ -20,7 +20,6 @@ export type LayoutAlignment =
   | "flex-end"
   | "center"
   | "stretch";
-export type TextWrap = "word" | "char" | "none";
 export type Marker = "bullet" | "number" | "none";
 export type FlexDirection = "row" | "column";
 export type ImageFit = "contain" | "cover" | "fill";
@@ -86,7 +85,6 @@ export type Font = {
   line_height?: number | null;
   // Pixels, matching the Template V2 editor text model.
   letter_spacing?: number | null;
-  wrap?: TextWrap | null;
   ellipsis?: boolean | null;
   opacity?: number | null;
 };
@@ -413,7 +411,6 @@ export type Box = {
 
 export type LayoutHorizontalAlignment = HorizontalAlignment;
 export type LayoutVerticalAlignment = VerticalAlignment;
-export type LayoutTextWrap = TextWrap;
 export type LayoutMarker = Marker;
 export type LayoutFlexDirection = FlexDirection;
 export type LayoutImageFit = ImageFit;

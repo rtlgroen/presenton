@@ -170,12 +170,6 @@ import {
   type TemplateV2SurfaceSelectedDetail,
 } from "@/components/slide-editor/events/events";
 
-function wordWrappedTextStyle(
-  style: TemplateV2TextEditStyle,
-): TemplateV2TextEditStyle {
-  return { ...style, wrap: "word" };
-}
-
 function autoSizeInlineTextFrame(
   frame: TemplateV2InlineEditBox | null | undefined,
   runs: TextRun[],
@@ -1112,7 +1106,7 @@ function TemplateV2KonvaSlideComponent({
         if (normalized.changed) {
           updateElement(elementSelection, () => normalized.element, false);
         }
-        const style = wordWrappedTextStyle(rawTextStyle(normalized.element));
+        const style = rawTextStyle(normalized.element);
         const runs = wordWrappedTextRuns(normalized.runs);
         startInlineEdit({
           kind: "text",
@@ -1124,7 +1118,7 @@ function TemplateV2KonvaSlideComponent({
         });
       } else if (type === "text-list") {
         const runs = wordWrappedTextRuns(rawTextListRunsForEditor(element));
-        const style = wordWrappedTextStyle(rawTextStyle(element));
+        const style = rawTextStyle(element);
         startInlineEdit({
           kind: "text-list",
           selection: elementSelection,
@@ -1150,7 +1144,7 @@ function TemplateV2KonvaSlideComponent({
         const style =
           (current.kind === "text" || current.kind === "text-list") &&
           current.style
-            ? wordWrappedTextStyle(current.style)
+            ? current.style
             : current.style;
         const frame =
           (current.kind === "text" || current.kind === "text-list") &&
@@ -1214,7 +1208,7 @@ function TemplateV2KonvaSlideComponent({
         }
         const nextRuns = wordWrappedTextRuns(runs);
         const style = active.style
-          ? wordWrappedTextStyle(active.style)
+          ? active.style
           : undefined;
         return {
           ...active,
@@ -1254,7 +1248,7 @@ function TemplateV2KonvaSlideComponent({
         }
         if (active.kind === "text") {
           const runs = wordWrappedTextRuns(rawTextRunsForEditor(next));
-          const style = wordWrappedTextStyle(rawTextStyle(next));
+          const style = rawTextStyle(next);
           return {
             ...active,
             draft: rawTextContent(next),
@@ -1265,7 +1259,7 @@ function TemplateV2KonvaSlideComponent({
         }
         if (active.kind === "text-list") {
           const runs = wordWrappedTextRuns(rawTextListRunsForEditor(next));
-          const style = wordWrappedTextStyle(rawTextStyle(next));
+          const style = rawTextStyle(next);
           return {
             ...active,
             draft: textRunsContent(runs),

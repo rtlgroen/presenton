@@ -17,7 +17,6 @@ type RenderTextFont = {
   underline: boolean;
   lineHeight: number;
   letterSpacing: number;
-  wrap: string;
   opacity: number;
 };
 
@@ -77,7 +76,7 @@ export function TemplateV2TableElement({
             fontSize,
             lineHeight: cellFont.lineHeight,
             fallback: 1.15,
-            wrap: cellFont.wrap,
+            wrap: "word",
           });
           return (
             <Group
@@ -150,7 +149,6 @@ function TableCellText({
   align,
   verticalAlign,
   lineHeight,
-  wrap,
 }: {
   x: number;
   y: number;
@@ -161,7 +159,6 @@ function TableCellText({
   align: string;
   verticalAlign: string;
   lineHeight: number;
-  wrap?: string;
 }) {
   const baseFont = { ...font, lineHeight };
   const renderRuns = runs.map((run) => ({
@@ -179,7 +176,7 @@ function TableCellText({
     align,
     verticalAlign,
     height,
-    wrap ?? font.wrap,
+    "word",
   );
 
   return (
@@ -297,7 +294,6 @@ function fontToTextRunFont(font: RenderTextFont): TextRun["font"] {
     underline: font.underline,
     line_height: font.lineHeight,
     letter_spacing: font.letterSpacing,
-    wrap: readFontWrap(font.wrap),
     opacity: font.opacity,
   };
 }
@@ -332,7 +328,6 @@ function rawFont(element: RawElement) {
     underline: false,
     lineHeight: 1.15,
     letterSpacing: 0,
-    wrap: "word",
     opacity: 1,
   });
 }
@@ -361,7 +356,6 @@ function fontFromRecord(
       readNumber(font?.letter_spacing) ??
       readNumber(font?.letterSpacing) ??
       fallback.letterSpacing,
-    wrap: readString(font?.wrap) ?? fallback.wrap,
     opacity: readNumber(font?.opacity) ?? fallback.opacity,
   };
 }
@@ -401,12 +395,6 @@ function readNumber(value: unknown): number | null {
 
 function readBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
-}
-
-function readFontWrap(value: unknown) {
-  return value === "word" || value === "char" || value === "none"
-    ? value
-    : undefined;
 }
 
 function withHash(value: string | null | undefined) {

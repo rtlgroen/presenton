@@ -104,7 +104,6 @@ function makeBulletListElement(marker: Marker): SlideElement {
     italic: false,
     line_height: 1.4,
     letter_spacing: 0,
-    wrap: "word" as const,
     ellipsis: false,
   };
   const items = [
@@ -478,13 +477,11 @@ function makeSimpleTableElement(): SlideElement {
     size: 14,
     color: "#344054",
     line_height: 1.2,
-    wrap: "word",
   };
   const headerFont: Font = {
     ...baseFont,
     color: "#101323",
     bold: true,
-    wrap: "none",
   };
   const headerFill: Fill = { color: "#F2F4F7", opacity: 1 };
   const bodyFill: Fill = { color: "#FFFFFF", opacity: 1 };

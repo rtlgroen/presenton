@@ -33,7 +33,6 @@ export type ResolvedFont = {
   underline?: boolean | null;
   lineHeight?: number | null;
   letterSpacing?: number | null;
-  wrap?: Font["wrap"];
   ellipsis?: boolean | null;
   opacity?: number | null;
 };
@@ -124,7 +123,6 @@ export function elementFont(element: {
     underline: element.font?.underline ?? null,
     lineHeight: element.font?.line_height ?? null,
     letterSpacing: element.font?.letter_spacing ?? null,
-    wrap: element.font?.wrap ?? null,
     ellipsis: element.font?.ellipsis ?? null,
     opacity: element.font?.opacity ?? null,
   };

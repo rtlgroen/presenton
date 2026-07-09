@@ -21,22 +21,17 @@ import {
 } from "react-konva";
 import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-height";
 import { textRunsContent } from "@/components/slide-editor/text/text-runs";
-import { measureWrappedRenderTextHeight } from "@/components/slide-editor/text/template-v2-text-editing";
 import {
   displayText,
   layoutRenderTextRuns,
-  layoutRichText,
   lineRenderHeight,
   lineStartX,
-  measureNoWrapTextHeight,
-  measureNoWrapTextWidth,
   fontScaleFromResize,
   rawFont,
   rawRenderTextRuns,
   rawTextContent,
   rawTextListRenderTextRuns,
-  textRunsHaveMixedStyle,
-  verticalTextStartY,
+  textVisualLocalBox,
   type RenderTextRun,
 } from "@/components/slide-editor/text/template-v2-text";
 import type { TableCellSelection } from "@/components/slide-editor/state/state";
@@ -412,6 +407,12 @@ export function RawComponentNode({
           onOpenEditor={onOpenElementEditor}
           onElementChange={onElementChange}
           parentBox={box}
+          textConstraintBox={{
+            x: 0,
+            y: 0,
+            width: box.width,
+            height: box.height,
+          }}
           layoutManaged={false}
           fontRevision={fontRevision}
         />
@@ -439,9 +440,15 @@ function componentTextClipBounds(elements: RawElement[], componentBox: Box): Box
     offsetX: number,
     offsetY: number,
   ) => {
+    const visualBox = constrainedWrappedTextVisualBox(element, box, {
+      x: 0,
+      y: 0,
+      width: Math.max(1, componentBox.width - offsetX),
+      height: componentBox.height,
+    });
     const type = readString(element.type);
     if (type === "text" || type === "text-list") {
-      includeBox(box, offsetX, offsetY);
+      includeBox(visualBox, offsetX, offsetY);
     }
 
     const childInfo = childArrayInfo(element);
@@ -464,6 +471,26 @@ function componentTextClipBounds(elements: RawElement[], componentBox: Box): Box
     width: Math.max(1, right - left),
     height: Math.max(1, bottom - top),
   };
+}
+
+function constrainedWrappedTextVisualBox(
+  element: RawElement,
+  box: Box,
+  parentBox: Box,
+): Box {
+  const type = readString(element.type);
+  if (type !== "text" && type !== "text-list") return box;
+
+  const availableWidth = Math.max(1, parentBox.width - box.x);
+  const width = Math.min(box.width, availableWidth);
+  if (Math.abs(width - box.width) < 0.01) return box;
+
+  const constrainedBox = { ...box, width };
+  return type === "text-list"
+    ? textVisualLocalBox(element, constrainedBox, {
+        runs: rawTextListRenderTextRuns(element),
+      })
+    : textVisualLocalBox(element, constrainedBox);
 }
 
 export const MemoizedRawComponentNode = memo(
@@ -514,6 +541,7 @@ function RawElementNode({
   onOpenEditor,
   onElementChange,
   parentBox,
+  textConstraintBox,
   renderBox,
   layoutManaged = false,
   fontRevision,
@@ -542,6 +570,7 @@ function RawElementNode({
     updater: (element: RawElement) => RawElement,
   ) => void;
   parentBox: Box;
+  textConstraintBox?: Box | null;
   renderBox?: Box | null;
   layoutManaged?: boolean;
   fontRevision: number;
@@ -564,6 +593,25 @@ function RawElementNode({
   const children = childInfo?.items ?? [];
   const laidOutChildren = layoutChildren(element, children, box);
   const clipChildren = shouldClipElementChildren(element, childInfo);
+  const shouldConstrainTextVisual =
+    componentIndex !== ROOT_ELEMENTS_COMPONENT_INDEX || elementPath.length > 1;
+  const visualBox = shouldConstrainTextVisual
+    ? constrainedWrappedTextVisualBox(element, box, textConstraintBox ?? parentBox)
+    : box;
+  const childTextConstraintBox = childInfo
+    ? textConstraintBox
+      ? {
+          ...textConstraintBox,
+          x: textConstraintBox.x + box.x,
+          y: textConstraintBox.y + box.y,
+        }
+      : {
+          x: 0,
+          y: 0,
+          width: box.width,
+          height: box.height,
+        }
+    : null;
   const centerOrigin = shouldUseCenterOrigin(element);
   const handleTableCellSelect = useCallback(
     (rowIndex: number, colIndex: number) => {
@@ -665,8 +713,8 @@ function RawElementNode({
       {editing ? null : (
         <MemoizedRawElementVisual
           element={element}
-          width={box.width}
-          height={box.height}
+          width={visualBox.width}
+          height={visualBox.height}
           interactive={isEditMode}
           selectedTableCell={selectedCell}
           onTableCellSelect={handleTableCellSelect}
@@ -695,6 +743,7 @@ function RawElementNode({
             width: box.width,
             height: box.height,
           }}
+          textConstraintBox={childTextConstraintBox}
           renderBox={childBox}
           layoutManaged={layoutManaged}
           fontRevision={fontRevision}
@@ -720,6 +769,7 @@ export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
     previous.onElementChange !== next.onElementChange ||
     !numberPathEqual(previous.elementPath, next.elementPath) ||
     !boxEqual(previous.parentBox, next.parentBox) ||
+    !nullableBoxEqual(previous.textConstraintBox, next.textConstraintBox) ||
     !nullableBoxEqual(previous.renderBox, next.renderBox)
   ) {
     return false;
@@ -937,9 +987,6 @@ function RawRichTextElement({
     text ??
     (runsOverride ? textRunsContent(runsOverride) : rawTextContent(element));
   const displayContent = displayText(content);
-  const renderRunsDifferFromElement =
-    renderRuns.length > 0 &&
-    textRunsHaveMixedStyle([{ text: "", font }, ...renderRuns]);
   const align = readString(element.alignment?.horizontal) ?? "left";
   const verticalAlign = readString(element.alignment?.vertical) ?? "top";
   const textLineHeight = effectiveLineHeight({
@@ -948,149 +995,66 @@ function RawRichTextElement({
     fontSize: font.size,
     lineHeight: font.lineHeight,
     fallback: 1.15,
-    wrap: font.wrap,
+    wrap: "word",
   });
 
-  if (renderRunsDifferFromElement) {
-    const lines = layoutRenderTextRuns(renderRuns, width, font.wrap);
-    const lineMetrics = lines.map((line) => ({
-      height: lineRenderHeight(line, textLineHeight),
-      width: line.reduce((sum, segment) => sum + segment.width, 0),
-    }));
-    const totalHeight = lineMetrics.reduce(
-      (sum, metric) => sum + metric.height,
-      0,
-    );
-    const startY =
-      verticalAlign === "middle"
-        ? Math.max(0, (height - totalHeight) / 2)
-        : verticalAlign === "bottom"
-          ? Math.max(0, height - totalHeight)
-          : 0;
-    let y = startY;
-
-    return (
-      <Group listening={interactive}>
-        {lines.map((line, lineIndex) => {
-          const lineMetric = lineMetrics[lineIndex] ?? {
-            height: font.size * textLineHeight,
-            width: 0,
-          };
-          const startX = lineStartX(
-            align,
-            width,
-            lineMetric.width,
-            font.wrap === "none",
-          );
-          let x = startX;
-          const lineY = y;
-          y += lineMetric.height;
-          return line.map((segment, segmentIndex) => {
-            const segmentX = x;
-            x += segment.width;
-            return (
-              <Text
-                key={`${lineIndex}:${segmentIndex}`}
-                x={segmentX}
-                y={lineY}
-                width={segment.width}
-                height={lineMetric.height}
-                text={segment.text}
-                fill={textFill(segment.font)}
-                fontFamily={`${segment.font.family}, Helvetica, sans-serif`}
-                fontSize={segment.font.size}
-                fontStyle={`${segment.font.bold ? "bold" : "normal"} ${segment.font.italic ? "italic" : ""
-                  }`}
-                textDecoration={segment.font.underline ? "underline" : ""}
-                verticalAlign="middle"
-                lineHeight={segment.font.lineHeight ?? textLineHeight}
-                letterSpacing={segment.font.letterSpacing}
-                wrap="none"
-                {...shadowProps(element)}
-                listening={interactive}
-              />
-            );
-          });
-        })}
-      </Group>
-    );
-  }
-
-  // Multi-run text is laid out per-run so each segment keeps its own font.
-  // Single-run text still uses Konva's native Text node.
-  const runs = typeof text === "string" && !runsOverride ? null : renderRuns;
-  if (runs && runs.length > 1) {
-    const { tokens } = layoutRichText(
-      runs,
-      width,
-      font,
-      align,
-      verticalAlign,
-      height,
-      font.wrap,
-    );
-    return (
-      <Group listening={interactive} {...shadowProps(element)}>
-        {tokens.map((tok, index) => (
-          <Text
-            key={index}
-            x={tok.x}
-            y={tok.y}
-            text={tok.text}
-            fill={textFill(tok.font)}
-            fontFamily={`${tok.font.family}, Helvetica, sans-serif`}
-            fontSize={tok.font.size}
-            fontStyle={`${tok.font.bold ? "bold" : "normal"} ${tok.font.italic ? "italic" : ""}`}
-            textDecoration={tok.font.underline ? "underline" : ""}
-            lineHeight={tok.font.lineHeight}
-            letterSpacing={tok.font.letterSpacing}
-            wrap="none"
-            listening={interactive}
-          />
-        ))}
-      </Group>
-    );
-  }
-
-  const noWrap = font.wrap === "none";
-  const textNodeWidth = noWrap
-    ? Math.max(width, measureNoWrapTextWidth(displayContent, font))
-    : width;
-  const textNodeRuns =
+  const layoutRuns =
     renderRuns.length > 0 ? renderRuns : [{ text: displayContent, font }];
-  const wrappedTextHeight = measureWrappedRenderTextHeight(
-    textNodeRuns,
-    width,
-    font.wrap,
-    textLineHeight,
+  const lines = layoutRenderTextRuns(layoutRuns, width, "word");
+  const lineMetrics = lines.map((line) => ({
+    height: lineRenderHeight(line, textLineHeight),
+    width: line.reduce((sum, segment) => sum + segment.width, 0),
+  }));
+  const totalHeight = lineMetrics.reduce(
+    (sum, metric) => sum + metric.height,
+    0,
   );
-  const textNodeHeight = noWrap
-    ? Math.max(
-      height,
-      measureNoWrapTextHeight(displayContent, font, textLineHeight),
-    )
-    : Math.max(height, wrappedTextHeight);
+  const startY =
+    verticalAlign === "middle"
+      ? Math.max(0, (height - totalHeight) / 2)
+      : verticalAlign === "bottom"
+        ? Math.max(0, height - totalHeight)
+        : 0;
+  let y = startY;
 
   return (
-    <Text
-      x={noWrap ? lineStartX(align, width, textNodeWidth, true) : 0}
-      y={verticalTextStartY(verticalAlign, height, textNodeHeight, true)}
-      width={textNodeWidth}
-      height={textNodeHeight}
-      text={displayContent}
-      fill={textFill(font)}
-      fontFamily={`${font.family}, Helvetica, sans-serif`}
-      fontSize={font.size}
-      fontStyle={`${font.bold ? "bold" : "normal"} ${font.italic ? "italic" : ""}`}
-      textDecoration={font.underline ? "underline" : ""}
-      align={align}
-      verticalAlign={verticalAlign}
-      lineHeight={textLineHeight}
-      letterSpacing={font.letterSpacing}
-      wrap={font.wrap === "none" ? "none" : "char"}
-      {...shadowProps(element)}
-      listening={interactive}
-    />
+    <Group listening={interactive}>
+      {lines.map((line, lineIndex) => {
+        const lineMetric = lineMetrics[lineIndex] ?? {
+          height: font.size * textLineHeight,
+          width: 0,
+        };
+        const startX = lineStartX(align, width, lineMetric.width, false);
+        let x = startX;
+        const lineY = y;
+        y += lineMetric.height;
+        return line.map((segment, segmentIndex) => {
+          const segmentX = x;
+          x += segment.width;
+          return (
+            <Text
+              key={`${lineIndex}:${segmentIndex}`}
+              x={segmentX}
+              y={lineY}
+              width={segment.width}
+              height={lineMetric.height}
+              text={segment.text}
+              fill={textFill(segment.font)}
+              fontFamily={`${segment.font.family}, Helvetica, sans-serif`}
+              fontSize={segment.font.size}
+              fontStyle={`${segment.font.bold ? "bold" : "normal"} ${segment.font.italic ? "italic" : ""}`}
+              textDecoration={segment.font.underline ? "underline" : ""}
+              verticalAlign="middle"
+              lineHeight={segment.font.lineHeight ?? textLineHeight}
+              letterSpacing={segment.font.letterSpacing}
+              wrap="none"
+              {...shadowProps(element)}
+              listening={interactive}
+            />
+          );
+        });
+      })}
+    </Group>
   );
 }
 

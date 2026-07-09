@@ -582,9 +582,6 @@ function estimateTextHeight(
   width: number,
 ) {
   const lineHeight = font.size * font.lineHeight;
-  if (font.wrap === "none") {
-    return Math.max(lineHeight, text.split(/\r?\n/).length * lineHeight);
-  }
   const averageCharWidth = Math.max(1, font.size * TEXT_AVERAGE_CHAR_EM);
   const charsPerLine = Math.max(1, Math.floor(width / averageCharWidth));
   const lines = text.split(/\r?\n/).reduce((count, line) => {

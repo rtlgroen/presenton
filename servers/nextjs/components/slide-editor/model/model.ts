@@ -25,7 +25,6 @@ import {
   setRawTextListContent,
   setRawTextListRunsContent,
   setRawTextRunsContent,
-  setRawTextWrap,
   normalizeRawTextMarkdownElement,
   textVisualLocalBox,
 } from "@/components/slide-editor/text/template-v2-text";
@@ -680,9 +679,6 @@ export function estimateTextHeight(
   width: number,
 ) {
   const lineHeight = font.size * font.lineHeight;
-  if (font.wrap === "none") {
-    return Math.max(lineHeight, text.split(/\r?\n/).length * lineHeight);
-  }
   const averageCharWidth = Math.max(1, font.size * TEXT_AVERAGE_CHAR_EM);
   const charsPerLine = Math.max(1, Math.floor(width / averageCharWidth));
   const lines = text.split(/\r?\n/).reduce((count, line) => {
@@ -1440,7 +1436,7 @@ export function elementWithInlineDraft(
         : draft === rawTextContent(element)
           ? element
           : setRawTextContent(element, draft, style);
-    return preserveInlineEditFrame(setRawTextWrap(next, "word"), frame);
+    return preserveInlineEditFrame(next, frame);
   }
   if (kind === "text-list") {
     const next =
@@ -1448,7 +1444,7 @@ export function elementWithInlineDraft(
         ? setRawTextListRunsContent(element, runs)
         : setRawTextListContent(element, draft);
     const styled = style ? applyTextStyle(next, style) : next;
-    return preserveInlineEditFrame(setRawTextWrap(styled, "word"), frame);
+    return preserveInlineEditFrame(styled, frame);
   }
   return element;
 }
