@@ -8348,6 +8348,7 @@
                                         "family": "Poppins",
                                         "color": "#111827",
                                         "bold": true,
+                                        "wrap": "word",
                                         "line_height": 0.8
                                     }
                                 }

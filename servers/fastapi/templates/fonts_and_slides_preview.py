@@ -982,6 +982,8 @@ async def upload_fonts_and_preview_handler(
     pptx_file: UploadFile,
     font_files: Optional[List[UploadFile]] = None,
     original_font_names: Optional[List[str]] = None,
+    google_font_names: Optional[List[str]] = None,
+    google_font_urls: Optional[List[str]] = None,
     max_slides: Optional[int] = None,
     upload_fonts: bool = True,
     get_slide_images: bool = True,
@@ -1001,6 +1003,8 @@ async def upload_fonts_and_preview_handler(
     """
     num_font_files = len(font_files or [])
     num_original_names = len(original_font_names or [])
+    num_google_font_names = len(google_font_names or [])
+    num_google_font_urls = len(google_font_urls or [])
     # If one is provided without the other
     if (num_font_files and not num_original_names) or (
         num_original_names and not num_font_files
@@ -1014,6 +1018,23 @@ async def upload_fonts_and_preview_handler(
             status_code=400,
             detail="Number of font files must match number of original font names",
         )
+    if (num_google_font_names and not num_google_font_urls) or (
+        num_google_font_urls and not num_google_font_names
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Both google_font_names and google_font_urls must be provided together",
+        )
+    if num_google_font_names != num_google_font_urls:
+        raise HTTPException(
+            status_code=400,
+            detail="Number of Google font names must match number of Google font URLs",
+        )
+    selected_google_fonts = {
+        name.strip(): url.strip()
+        for name, url in zip(google_font_names or [], google_font_urls or [])
+        if name.strip() and url.strip()
+    }
 
     # Validate PPTX file
     filename = getattr(pptx_file, "filename", "") or ""
@@ -1083,6 +1104,7 @@ async def upload_fonts_and_preview_handler(
             variants_by_normalized_name=variants_by_normalized_name,
             logger=logger,
         )
+        fonts.update(selected_google_fonts)
         slide_image_paths: List[str] = []
         if get_slide_images:
             slide_image_paths = await create_slide_previews(

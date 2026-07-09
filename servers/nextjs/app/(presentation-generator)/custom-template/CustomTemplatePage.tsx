@@ -29,6 +29,10 @@ import {
   EDITOR_STAGE_HEIGHT,
   EDITOR_STAGE_WIDTH,
 } from "@/components/slide-editor/types";
+import {
+  loadGoogleFontOptions,
+  type GoogleFontOption,
+} from "@/components/slide-editor/text/google-fonts";
 import type { RootState } from "@/store/store";
 import { normalizeBackendAssetUrls, resolveBackendAssetUrl } from "@/utils/api";
 import { setupImageUrlConverter } from "@/utils/image-url-converter";
@@ -362,17 +366,47 @@ function UploadPanel({
 }
 
 function chipLabel(font: FontItem): string {
-  return font.family_name || font.name;
+  return font.name || font.family_name || font.original_name || "Unknown font";
 }
 
 function uniqueFontChips(fontsData: FontData): FontItem[] {
   const seen = new Set<string>();
-  return [...fontsData.unavailable_fonts, ...fontsData.available_fonts].filter((font) => {
+  return [...fontsData.available_fonts, ...fontsData.unavailable_fonts].filter((font) => {
     const key = chipLabel(font).toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function googleFontKey(family: string): string {
+  return family.trim().toLowerCase();
+}
+
+function preferredFallbackFont(
+  font: FontItem,
+  googleFontOptions: GoogleFontOption[],
+): GoogleFontOption | null {
+  if (googleFontOptions.length === 0) return null;
+
+  const byFamily = new Map(
+    googleFontOptions.map((option) => [googleFontKey(option.family), option]),
+  );
+  const candidates = [
+    font.family_name,
+    font.original_name,
+    "Poppins",
+    "Inter",
+    "Roboto",
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const option = byFamily.get(googleFontKey(candidate));
+    if (option) return option;
+  }
+
+  return googleFontOptions[0] ?? null;
 }
 
 function AnalyzePanel({
@@ -381,12 +415,18 @@ function AnalyzePanel({
   isUploading,
   uploadFont,
   hasPendingMissingFonts,
+  googleFontOptions,
+  selectedFallbackFonts,
+  onFallbackFontChange,
 }: {
   fontsData: FontData | null;
   uploadedFonts: UploadedFont[];
   isUploading: boolean;
   uploadFont: (fontName: string, file: File) => string | null;
   hasPendingMissingFonts: boolean;
+  googleFontOptions: GoogleFontOption[];
+  selectedFallbackFonts: Record<string, GoogleFontOption>;
+  onFallbackFontChange: (fontName: string, option: GoogleFontOption) => void;
 }) {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const missingFonts = fontsData?.unavailable_fonts ?? [];
@@ -401,10 +441,11 @@ function AnalyzePanel({
   const fontsStepComplete =
     missingFonts.length === 0 || pendingMissingFonts.length === 0 || isUploading;
   const availableFontCount = fontsData?.available_fonts.length ?? 0;
+  const missingFontCount = missingFonts.length;
   const uploadedMissingCount = missingFonts.filter((font) =>
     uploadedFontNames.has(font.name),
   ).length;
-  const totalDetectedFonts = fontChips.length;
+  const totalDetectedFonts = availableFontCount + missingFontCount;
   const fontStatusLabel = isUploading
     ? "Preparing Preview"
     : fontsStepComplete
@@ -427,8 +468,8 @@ function AnalyzePanel({
     <main className="flex min-h-screen flex-col bg-white px-4 pb-28 font-syne sm:px-6 sm:pb-32 2xl:px-10 2xl:pb-36">
       <TemplateStudioTitle compact />
       <section className="mx-auto mt-8 w-full max-w-[980px] sm:mt-10 2xl:mt-12 2xl:max-w-[1180px]">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px] 2xl:gap-5">
-          <div className="rounded-[10px] border border-[#E7E8EE] bg-white p-4 shadow-[0_8px_28px_rgba(16,24,40,0.05)] sm:p-5 2xl:p-6">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px] 2xl:gap-5">
+          <div className="h-fit rounded-[10px] border border-[#E3E5EC] bg-gradient-to-br from-white to-[#FAFAFF] p-4 shadow-[0_12px_34px_rgba(16,24,40,0.06)] sm:p-5 2xl:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F0EFFD] text-[#5146E5] 2xl:h-12 2xl:w-12">
@@ -459,16 +500,16 @@ function AnalyzePanel({
               {[
                 { label: "Detected", value: totalDetectedFonts },
                 { label: "Available", value: availableFontCount },
-                { label: "Uploaded", value: uploadedMissingCount },
+                { label: "Missing", value: pendingMissingFonts.length },
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-[8px] border border-[#ECECF2] bg-[#F8F8FB] px-3 py-3 2xl:px-4 2xl:py-4"
+                  className="rounded-[8px] border border-[#E6E7EF] bg-white px-3 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)] 2xl:px-4 2xl:py-4"
                 >
                   <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#777985] 2xl:text-xs">
                     {item.label}
                   </p>
-                  <p className="mt-1 text-2xl font-semibold text-[#15161C] 2xl:text-3xl">
+                  <p className="mt-1 font-mono text-2xl font-semibold leading-none text-[#15161C] 2xl:text-3xl">
                     {item.value}
                   </p>
                 </div>
@@ -481,10 +522,10 @@ function AnalyzePanel({
                   Detected Fonts
                 </p>
                 <p className="text-[12px] text-[#777985] 2xl:text-sm">
-                  {missingFonts.length} missing
+                  {missingFontCount} missing
                 </p>
               </div>
-              <div className="flex max-h-[172px] flex-wrap gap-2 overflow-y-auto pr-1 [scrollbar-color:#C7CBD6_transparent] [scrollbar-width:thin] 2xl:max-h-[220px] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C7CBD6] [&::-webkit-scrollbar-track]:bg-transparent">
+              <div className="flex max-h-[190px] flex-wrap gap-2 overflow-y-auto pr-1 [scrollbar-color:#C7CBD6_transparent] [scrollbar-width:thin] 2xl:max-h-[240px] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C7CBD6] [&::-webkit-scrollbar-track]:bg-transparent">
                 {fontChips.length > 0 ? (
                   fontChips.map((font, index) => {
                     const label = chipLabel(font);
@@ -509,9 +550,15 @@ function AnalyzePanel({
                 )}
               </div>
             </div>
+
+            {uploadedMissingCount > 0 ? (
+              <div className="mt-4 rounded-[8px] border border-[#CFEBDD] bg-[#F0FBF5] px-3 py-2.5 text-[12px] text-[#236C4A] 2xl:text-[13px]">
+                {uploadedMissingCount} missing font{uploadedMissingCount === 1 ? "" : "s"} uploaded.
+              </div>
+            ) : null}
           </div>
 
-          <aside className="rounded-[10px] border border-[#E7E8EE] bg-[#FBFBFD] p-4 shadow-[0_8px_28px_rgba(16,24,40,0.04)] sm:p-5 2xl:p-6">
+          <aside className="h-fit rounded-[10px] border border-[#E3E5EC] bg-white p-4 shadow-[0_12px_34px_rgba(16,24,40,0.05)] sm:p-5 2xl:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-[15px] font-semibold text-[#181A22] 2xl:text-lg">
@@ -537,6 +584,7 @@ function AnalyzePanel({
                 {missingFonts.map((font, index) => {
                   const fontName = font.name;
                   const isUploaded = uploadedFontNames.has(fontName);
+                  const selectedFallback = selectedFallbackFonts[fontName];
                   return (
                     <div key={`${fontName}-${index}`} className="rounded-[8px] border border-[#ECECF2] bg-white p-3 2xl:p-4">
                       <div className="mb-2 flex items-center justify-between gap-2 2xl:mb-3">
@@ -573,12 +621,22 @@ function AnalyzePanel({
                           aria-label={`Fallback font for ${fontName}`}
                           disabled={isUploading}
                           className="h-9 w-full appearance-none rounded-[5px] border border-[#D9DAE2] bg-white px-3 pr-8 text-[12px] text-[#282A32] outline-none transition hover:border-[#B9ABFF] disabled:cursor-not-allowed disabled:opacity-60 2xl:h-10 2xl:text-[13px]"
-                          defaultValue="Poppins"
+                          value={selectedFallback?.family ?? ""}
+                          onChange={(event) => {
+                            const option = googleFontOptions.find(
+                              (item) => item.family === event.target.value,
+                            );
+                            if (option) onFallbackFontChange(fontName, option);
+                          }}
                         >
-                          <option>Poppins</option>
-                          <option>Inter</option>
-                          <option>Manrope</option>
-                          <option>Syne</option>
+                          {googleFontOptions.length === 0 ? (
+                            <option value="">Loading Google fonts...</option>
+                          ) : null}
+                          {googleFontOptions.map((option) => (
+                            <option key={option.family} value={option.family}>
+                              {option.family}
+                            </option>
+                          ))}
                         </select>
                         <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black" />
                       </div>
@@ -1175,6 +1233,10 @@ const CustomTemplatePage = ({
   const [reviewSlideIndex, setReviewSlideIndex] = useState(0);
   const [templateModalMode, setTemplateModalMode] = useState<"create" | "save" | null>(null);
   const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false);
+  const [googleFontOptions, setGoogleFontOptions] = useState<GoogleFontOption[]>([]);
+  const [selectedFallbackFonts, setSelectedFallbackFonts] = useState<
+    Record<string, GoogleFontOption>
+  >({});
 
   const {
     selectedFile,
@@ -1210,11 +1272,34 @@ const CustomTemplatePage = ({
   const isCreateTemplateModal = templateModalMode === "create";
 
   const missingFonts = state.fontsData?.unavailable_fonts ?? [];
-  const uploadedFontNames = new Set(uploadedFonts.map((font) => font.fontName));
-  const pendingMissingFonts = missingFonts.filter(
-    (font) => !uploadedFontNames.has(font.name),
+  const uploadedFontNames = useMemo(
+    () => new Set(uploadedFonts.map((font) => font.fontName)),
+    [uploadedFonts],
+  );
+  const pendingMissingFonts = useMemo(
+    () => missingFonts.filter((font) => !uploadedFontNames.has(font.name)),
+    [missingFonts, uploadedFontNames],
   );
   const hasPendingMissingFonts = pendingMissingFonts.length > 0;
+  const selectedFallbackFontUrls = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        pendingMissingFonts.flatMap((font) => {
+          const selectedFont = selectedFallbackFonts[font.name];
+          return selectedFont?.cssUrl ? [[font.name, selectedFont.cssUrl]] : [];
+        }),
+      ),
+    [pendingMissingFonts, selectedFallbackFonts],
+  );
+  const handleFallbackFontChange = useCallback(
+    (fontName: string, option: GoogleFontOption) => {
+      setSelectedFallbackFonts((current) => ({
+        ...current,
+        [fontName]: option,
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     showTemplateV2ModelWarningIfNeeded(llmConfig);
@@ -1232,6 +1317,47 @@ const CustomTemplatePage = ({
       document.head.appendChild(script);
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadGoogleFontOptions()
+      .then((options) => {
+        if (!cancelled) setGoogleFontOptions(options);
+      })
+      .catch((error) => {
+        console.error("Failed to load Google font options", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (googleFontOptions.length === 0 || pendingMissingFonts.length === 0) return;
+
+    setSelectedFallbackFonts((current) => {
+      let changed = false;
+      const next = { ...current };
+      const pendingFontNames = new Set(pendingMissingFonts.map((font) => font.name));
+
+      Object.keys(next).forEach((fontName) => {
+        if (!pendingFontNames.has(fontName)) {
+          delete next[fontName];
+          changed = true;
+        }
+      });
+
+      pendingMissingFonts.forEach((font) => {
+        if (next[font.name]) return;
+        const fallbackFont = preferredFallbackFont(font, googleFontOptions);
+        if (!fallbackFont) return;
+        next[font.name] = fallbackFont;
+        changed = true;
+      });
+
+      return changed ? next : current;
+    });
+  }, [googleFontOptions, pendingMissingFonts]);
 
   useEffect(() => {
     if (!state.previewData?.fonts) return;
@@ -1287,7 +1413,7 @@ const CustomTemplatePage = ({
         "Continuing without uploaded fonts. They will not be applied to your template.",
       );
     }
-    const data = await fontUploadAndPreview(selectedFile);
+    const data = await fontUploadAndPreview(selectedFile, selectedFallbackFontUrls);
     if (data) {
       loadFontAssets(normalizeBackendAssetUrls(data.fonts));
       trackEvent(MixpanelEvent.Templates_Build_Template_Clicked, {
@@ -1295,7 +1421,13 @@ const CustomTemplatePage = ({
         slide_count: data.slide_image_urls.length,
       });
     }
-  }, [fontUploadAndPreview, hasPendingMissingFonts, loadFontAssets, selectedFile]);
+  }, [
+    fontUploadAndPreview,
+    hasPendingMissingFonts,
+    loadFontAssets,
+    selectedFallbackFontUrls,
+    selectedFile,
+  ]);
 
   const handleCreateTemplate = useCallback(
     async (name: string, description: string) => {
@@ -1313,7 +1445,10 @@ const CustomTemplatePage = ({
         await TemplateService.createTemplate({
           pptx_url: state.previewData.modified_pptx_url,
           slide_image_urls: state.previewData.slide_image_urls,
-          fonts: state.previewData.fonts,
+          fonts: {
+            ...state.previewData.fonts,
+            ...selectedFallbackFontUrls,
+          },
           name,
           description: description || null,
         });
@@ -1332,7 +1467,7 @@ const CustomTemplatePage = ({
         setIsSubmittingTemplate(false);
       }
     },
-    [router, state.previewData],
+    [router, selectedFallbackFontUrls, state.previewData],
   );
 
   const handleSaveTemplate = useCallback(
@@ -1453,6 +1588,9 @@ const CustomTemplatePage = ({
             isUploading={state.isLoading}
             uploadFont={uploadFont}
             hasPendingMissingFonts={hasPendingMissingFonts}
+            googleFontOptions={googleFontOptions}
+            selectedFallbackFonts={selectedFallbackFonts}
+            onFallbackFontChange={handleFallbackFontChange}
           />
         ) : null}
 

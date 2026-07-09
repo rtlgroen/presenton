@@ -266,14 +266,17 @@ export const useTemplateCreation = ({
 
     // Step 2: Upload fonts and get slide preview
     const fontUploadAndPreview = useCallback(async (
-        pptxFile: File
+        pptxFile: File,
+        googleFontUrlsByName: Record<string, string> = {}
     ): Promise<FontUploadPreviewResponse | null> => {
         updateState({ isLoading: true, error: null, step: 'font-upload' });
         const startedAt = Date.now();
         const missingFontCount = getUnsupportedFonts().length;
+        const selectedGoogleFontCount = Object.keys(googleFontUrlsByName).length;
         trackEvent(MixpanelEvent.CustomTemplate_Preview_Started, {
             uploaded_font_count: uploadedFonts.length,
             missing_font_count: missingFontCount,
+            selected_google_font_count: selectedGoogleFontCount,
         });
 
         try {
@@ -284,6 +287,10 @@ export const useTemplateCreation = ({
             uploadedFonts.forEach(font => {
                 formData.append("font_files", font.file);
                 formData.append("original_font_names", font.fontName);
+            });
+            Object.entries(googleFontUrlsByName).forEach(([fontName, fontUrl]) => {
+                formData.append("google_font_names", fontName);
+                formData.append("google_font_urls", fontUrl);
             });
 
             const response = await fetch(
@@ -308,6 +315,7 @@ export const useTemplateCreation = ({
             trackEvent(MixpanelEvent.CustomTemplate_Preview_Completed, {
                 slide_count: data.slide_image_urls?.length ?? 0,
                 uploaded_font_count: uploadedFonts.length,
+                selected_google_font_count: selectedGoogleFontCount,
                 duration_ms: Date.now() - startedAt,
             });
 

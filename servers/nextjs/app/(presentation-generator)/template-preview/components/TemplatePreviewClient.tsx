@@ -16,6 +16,7 @@ import { useFontLoader as loadFontAssets } from "../../hooks/useFontLoad";
 import { useTemplateDetails } from "../../hooks/useTemplateDetails";
 import { TemplateV2Layout } from "../../custom-template/types";
 import { TemplateV2LayoutPreview } from "../../custom-template/components/EachSlide/TemplateV2LayoutPreview";
+import { TemplateV2KonvaSlide } from "@/components/slide-editor/surface/TemplateV2KonvaSlide";
 
 type GroupLayoutPreviewProps = {
   useKonvaTemplateV2Preview?: boolean;
@@ -187,9 +188,11 @@ function TemplateLayoutList({
             </div>
 
             <div className="p-6 flex justify-center overflow-x-auto">
-              <TemplateV2LayoutPreview
+              <TemplateV2KonvaSlide
                 layout={layout}
-                useKonvaRenderer={useKonvaTemplateV2Preview}
+                isEditMode={false}
+                slideId={null}
+                slideIndex={0}
                 fonts={fonts}
               />
             </div>

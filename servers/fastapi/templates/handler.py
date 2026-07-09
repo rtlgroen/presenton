@@ -515,11 +515,15 @@ async def upload_fonts_and_slides_preview(
         default=None, description="Font files to upload"
     ),
     original_font_names: Optional[List[str]] = Form(default=None),
+    google_font_names: Optional[List[str]] = Form(default=None),
+    google_font_urls: Optional[List[str]] = Form(default=None),
 ):
     return await upload_fonts_and_slides_preview_handler(
         pptx_file=pptx_file,
         font_files=font_files,
         original_font_names=original_font_names,
+        google_font_names=google_font_names,
+        google_font_urls=google_font_urls,
     )
 
 
@@ -529,11 +533,15 @@ async def upload_fonts_for_pptx_import(
         default=None, description="Font files to upload"
     ),
     original_font_names: Optional[List[str]] = Form(default=None),
+    google_font_names: Optional[List[str]] = Form(default=None),
+    google_font_urls: Optional[List[str]] = Form(default=None),
 ):
     return await upload_fonts_and_slides_preview_handler(
         pptx_file=pptx_file,
         font_files=font_files,
         original_font_names=original_font_names,
+        google_font_names=google_font_names,
+        google_font_urls=google_font_urls,
         get_slide_images=False,
         upload_presentation=True,
     )
