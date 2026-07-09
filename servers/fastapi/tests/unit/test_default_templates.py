@@ -135,11 +135,20 @@ def test_default_template_import_normalizes_shapes_and_copies_static(
     ).read_bytes() == b"image"
 
 
-def test_default_template_import_skips_existing_database_row(tmp_path, monkeypatch):
+def test_default_template_import_updates_existing_database_row(tmp_path, monkeypatch):
     templates_root = tmp_path / "templates"
     _write_template_bundle(templates_root)
     app_data_dir = tmp_path / "app_data"
-    session = _FakeSession(existing=TemplateV2(id="general", name="General"))
+    existing = TemplateV2(
+        id="general",
+        name="Old name",
+        description="Old description",
+        layouts={"layouts": []},
+        merged_components={"components": []},
+        assets={"thumbnail": "/old.png"},
+        is_default=False,
+    )
+    session = _FakeSession(existing=existing)
     monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data_dir))
     monkeypatch.setattr(
         default_templates,
@@ -149,9 +158,17 @@ def test_default_template_import_skips_existing_database_row(tmp_path, monkeypat
 
     asyncio.run(default_templates.import_default_templates_on_startup(templates_root))
 
-    assert session.commit_count == 0
-    assert session.added == []
-    assert not (app_data_dir / "templates/general/static/image.png").exists()
+    assert session.commit_count == 1
+    assert session.added == [existing]
+    assert existing.name == "General"
+    assert existing.description == "General purpose default template."
+    assert existing.is_default is True
+    assert list(existing.layouts) == ["layouts"]
+    assert list(existing.merged_components) == ["components"]
+    assert existing.assets["thumbnail"] == (
+        "/app_data/templates/general/static/thumbnail.png"
+    )
+    assert (app_data_dir / "templates/general/static/image.png").exists()
 
 
 def test_bundled_general_template_json_matches_template_v2_shapes():
