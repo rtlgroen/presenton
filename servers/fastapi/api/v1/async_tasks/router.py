@@ -9,7 +9,7 @@ from services.database import get_async_session
 
 
 API_V1_ASYNC_TASKS_ROUTER = APIRouter(
-    prefix="/api/v1/async_tasks",
+    prefix="/api/v1/async-tasks",
     tags=["Async Tasks"],
 )
 

@@ -5,7 +5,11 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.dialects import sqlite
 
-from api.v1.async_tasks.router import check_async_task_status, list_async_tasks
+from api.v1.async_tasks.router import (
+    API_V1_ASYNC_TASKS_ROUTER,
+    check_async_task_status,
+    list_async_tasks,
+)
 from models.sql.async_task import AsyncTaskModel
 
 
@@ -31,6 +35,14 @@ class _FakeAsyncSession:
     async def execute(self, statement: Any):
         self.executed_statement = statement
         return _RowsResult(list(self._get_results.values()))
+
+
+def test_async_tasks_routes_use_hyphenated_endpoint():
+    paths = {route.path for route in API_V1_ASYNC_TASKS_ROUTER.routes}
+
+    assert "/api/v1/async-tasks" in paths
+    assert "/api/v1/async-tasks/status/{id}" in paths
+    assert "/api/v1/async_tasks" not in paths
 
 
 def test_check_async_task_status_returns_task():
