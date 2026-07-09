@@ -55,6 +55,7 @@ type LayoutElementType =
   | "container"
   | "flex"
   | "grid"
+  | "group"
   | "line"
   | "list-view"
   | "grid-view";
@@ -634,6 +635,12 @@ export function isTemplateV2FlowLayoutElement(
     element?.type === "grid-view" ||
     Boolean(element && isFlowLayoutElement(element as RawRecord))
   );
+}
+
+export function isTemplateV2GroupElement(
+  element: RawRecord | TemplateV2ToolbarElement | null | undefined,
+): element is TemplateV2LayoutElement {
+  return element?.type === "group";
 }
 
 export function isTemplateV2ChartToolbarElement(

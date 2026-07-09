@@ -70,6 +70,7 @@ import {
 import { useTemplateV2Clipboard } from "@/components/slide-editor/clipboard/useClipboard";
 import {
   isTemplateV2FlowLayoutElement,
+  isTemplateV2GroupElement,
   isTemplateV2LayoutElement,
   type TemplateV2SelectionComponentActions,
 } from "@/components/slide-editor/layout/LayoutToolbar";
@@ -432,7 +433,8 @@ function TemplateV2KonvaSlideComponent({
       componentIndex == null ||
       componentIndex < 0 ||
       !layoutToolbarTarget ||
-      !isTemplateV2FlowLayoutElement(layoutToolbarTarget.element)
+      (!isTemplateV2FlowLayoutElement(layoutToolbarTarget.element) &&
+        !isTemplateV2GroupElement(layoutToolbarTarget.element))
     ) {
       return false;
     }
@@ -1916,6 +1918,7 @@ function TemplateV2KonvaSlideComponent({
         !chartToolbarTarget &&
         !tableToolbarTarget &&
         !isTemplateV2LayoutElement(selectedElement) &&
+        !isTemplateV2GroupElement(selectedElement) &&
         !isRawIconElement(selectedElement) &&
         !(editingTableCell && readString(selectedElement.type) === "table") ? (
         <ElementToolbar

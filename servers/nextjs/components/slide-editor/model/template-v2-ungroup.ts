@@ -39,7 +39,7 @@ export function canUngroupTemplateV2Component(
   if (!component) return false;
   const elements = readArray(component.elements).filter(isRecord);
   if (elements.length > 1) return true;
-  return elements.some(hasUngroupableFlowLayout);
+  return elements.some(hasUngroupableLayout);
 }
 
 export function ungroupTemplateV2ComponentInUi(
@@ -135,14 +135,14 @@ function ungroupElementTree(
   return [...currentLevel, ...children];
 }
 
-function hasUngroupableFlowLayout(element: RawRecord): boolean {
+function hasUngroupableLayout(element: RawRecord): boolean {
   const childInfo = childArrayInfoFromRecord(element);
   if (!childInfo) return false;
   const children = childInfo.items.filter(isRecord);
-  if (isFlowLayoutType(readString(element.type)) && children.length > 0) {
+  if (isUngroupableLayoutType(readString(element.type)) && children.length > 0) {
     return true;
   }
-  return children.some(hasUngroupableFlowLayout);
+  return children.some(hasUngroupableLayout);
 }
 
 function ungroupedComponent(
@@ -190,6 +190,10 @@ function isFlowLayoutType(type: string | null) {
     type === "list-view" ||
     type === "grid-view"
   );
+}
+
+function isUngroupableLayoutType(type: string | null) {
+  return isFlowLayoutType(type) || type === "group";
 }
 
 function elementHasVisibleBoxStyle(

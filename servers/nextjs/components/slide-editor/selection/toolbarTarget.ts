@@ -1,4 +1,5 @@
 import {
+  isTemplateV2GroupElement,
   isTemplateV2LayoutElement,
   type TemplateV2ToolbarElement,
 } from "@/components/slide-editor/layout/LayoutToolbar";
@@ -55,7 +56,8 @@ export function getTemplateV2SelectionToolbarTarget({
     selection?.kind === "element" &&
     selectedElement &&
     selectedBox &&
-    isTemplateV2LayoutElement(selectedElement)
+    (isTemplateV2LayoutElement(selectedElement) ||
+      isTemplateV2GroupElement(selectedElement))
   ) {
     return {
       selection,
