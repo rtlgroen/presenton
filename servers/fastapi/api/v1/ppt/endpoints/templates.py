@@ -208,11 +208,26 @@ class TemplateV2Response(TemplateV2ListItem):
 def _template_v2_task_progress_data(
     created_layouts: int,
     remaining_layouts: int,
-) -> dict[str, int]:
+    name: str | None = None,
+    thumbnail: str | None = None,
+) -> dict[str, Any]:
     return {
         "created_layouts": max(created_layouts, 0),
         "remaining_layouts": max(remaining_layouts, 0),
+        "name": name,
+        "thumbnail": thumbnail,
     }
+
+
+def _template_v2_request_name(request: InitTemplateV2Request) -> str:
+    return (request.name or "").strip() or _derive_template_name(request.pptx_url, "")
+
+
+def _template_v2_request_thumbnail(request: InitTemplateV2Request) -> str | None:
+    for slide_image_url in request.slide_image_urls:
+        if isinstance(slide_image_url, str) and slide_image_url.strip():
+            return slide_image_url.strip()
+    return None
 
 
 def _derive_template_name(pptx_url: str, pptx_path: str) -> str:
@@ -785,6 +800,8 @@ async def _run_create_template_v2_task(
             task.data = _template_v2_task_progress_data(
                 created_layouts=0,
                 remaining_layouts=len(request.slide_image_urls),
+                name=_template_v2_request_name(request),
+                thumbnail=_template_v2_request_thumbnail(request),
             )
             task.updated_at = datetime.now()
             sql_session.add(task)
@@ -798,6 +815,8 @@ async def _run_create_template_v2_task(
             task.data = _template_v2_task_progress_data(
                 created_layouts=created_layouts,
                 remaining_layouts=len(request.slide_image_urls) - created_layouts,
+                name=template.name,
+                thumbnail=_get_template_thumbnail_from_assets(template.assets),
             )
             task.updated_at = datetime.now()
             sql_session.add(task)
@@ -837,6 +856,8 @@ async def create_template_v2(
         data=_template_v2_task_progress_data(
             created_layouts=0,
             remaining_layouts=len(request.slide_image_urls),
+            name=_template_v2_request_name(request),
+            thumbnail=_template_v2_request_thumbnail(request),
         ),
     )
     sql_session.add(task)

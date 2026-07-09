@@ -325,7 +325,12 @@ def test_create_template_v2_async_enqueues_task(fake_async_session):
     assert task.type == "template.create"
     assert task.status == "pending"
     assert task.message == "Queued for template creation"
-    assert task.data == {"created_layouts": 0, "remaining_layouts": 1}
+    assert task.data == {
+        "created_layouts": 0,
+        "remaining_layouts": 1,
+        "name": "template",
+        "thumbnail": "/app_data/images/slide-1.png",
+    }
     assert fake_async_session.added == [task]
     assert fake_async_session.commit_count == 1
     assert len(background_tasks.tasks) == 1
