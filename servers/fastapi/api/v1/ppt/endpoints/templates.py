@@ -7,7 +7,6 @@ from datetime import datetime
 from functools import partial
 from typing import Any, Optional
 from urllib.parse import unquote, urlparse
-import uuid
 
 from fastapi import (
     APIRouter,
@@ -59,7 +58,7 @@ from utils.file_utils import get_original_file_name
 TEMPLATES_ROUTER = APIRouter(prefix="/templates", tags=["Templates"])
 TEMPLATE_ASSETS_ROUTER = APIRouter(prefix="/template", tags=["Template Assets"])
 LOGGER = logging.getLogger(__name__)
-_TEMPLATE_LAYOUT_PATCH_LOCKS: dict[uuid.UUID, asyncio.Lock] = {}
+_TEMPLATE_LAYOUT_PATCH_LOCKS: dict[str, asyncio.Lock] = {}
 _TEMPLATE_LAYOUT_PATCH_LOCKS_GUARD = asyncio.Lock()
 
 
@@ -78,13 +77,13 @@ class CreateTemplateV2Request(InitTemplateV2Request):
 class GenerateTemplateV2BlocksRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    template_id: uuid.UUID = Field(validation_alias=AliasChoices("template_id", "id"))
+    template_id: str = Field(validation_alias=AliasChoices("template_id", "id"))
 
 
 class CreateTemplateV2LayoutsRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    template_id: uuid.UUID = Field(validation_alias=AliasChoices("template_id", "id"))
+    template_id: str = Field(validation_alias=AliasChoices("template_id", "id"))
     index: Optional[int] = Field(default=None, ge=0)
     indices: Optional[list[int]] = None
 
@@ -177,11 +176,12 @@ class UpdateTemplateV2MetadataRequest(BaseModel):
 class TemplateV2ListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: str
     name: str
     description: Optional[str] = None
     layout_count: int = 0
     thumbnail: Optional[str] = None
+    is_default: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -381,6 +381,10 @@ def _get_template_thumbnail_from_assets(assets: Any) -> str | None:
     if not isinstance(assets, dict):
         return None
 
+    thumbnail = assets.get("thumbnail")
+    if isinstance(thumbnail, str) and thumbnail.strip():
+        return thumbnail.strip()
+
     slide_image_urls = assets.get("slide_image_urls")
     if not isinstance(slide_image_urls, list):
         return None
@@ -391,7 +395,7 @@ def _get_template_thumbnail_from_assets(assets: Any) -> str | None:
     return None
 
 
-async def _get_template_layout_patch_lock(template_id: uuid.UUID) -> asyncio.Lock:
+async def _get_template_layout_patch_lock(template_id: str) -> asyncio.Lock:
     async with _TEMPLATE_LAYOUT_PATCH_LOCKS_GUARD:
         lock = _TEMPLATE_LAYOUT_PATCH_LOCKS.get(template_id)
         if lock is None:
@@ -600,6 +604,7 @@ async def list_templates_v2(
             TemplateV2.description,
             TemplateV2.layouts,
             TemplateV2.assets,
+            TemplateV2.is_default,
             TemplateV2.created_at,
             TemplateV2.updated_at,
         )
@@ -615,10 +620,20 @@ async def list_templates_v2(
             description=description,
             layout_count=_count_layouts(layouts),
             thumbnail=_get_template_thumbnail_from_assets(assets),
+            is_default=is_default,
             created_at=created_at,
             updated_at=updated_at,
         )
-        for template_id, name, description, layouts, assets, created_at, updated_at in result.all()
+        for (
+            template_id,
+            name,
+            description,
+            layouts,
+            assets,
+            is_default,
+            created_at,
+            updated_at,
+        ) in result.all()
     ]
     return TemplateV2ListResponse(
         items=items,
@@ -649,7 +664,7 @@ async def upload_template_fonts_and_slides_preview(
 @TEMPLATES_ROUTER.post(
     "/init",
     status_code=201,
-    response_model=uuid.UUID,
+    response_model=str,
 )
 async def init_template_v2(
     request: InitTemplateV2Request = Body(...),
@@ -879,7 +894,7 @@ async def generate_template_v2_blocks(
     response_model=TemplateV2Response,
 )
 async def patch_template_v2_slide_layout(
-    template_id: uuid.UUID = Path(...),
+    template_id: str = Path(...),
     request: PatchTemplateV2SlideLayoutRequest = Body(...),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
@@ -924,7 +939,7 @@ async def patch_template_v2_slide_layout(
 
 @TEMPLATES_ROUTER.patch("/{template_id}", response_model=TemplateV2Response)
 async def update_template_v2_metadata(
-    template_id: uuid.UUID = Path(...),
+    template_id: str = Path(...),
     request: UpdateTemplateV2MetadataRequest = Body(...),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
@@ -950,7 +965,7 @@ async def update_template_v2_metadata(
 
 @TEMPLATES_ROUTER.get("/{template_id}", response_model=TemplateV2Response)
 async def get_template_v2(
-    template_id: uuid.UUID = Path(...),
+    template_id: str = Path(...),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     template = await sql_session.get(TemplateV2, template_id)
@@ -961,7 +976,7 @@ async def get_template_v2(
 
 @TEMPLATES_ROUTER.delete("/{template_id}", status_code=204)
 async def delete_template_v2(
-    template_id: uuid.UUID = Path(...),
+    template_id: str = Path(...),
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     template = await sql_session.get(TemplateV2, template_id)

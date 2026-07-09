@@ -105,46 +105,63 @@ def _extract_custom_template_id(layout_name: Optional[str]) -> Optional[uuid.UUI
         return None
 
 
-def _extract_template_v2_id(layout_name: Optional[str]) -> Optional[uuid.UUID]:
-    if not layout_name:
+def _extract_template_v2_id(layout_name: Optional[str]) -> Optional[str]:
+    if not isinstance(layout_name, str):
         return None
 
+    layout_name = layout_name.strip()
+    if not layout_name:
+        return None
     for prefix in ("template-v2-", "template-v2:"):
         if layout_name.startswith(prefix):
-            try:
-                return uuid.UUID(layout_name[len(prefix) :])
-            except Exception:
-                return None
+            candidate = layout_name[len(prefix) :].strip()
+            return candidate or None
     return None
 
 
 def _extract_requested_template_v2_id(
     template_name: Optional[str],
-) -> Optional[uuid.UUID]:
-    if not template_name:
+    *,
+    allow_bare: bool = False,
+) -> Optional[str]:
+    if not isinstance(template_name, str):
         return None
 
     value = template_name.strip()
+    if not value:
+        return None
     for prefix in ("template-v2-", "template-v2:", "custom-"):
         if not value.startswith(prefix):
             continue
         candidate = value[len(prefix) :]
-        try:
-            return uuid.UUID(candidate)
-        except Exception:
-            return None
+        return candidate.strip() or None
 
-    try:
-        return uuid.UUID(value)
-    except Exception:
+    return value if allow_bare else None
+
+
+def _extract_template_v2_metadata_id(key: str, value: Any) -> Optional[str]:
+    if not isinstance(value, str):
         return None
+
+    prefixed = _extract_template_v2_id(value)
+    if prefixed:
+        return prefixed
+    if key in {"template_id", "template_v2_id"}:
+        candidate = value.strip()
+        return candidate or None
+    return None
 
 
 async def _resolve_requested_template_v2(
     template_name: str,
     sql_session: AsyncSession,
+    *,
+    allow_bare: bool = False,
 ) -> Optional[TemplateV2]:
-    template_id = _extract_requested_template_v2_id(template_name)
+    template_id = _extract_requested_template_v2_id(
+        template_name,
+        allow_bare=allow_bare,
+    )
     if not template_id:
         return None
 
@@ -259,20 +276,13 @@ async def _resolve_presentation_template_v2_fonts(
     slides: List[SlideModel],
     sql_session: AsyncSession,
 ):
-    candidate_template_ids: List[uuid.UUID] = []
-    seen = set()
+    candidate_template_ids: List[str] = []
+    seen: set[str] = set()
 
     if isinstance(presentation.layout, dict):
         for key in ("name", "template_id", "template_v2_id"):
             value = presentation.layout.get(key)
-            template_id = None
-            if isinstance(value, str):
-                template_id = _extract_template_v2_id(value)
-                if template_id is None:
-                    try:
-                        template_id = uuid.UUID(value)
-                    except Exception:
-                        template_id = None
+            template_id = _extract_template_v2_metadata_id(key, value)
             if template_id and template_id not in seen:
                 candidate_template_ids.append(template_id)
                 seen.add(template_id)
@@ -321,7 +331,7 @@ async def _resolve_presentation_fonts(
         return stored_fonts
 
     candidate_template_ids: List[uuid.UUID] = []
-    seen = set()
+    seen: set[uuid.UUID] = set()
 
     layout_name = None
     if isinstance(presentation.layout, dict):
@@ -365,20 +375,13 @@ async def _resolve_presentation_template_v2_payload(
     sql_session: AsyncSession,
     payload_field: Literal["components", "merged_components"],
 ):
-    candidate_template_ids: List[uuid.UUID] = []
-    seen = set()
+    candidate_template_ids: List[str] = []
+    seen: set[str] = set()
 
     if isinstance(presentation.layout, dict):
         for key in ("name", "template_id", "template_v2_id"):
             value = presentation.layout.get(key)
-            template_id = None
-            if isinstance(value, str):
-                template_id = _extract_template_v2_id(value)
-                if template_id is None:
-                    try:
-                        template_id = uuid.UUID(value)
-                    except Exception:
-                        template_id = None
+            template_id = _extract_template_v2_metadata_id(key, value)
             if template_id and template_id not in seen:
                 candidate_template_ids.append(template_id)
                 seen.add(template_id)
@@ -1247,13 +1250,12 @@ async def _resolve_prepare_layout(
     if isinstance(layout, PresentationLayoutModel):
         return layout.model_dump(mode="json"), layout, None
 
-    try:
-        template_id = uuid.UUID(layout)
-    except ValueError as exc:
+    template_id = layout.strip()
+    if not template_id:
         raise HTTPException(
             status_code=400,
-            detail="Template v2 layout id must be a valid UUID",
-        ) from exc
+            detail="Template v2 layout id is required",
+        )
 
     template = await sql_session.get(TemplateV2, template_id)
     if not template:

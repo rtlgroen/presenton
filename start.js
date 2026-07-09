@@ -62,6 +62,7 @@ const appDataStaticDirectories = [
   "images",
   "uploads",
   "fonts",
+  "templates",
   "pptx-to-html",
   "pptx-to-json",
 ].map((name) => join(appDataDirectory, name));

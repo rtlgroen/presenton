@@ -45,7 +45,7 @@ def _upgrade_template_v2() -> None:
     if not _has_table("template_v2"):
         op.create_table(
             "template_v2",
-            sa.Column("id", sa.Uuid(), nullable=False),
+            sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
             sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
             sa.Column("description", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
             sa.Column("raw_layouts", sa.JSON(), nullable=True),

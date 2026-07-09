@@ -52,7 +52,7 @@ def _parse_created_at(value: Any) -> datetime | None:
 def _resource_filter(
     *,
     presentation_id: uuid.UUID | None = None,
-    template_v2_id: uuid.UUID | None = None,
+    template_v2_id: str | None = None,
 ) -> ColumnElement[bool]:
     if (presentation_id is None) == (template_v2_id is None):
         raise ValueError("Exactly one chat resource id is required.")
@@ -65,7 +65,7 @@ async def load_messages(
     session: AsyncSession,
     *,
     presentation_id: uuid.UUID | None = None,
-    template_v2_id: uuid.UUID | None = None,
+    template_v2_id: str | None = None,
     conversation_id: uuid.UUID,
 ) -> list[dict[str, str]]:
     rows = await load_messages_with_meta(
@@ -85,7 +85,7 @@ async def load_messages_with_meta(
     session: AsyncSession,
     *,
     presentation_id: uuid.UUID | None = None,
-    template_v2_id: uuid.UUID | None = None,
+    template_v2_id: str | None = None,
     conversation_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     resource_clause = _resource_filter(
@@ -121,7 +121,7 @@ async def replace_messages(
     session: AsyncSession,
     *,
     presentation_id: uuid.UUID | None = None,
-    template_v2_id: uuid.UUID | None = None,
+    template_v2_id: str | None = None,
     conversation_id: uuid.UUID,
     messages: list[dict[str, str]],
 ) -> None:
@@ -168,7 +168,7 @@ async def append_turn(
     session: AsyncSession,
     *,
     presentation_id: uuid.UUID | None = None,
-    template_v2_id: uuid.UUID | None = None,
+    template_v2_id: str | None = None,
     conversation_id: uuid.UUID,
     user_message: str,
     assistant_message: str,
@@ -217,7 +217,7 @@ async def list_conversations(
     session: AsyncSession,
     *,
     presentation_id: uuid.UUID | None = None,
-    template_v2_id: uuid.UUID | None = None,
+    template_v2_id: str | None = None,
 ) -> list[dict[str, Any]]:
     resource_clause = _resource_filter(
         presentation_id=presentation_id,

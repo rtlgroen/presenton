@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from migrations import migrate_database_on_startup
 from services.database import create_db_and_tables, dispose_engines
+from templates.default_templates import import_default_templates_on_startup
 from utils.get_env import get_app_data_directory_env, get_can_change_keys_env
 from utils.model_availability import (
     check_llm_and_image_provider_api_or_model_availability,
@@ -112,6 +113,7 @@ async def app_lifespan(_: FastAPI):
     os.makedirs(get_app_data_directory_env(), exist_ok=True)
     await migrate_database_on_startup()
     await create_db_and_tables()
+    await import_default_templates_on_startup()
     _bootstrap_auth_from_env()
     if get_can_change_keys_env() != "false":
         update_env_with_user_config()

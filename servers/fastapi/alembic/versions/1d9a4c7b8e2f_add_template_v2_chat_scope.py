@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+import sqlmodel
 
 
 # revision identifiers, used by Alembic.
@@ -71,7 +72,7 @@ def upgrade() -> None:
             batch_op.add_column(
                 sa.Column(
                     "template_v2_id",
-                    sa.Uuid(),
+                    sqlmodel.sql.sqltypes.AutoString(),
                     nullable=True,
                 )
             )

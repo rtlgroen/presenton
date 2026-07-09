@@ -2461,13 +2461,14 @@ class PresentationChatMemoryLayer:
         self,
         presentation: PresentationModel,
     ) -> PresentationLayoutModel | None:
-        candidate_ids: list[uuid.UUID] = []
-        seen_ids: set[uuid.UUID] = set()
+        candidate_ids: list[str] = []
+        seen_ids: set[str] = set()
 
         if isinstance(presentation.layout, dict):
             for key in ("name", "template_id", "template_v2_id"):
                 template_id = self._extract_template_v2_id(
-                    presentation.layout.get(key)
+                    presentation.layout.get(key),
+                    allow_bare=key in {"template_id", "template_v2_id"},
                 )
                 if template_id and template_id not in seen_ids:
                     candidate_ids.append(template_id)
@@ -2492,19 +2493,21 @@ class PresentationChatMemoryLayer:
         )
 
     @staticmethod
-    def _extract_template_v2_id(value: Any) -> uuid.UUID | None:
+    def _extract_template_v2_id(value: Any, *, allow_bare: bool = False) -> str | None:
         if not isinstance(value, str) or not value:
             return None
 
-        candidate = value
-        for prefix in ("template-v2-", "template-v2:"):
-            if value.startswith(prefix):
-                candidate = value[len(prefix) :]
-                break
-        try:
-            return uuid.UUID(candidate)
-        except Exception:
+        candidate = value.strip()
+        if not candidate:
             return None
+        for prefix in ("template-v2-", "template-v2:"):
+            if candidate.startswith(prefix):
+                candidate = candidate[len(prefix) :].strip()
+                break
+        else:
+            if not allow_bare:
+                return None
+        return candidate or None
 
     @staticmethod
     def _build_template_v2_layout_model(
@@ -2592,7 +2595,8 @@ class PresentationChatMemoryLayer:
 
             for key in ("name", "template_id", "template_v2_id"):
                 template_id = self._extract_template_v2_id(
-                    presentation.layout.get(key)
+                    presentation.layout.get(key),
+                    allow_bare=key in {"template_id", "template_v2_id"},
                 )
                 if not template_id:
                     continue

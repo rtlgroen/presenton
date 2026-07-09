@@ -22,6 +22,8 @@ REVISION_PRESENTATION_FONTS = "9b2d1c4e5f6a"
 REVISION_TEMPLATE_V2_CHAT_SCOPE = "1d9a4c7b8e2f"
 REVISION_TEMPLATE_V2_LAYOUTS_OPTIONAL = "2c8f4a1b9d7e"
 REVISION_FONT_UPLOADS = "5d7e9a1b2c3f"
+REVISION_TEMPLATE_V2_ID_STRINGS = "3f2a1b4c5d6e"
+REVISION_TEMPLATE_V2_IS_DEFAULT = "4b7c9d0e1f2a"
 
 
 async def migrate_database_on_startup() -> None:
@@ -127,16 +129,27 @@ def _infer_revision_from_schema(inspector, tables: set[str], head_revision: str)
             or _has_column(inspector, "chat_history_messages", "template_v2_id")
         )
         font_uploads_ready = "font_uploads" in tables
+        template_v2_id_strings_ready = _has_template_v2_id_string_columns(
+            inspector,
+            tables,
+        )
+        template_v2_is_default_ready = _has_column(
+            inspector, "template_v2", "is_default"
+        )
         if (
             final_template_columns.issubset(cols)
             and not {"cluster_candidates", "clusters"}.intersection(cols)
             and presentation_version_ready
         ):
             if slide_ui_ready and presentation_fonts_ready and template_v2_chat_scope_ready:
+                if not font_uploads_ready:
+                    return REVISION_TEMPLATE_V2_LAYOUTS_OPTIONAL
+                if not template_v2_id_strings_ready:
+                    return REVISION_FONT_UPLOADS
                 return (
                     head_revision
-                    if font_uploads_ready
-                    else REVISION_TEMPLATE_V2_LAYOUTS_OPTIONAL
+                    if template_v2_is_default_ready
+                    else REVISION_TEMPLATE_V2_ID_STRINGS
                 )
             if slide_ui_ready and presentation_fonts_ready:
                 return REVISION_PRESENTATION_FONTS
@@ -164,6 +177,35 @@ def _has_presentation_version_column(inspector, tables: set[str]) -> bool:
 def _has_column(inspector, table_name: str, column_name: str) -> bool:
     columns = {column["name"] for column in inspector.get_columns(table_name)}
     return column_name in columns
+
+
+def _has_template_v2_id_string_columns(inspector, tables: set[str]) -> bool:
+    if "template_v2" not in tables or not _has_column(inspector, "template_v2", "id"):
+        return False
+    if _is_uuid_storage_column(inspector, "template_v2", "id"):
+        return False
+    if "chat_history_messages" in tables and _has_column(
+        inspector,
+        "chat_history_messages",
+        "template_v2_id",
+    ):
+        return not _is_uuid_storage_column(
+            inspector,
+            "chat_history_messages",
+            "template_v2_id",
+        )
+    return True
+
+
+def _is_uuid_storage_column(inspector, table_name: str, column_name: str) -> bool:
+    for column in inspector.get_columns(table_name):
+        if column["name"] != column_name:
+            continue
+        column_type = column["type"]
+        type_class = column_type.__class__.__name__.lower()
+        rendered_type = str(column_type).lower().replace(" ", "")
+        return type_class == "uuid" or rendered_type in {"uuid", "char(32)"}
+    return False
 
 
 def _stamp_legacy_database_if_needed(config: Config, database_url: str) -> None:

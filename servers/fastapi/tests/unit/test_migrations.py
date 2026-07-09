@@ -70,7 +70,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(presentations)"))
             }
 
-        assert version == migrations.REVISION_FONT_UPLOADS
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
         assert "theme" in columns
         assert "fonts" in columns
     finally:
@@ -121,7 +121,7 @@ def test_upgrade_from_theme_stamp_skips_existing_template_create_infos_table(tmp
                 )
             }
 
-        assert version == migrations.REVISION_FONT_UPLOADS
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
         assert "template_create_infos" in tables
     finally:
         engine.dispose()
@@ -181,7 +181,7 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
                 for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
-        assert version == migrations.REVISION_FONT_UPLOADS
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
         assert {
             "ix_chat_history_messages_conversation_id",
             "ix_chat_history_messages_position",
@@ -249,7 +249,7 @@ def test_consolidated_migration_adds_presentation_version(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(slides)"))
             }
 
-        assert version == migrations.REVISION_FONT_UPLOADS
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
         assert presentation_version == "v1-standard"
         assert version_column[3] == 1
         assert version_column[4] is None
@@ -324,8 +324,151 @@ def test_upgrade_from_template_v2_revision_adds_slide_ui(tmp_path):
                 for row in connection.execute(text("PRAGMA table_info(slides)"))
             }
 
-        assert version == migrations.REVISION_FONT_UPLOADS
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
         assert "ui" in slide_columns
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_from_font_uploads_revision_converts_template_v2_ids_to_strings(
+    tmp_path,
+):
+    database_url = f"sqlite:///{tmp_path / 'template-v2-string-ids.db'}"
+    template_id = "12345678123456781234567812345678"
+    expected_template_id = "12345678-1234-5678-1234-567812345678"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE template_v2 (
+                        id CHAR(32) NOT NULL,
+                        name VARCHAR NOT NULL,
+                        description VARCHAR,
+                        raw_layouts JSON,
+                        components JSON,
+                        merged_components JSON,
+                        layouts JSON,
+                        assets JSON,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO template_v2 (
+                        id, name, layouts, created_at, updated_at
+                    )
+                    VALUES (
+                        :template_id,
+                        'Legacy V2',
+                        '{"layouts": []}',
+                        '2026-07-09 00:00:00',
+                        '2026-07-09 00:00:00'
+                    )
+                    """
+                ),
+                {"template_id": template_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE chat_history_messages (
+                        id CHAR(32) NOT NULL,
+                        presentation_id CHAR(32),
+                        template_v2_id CHAR(32),
+                        conversation_id CHAR(32) NOT NULL,
+                        position INTEGER NOT NULL,
+                        role VARCHAR NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        tool_calls JSON,
+                        PRIMARY KEY (id)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO chat_history_messages (
+                        id,
+                        template_v2_id,
+                        conversation_id,
+                        position,
+                        role,
+                        content,
+                        created_at
+                    )
+                    VALUES (
+                        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                        :template_id,
+                        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                        1,
+                        'user',
+                        'hello',
+                        '2026-07-09 00:00:00'
+                    )
+                    """
+                ),
+                {"template_id": template_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE INDEX ix_chat_history_messages_template_v2_id
+                    ON chat_history_messages (template_v2_id)
+                    """
+                )
+            )
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": migrations.REVISION_FONT_UPLOADS},
+            )
+
+        command.upgrade(_alembic_config(database_url), "head")
+
+        with engine.connect() as connection:
+            version = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            stored_template_id = connection.execute(
+                text("SELECT id FROM template_v2")
+            ).scalar_one()
+            stored_chat_template_id = connection.execute(
+                text("SELECT template_v2_id FROM chat_history_messages")
+            ).scalar_one()
+            template_id_type = next(
+                row[2]
+                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+                if row[1] == "id"
+            )
+            chat_template_id_type = next(
+                row[2]
+                for row in connection.execute(
+                    text("PRAGMA table_info(chat_history_messages)")
+                )
+                if row[1] == "template_v2_id"
+            )
+            template_columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+            }
+
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
+        assert stored_template_id == expected_template_id
+        assert stored_chat_template_id == expected_template_id
+        assert template_id_type == "VARCHAR"
+        assert chat_template_id_type == "VARCHAR"
+        assert "is_default" in template_columns
     finally:
         engine.dispose()
 
@@ -467,8 +610,9 @@ def test_removed_intermediate_revision_upgrades_through_consolidated_migration(
                 for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
-        assert version == migrations.REVISION_FONT_UPLOADS
+        assert version == migrations.REVISION_TEMPLATE_V2_IS_DEFAULT
         assert {"description", "components", "assets"}.issubset(template_columns)
+        assert "is_default" in template_columns
         assert "cluster_candidates" not in template_columns
         assert "clusters" not in template_columns
     finally:

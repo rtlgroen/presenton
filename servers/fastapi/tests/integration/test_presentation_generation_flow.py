@@ -159,7 +159,7 @@ def test_generate_presentation_handler_full_flow_uses_mocked_dependencies(fake_a
 
 
 def test_generate_presentation_handler_uses_template_v2_layout():
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     presentation_id = uuid.uuid4()
     template = TemplateV2(
         id=template_id,
@@ -264,7 +264,7 @@ def test_create_presentation_requires_and_stores_version(fake_async_session):
 
 
 def test_check_api_request_accepts_custom_prefixed_template_v2_id():
-    template_id = uuid.uuid4()
+    template_id = "general-template"
     template = TemplateV2(
         id=template_id,
         name="Custom V2",
@@ -457,7 +457,7 @@ def test_check_api_request_rejects_too_many_slides_markdown(fake_async_session):
 
 def test_prepare_presentation_accepts_template_v2_layout_id():
     presentation_id = uuid.uuid4()
-    template_id = uuid.uuid4()
+    template_id = "strategy-template"
     presentation = PresentationModel(
         id=presentation_id,
         version=PresentationVersion.V2_STANDARD,
@@ -577,7 +577,7 @@ def test_get_presentation_preserves_template_v2_detail_payload():
         updated_at=now,
     )
     template = TemplateV2(
-        id=uuid.uuid4(),
+        id=str(uuid.uuid4()),
         name="presentation",
         layouts=template_layouts,
         assets={
@@ -825,7 +825,7 @@ async def _fake_export_presentation(presentation_id, *_args, **_kwargs):
 
 def test_edit_presentation_hydrates_template_v2_slide_ui():
     presentation_id = uuid.uuid4()
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     layout_payload = _template_v2_layout_payload()
     presentation = PresentationModel(
         id=presentation_id,
@@ -880,7 +880,7 @@ def test_edit_presentation_hydrates_template_v2_slide_ui():
 
 def test_derive_presentation_hydrates_template_v2_slide_ui():
     presentation_id = uuid.uuid4()
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     layout_payload = _template_v2_layout_payload()
     presentation = PresentationModel(
         id=presentation_id,

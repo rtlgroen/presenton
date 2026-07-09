@@ -126,7 +126,7 @@ class _ListSession:
         return _RowsResult(
             [
                 (
-                    uuid.UUID("00000000-0000-0000-0000-000000000001"),
+                    "00000000-0000-0000-0000-000000000001",
                     "Quarterly Review",
                     "Board deck template",
                     TEMPLATE_LAYOUTS,
@@ -136,6 +136,7 @@ class _ListSession:
                             "/app_data/images/slide-2.png",
                         ]
                     },
+                    False,
                     now,
                     now,
                 )
@@ -306,6 +307,18 @@ def test_create_template_v2_requires_slide_images(fake_async_session):
     assert exc.value.detail == "At least one slide image is required"
 
 
+def test_template_v2_request_ids_accept_non_uuid_strings():
+    layouts_request = CreateTemplateV2LayoutsRequest.model_validate(
+        {"id": "general-template", "indices": [0]}
+    )
+    blocks_request = GenerateTemplateV2BlocksRequest.model_validate(
+        {"template_id": "sales-template"}
+    )
+
+    assert layouts_request.template_id == "general-template"
+    assert blocks_request.template_id == "sales-template"
+
+
 def test_init_template_v2_persists_assets_without_layouts(tmp_path, fake_async_session):
     pptx_path = tmp_path / "quarterly-review.pptx"
     pptx_path.write_bytes(b"pptx")
@@ -329,7 +342,7 @@ def test_init_template_v2_persists_assets_without_layouts(tmp_path, fake_async_s
             )
         )
 
-    assert isinstance(template_id, uuid.UUID)
+    assert isinstance(template_id, str)
     convert_mock.assert_awaited_once_with(str(pptx_path))
     template = fake_async_session.added[0]
     assert template.name == "Quarterly Review"
@@ -354,17 +367,18 @@ def test_list_templates_v2_returns_paginated_summary():
     assert response.total == 1
     assert response.page == 1
     assert response.page_size == 20
-    assert response.items[0].id == uuid.UUID("00000000-0000-0000-0000-000000000001")
+    assert response.items[0].id == "00000000-0000-0000-0000-000000000001"
     assert response.items[0].name == "Quarterly Review"
     assert response.items[0].description == "Board deck template"
     assert response.items[0].layout_count == 1
     assert response.items[0].thumbnail == "/app_data/images/slide-1.png"
+    assert response.items[0].is_default is False
 
 
 def test_create_template_v2_slide_layouts_returns_generated_layout(
     fake_async_session,
 ):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(
         name="Custom",
         raw_layouts=RAW_LAYOUTS,
@@ -412,7 +426,7 @@ def test_create_template_v2_slide_layouts_returns_generated_layout(
 def test_create_template_v2_slide_layouts_rejects_invalid_index(
     fake_async_session,
 ):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
         raw_layouts=RAW_LAYOUTS,
@@ -438,7 +452,7 @@ def test_create_template_v2_slide_layouts_rejects_invalid_index(
 def test_create_template_v2_slide_layouts_requires_slide_image(
     fake_async_session,
 ):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
         raw_layouts=RAW_LAYOUTS,
@@ -466,7 +480,7 @@ def test_create_template_v2_slide_layouts_requires_slide_image(
 def test_create_template_v2_slide_layouts_preserves_image_url_indexes(
     fake_async_session,
 ):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     raw_layouts = {
         "layouts": [
             RAW_LAYOUTS["layouts"][0],
@@ -511,7 +525,7 @@ def test_create_template_v2_slide_layouts_returns_404_for_missing_template(
         asyncio.run(
             create_template_v2_slide_layouts(
                 CreateTemplateV2LayoutsRequest(
-                    template_id=uuid.uuid4(),
+                    template_id=str(uuid.uuid4()),
                     indices=[0],
                 ),
                 sql_session=fake_async_session,
@@ -523,7 +537,7 @@ def test_create_template_v2_slide_layouts_returns_404_for_missing_template(
 
 
 def test_generate_template_v2_blocks_clusters_and_persists(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(
         name="Custom",
         layouts=TEMPLATE_LAYOUTS,
@@ -555,7 +569,7 @@ def test_generate_template_v2_blocks_clusters_and_persists(fake_async_session):
 
 
 def test_generate_template_v2_blocks_requires_layouts(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
         layouts=None,
@@ -576,7 +590,7 @@ def test_generate_template_v2_blocks_requires_layouts(fake_async_session):
 
 
 def test_patch_template_v2_slide_layout_updates_stored_layouts(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(
         name="Custom",
         layouts=_two_template_layouts(),
@@ -610,7 +624,7 @@ def test_patch_template_v2_slide_layout_updates_stored_layouts(fake_async_sessio
 def test_patch_template_v2_slide_layout_merges_out_of_order_init_saves(
     fake_async_session,
 ):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     raw_layouts = {
         "layouts": [
             RAW_LAYOUTS["layouts"][0],
@@ -660,7 +674,7 @@ def test_patch_template_v2_slide_layout_merges_out_of_order_init_saves(
 
 
 def test_patch_template_v2_slide_layout_rejects_invalid_index(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
         layouts=TEMPLATE_LAYOUTS,
@@ -687,7 +701,7 @@ def test_patch_template_v2_slide_layout_rejects_invalid_index(fake_async_session
 def test_patch_template_v2_slide_layout_rejects_duplicate_layout_ids(
     fake_async_session,
 ):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
         layouts=_two_template_layouts(),
@@ -717,7 +731,7 @@ def test_patch_template_v2_slide_layout_rejects_duplicate_layout_ids(
 
 
 def test_get_template_v2_returns_template(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
@@ -729,7 +743,7 @@ def test_get_template_v2_returns_template(fake_async_session):
 
 
 def test_update_template_v2_metadata_updates_name_and_description(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", description=None, layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
@@ -752,7 +766,7 @@ def test_update_template_v2_metadata_updates_name_and_description(fake_async_ses
 
 
 def test_update_template_v2_metadata_rejects_blank_name(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
@@ -772,7 +786,7 @@ def test_update_template_v2_metadata_rejects_blank_name(fake_async_session):
 
 
 def test_delete_template_v2_deletes_template(fake_async_session):
-    template_id = uuid.uuid4()
+    template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
@@ -787,7 +801,7 @@ def test_delete_template_v2_deletes_template(fake_async_session):
 
 def test_get_template_v2_returns_404_for_missing_template(fake_async_session):
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(get_template_v2(uuid.uuid4(), sql_session=fake_async_session))
+        asyncio.run(get_template_v2("missing-template", sql_session=fake_async_session))
 
     assert exc.value.status_code == 404
     assert exc.value.detail == "Template not found"
