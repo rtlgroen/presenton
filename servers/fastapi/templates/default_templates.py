@@ -36,17 +36,16 @@ async def import_default_templates_on_startup(
         for template_dir in template_dirs:
             template = _load_default_template(template_dir)
             existing = await session.get(TemplateV2, template.id)
-            if existing:
-                LOGGER.info(
-                    "Default template already exists; skipping import: %s",
-                    template.id,
-                )
-                continue
 
             _copy_default_template_static_assets(template_dir, template.id)
-            session.add(template)
+            if existing:
+                _update_template_from_default(existing, template)
+                session.add(existing)
+                LOGGER.info("Updated default template: %s", template.id)
+            else:
+                session.add(template)
+                LOGGER.info("Imported default template: %s", template.id)
             await session.commit()
-            LOGGER.info("Imported default template: %s", template.id)
 
 
 def _default_templates_root() -> Path:
@@ -79,6 +78,17 @@ def _load_default_template(template_dir: Path) -> TemplateV2:
         assets=assets,
         is_default=True,
     )
+
+
+def _update_template_from_default(existing: TemplateV2, template: TemplateV2) -> None:
+    existing.name = template.name
+    existing.description = template.description
+    existing.raw_layouts = template.raw_layouts
+    existing.components = template.components
+    existing.merged_components = template.merged_components
+    existing.layouts = template.layouts
+    existing.assets = template.assets
+    existing.is_default = True
 
 
 def _read_template_id(raw: dict[str, Any], template_dir: Path) -> str:
