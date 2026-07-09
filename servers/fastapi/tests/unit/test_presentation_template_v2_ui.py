@@ -186,6 +186,89 @@ def test_apply_template_v2_content_to_ui_uses_schema_content_keys():
     assert ui["components"][0]["elements"][0]["runs"][0]["text"] == "Old headline"
 
 
+def test_chat_template_v2_content_hydration_updates_nested_blocks_and_tables():
+    ui = {
+        "id": "layout-1",
+        "components": [
+            {
+                "id": "hero",
+                "elements": [
+                    {
+                        "type": "text",
+                        "decorative": False,
+                        "name": "headline",
+                        "runs": [{"text": "Old headline"}],
+                    },
+                    {
+                        "type": "grid",
+                        "name": "cards",
+                        "children": [
+                            {
+                                "type": "group",
+                                "name": "card_1",
+                                "children": [
+                                    {
+                                        "type": "text",
+                                        "decorative": False,
+                                        "name": "title_1",
+                                        "runs": [{"text": "Old card"}],
+                                    },
+                                    {
+                                        "type": "image",
+                                        "decorative": False,
+                                        "name": "icon_1",
+                                        "data": "/old.svg",
+                                        "is_icon": True,
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "table",
+                        "decorative": False,
+                        "name": "metrics",
+                        "columns": [{"runs": [{"text": "Old column"}]}],
+                        "rows": [[{"runs": [{"text": "Old value"}]}]],
+                    },
+                ],
+            }
+        ],
+    }
+
+    PresentationChatMemoryLayer._apply_template_v2_content_to_ui(
+        ui,
+        {
+            "hero": {
+                "headline": "Generated headline",
+                "cards": [
+                    {
+                        "title": "Revenue up",
+                        "icon": {
+                            "icon_query": "growth",
+                            "icon_url": "/app_data/icons/growth.svg",
+                        },
+                    }
+                ],
+                "metrics": {
+                    "columns": ["Metric", "Value"],
+                    "rows": [["Revenue", 42]],
+                },
+            }
+        },
+    )
+
+    elements = ui["components"][0]["elements"]
+    assert elements[0]["runs"][0]["text"] == "Generated headline"
+    assert elements[1]["children"][0]["children"][0]["runs"][0]["text"] == "Revenue up"
+    assert elements[1]["children"][0]["children"][1]["data"] == "/app_data/icons/growth.svg"
+    assert elements[1]["children"][0]["children"][1]["prompt"] == "growth"
+    assert elements[2]["columns"][0]["runs"][0]["text"] == "Metric"
+    assert elements[2]["columns"][1]["runs"][0]["text"] == "Value"
+    assert elements[2]["rows"][0][0]["runs"][0]["text"] == "Revenue"
+    assert elements[2]["rows"][0][1]["runs"][0]["text"] == "42"
+
+
 def test_apply_template_v2_content_to_ui_parses_markdown_text_to_runs():
     ui = {
         "id": "layout-1",
