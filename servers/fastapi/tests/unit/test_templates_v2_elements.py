@@ -124,8 +124,21 @@ def test_element_models_match_export_schema_changes():
         "show_values",
     }.intersection(Chart.model_fields)
     assert "axis_color" in Chart.model_fields
+    assert "title_color" in Chart.model_fields
     assert "legend" in Chart.model_fields
     assert {"base_color", "highlight_color"}.issubset(Infographic.model_fields)
+
+    chart = Chart.model_validate(
+        {
+            "type": "chart",
+            "decorative": False,
+            "name": "model_chart",
+            "chart_type": "bar",
+            "title": "Revenue",
+            "title_color": "#102030",
+        }
+    )
+    assert chart.title_color == "#102030"
 
     with pytest.raises(ValidationError, match="runs"):
         Text.model_validate(

@@ -107,6 +107,7 @@ def test_extract_slide_schema_from_layout_extracts_editable_content():
                         "additionalProperties": False,
                         "properties": {
                             "title": {"type": ["string", "null"]},
+                            "title_color": {"type": ["string", "null"]},
                             "categories": {
                                 "type": "array",
                                 "items": {"type": "string"},

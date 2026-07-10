@@ -273,6 +273,7 @@ export type ChartElement = ElementBase & {
   chart_type: ChartType;
   data: ChartDatum[];
   title?: string | null;
+  title_color?: string | null;
   color?: string | null;
   axis_color?: string | null;
   grid_color?: string | null;

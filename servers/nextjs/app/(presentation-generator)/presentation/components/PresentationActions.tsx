@@ -667,7 +667,7 @@ function BlockThumbnail({ block }: { block: TemplateBlock }) {
   return (
     <div
       ref={previewRef}
-      className="relative aspect-video w-full overflow-hidden rounded-[6px] bg-white"
+      className="template-block-preview relative aspect-video w-full overflow-hidden rounded-[6px] bg-white transition-colors"
     >
       <div
         className={cn(
@@ -691,7 +691,8 @@ function BlockThumbnail({ block }: { block: TemplateBlock }) {
             ui: layout,
           }}
           fonts={null}
-          className="pointer-events-none rounded-[10px]"
+          className="template-block-preview-surface pointer-events-none rounded-[10px]"
+          contentClassName="template-block-preview-content"
         />
 
       </div>
@@ -710,7 +711,7 @@ function BlockVariantButton({
     <button
       type="button"
       data-block-variant
-      className="group relative w-full overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F9FAFB] p-2 text-left transition hover:border-[#D6BBFB] hover:bg-[#FAF9FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/40"
+      className="template-block-variant group relative w-full overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-[#F9FAFB] p-2 text-left transition hover:border-[#D6BBFB] hover:bg-[#FAF9FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]/40"
       onClick={() => onInsertBlock(block)}
       aria-label={`Insert ${block.title}`}
     >
@@ -881,6 +882,14 @@ const BlocksPanel = ({
 
   return (
     <div className="h-full overflow-y-auto px-5 pb-8 pt-8 hide-scrollbar">
+      <style jsx global>{`
+        .template-block-variant:hover .template-block-preview,
+        .template-block-variant:hover .template-block-preview-surface,
+        .template-block-variant:hover .template-block-preview-content,
+        .template-block-variant:hover .template-block-preview-content > div {
+          background: #000 !important;
+        }
+      `}</style>
       <h3 className="mb-3 text-[15px] font-semibold leading-5 text-[#101323]">
         Blocks
       </h3>

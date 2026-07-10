@@ -14,23 +14,35 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  LayoutPanelTop,
   Loader2,
-  Search,
   Sparkles,
   Trash2,
-  Type,
   Upload,
   X,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { notify } from "@/components/ui/sonner";
 import {
   EDITOR_STAGE_HEIGHT,
   EDITOR_STAGE_WIDTH,
 } from "@/components/slide-editor/types";
 import {
+  GOOGLE_FONT_OPTIONS,
   loadGoogleFontOptions,
   type GoogleFontOption,
 } from "@/components/slide-editor/text/google-fonts";
@@ -290,9 +302,15 @@ function UploadPanel({
                         {selectedFile.name}
                       </p>
                       <p className="mt-2 2xl:mt-2.5 text-sm 2xl:text-base text-[#777985]">
-                        {isProcessing ? "62%" : formatFileSize(selectedFile.size)}
-                        <span className="px-2">•</span>
-                        {isProcessing ? "Process" : "Ready"}
+                        {isProcessing ? (
+                          "Processing..."
+                        ) : (
+                          <>
+                            {formatFileSize(selectedFile.size)}
+                            <span className="px-2">•</span>
+                            Ready
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -419,35 +437,20 @@ function FontFallbackPicker({
   options,
   selectedOption,
   disabled,
+  onLoadOptions,
   onChange,
 }: {
   fontName: string;
   options: GoogleFontOption[];
   selectedOption?: GoogleFontOption;
   disabled?: boolean;
+  onLoadOptions: () => void;
   onChange: (option: GoogleFontOption) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [scrollTop, setScrollTop] = useState(0);
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!open || typeof document === "undefined") return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && rootRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-    };
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -456,16 +459,19 @@ function FontFallbackPicker({
     if (listRef.current) {
       listRef.current.scrollTop = 0;
     }
-    window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
 
+  const handleSelect = (option: GoogleFontOption) => {
+    onChange(option);
+    setOpen(false);
+  };
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = useMemo(
     () =>
       normalizedQuery
         ? options.filter((option) =>
-            option.family.toLowerCase().includes(normalizedQuery),
-          )
+          option.family.toLowerCase().includes(normalizedQuery),
+        )
         : options,
     [normalizedQuery, options],
   );
@@ -478,7 +484,7 @@ function FontFallbackPicker({
   const firstVisibleIndex = Math.max(
     0,
     Math.floor(scrollTop / FONT_FALLBACK_OPTION_HEIGHT) -
-      FONT_FALLBACK_OVERSCAN_ROWS,
+    FONT_FALLBACK_OVERSCAN_ROWS,
   );
   const visibleOptionCount =
     viewportRows + FONT_FALLBACK_OVERSCAN_ROWS * 2 + 1;
@@ -487,81 +493,71 @@ function FontFallbackPicker({
     firstVisibleIndex + visibleOptionCount,
   );
 
-  const handleSelect = (option: GoogleFontOption) => {
-    onChange(option);
-    setOpen(false);
+  useEffect(() => {
+    setScrollTop(0);
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [normalizedQuery]);
+
+  useEffect(() => {
+    if (!open || normalizedQuery.length === 0) return;
+    onLoadOptions();
+  }, [normalizedQuery, onLoadOptions, open]);
+
+  const handleListScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    setScrollTop(target.scrollTop);
+
+    const distanceToBottom =
+      target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (distanceToBottom < FONT_FALLBACK_OPTION_HEIGHT * 2) {
+      onLoadOptions();
+    }
   };
 
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-        className="flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-[#DADDE6] bg-[#FAFBFC] px-3 text-left text-sm font-medium text-[#282A32] outline-none transition hover:border-[#8D7DFF] disabled:cursor-not-allowed disabled:opacity-60"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-label={`Fallback font for ${fontName}`}
+          disabled={disabled}
+          className="h-11 w-full justify-between rounded-lg border-[#DADDE6] bg-white px-3 font-syne text-sm font-medium text-[#282A32] shadow-none hover:border-[#B8BCC8] hover:bg-white"
+        >
+          <span className="min-w-0 truncate">
+            {selectedOption?.family ?? "Choose fallback"}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-[#61646F]" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="z-[100] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-xl border-[#E4E6EE] bg-white p-0 shadow-[0_18px_45px_rgba(16,24,40,0.14)]"
       >
-        <span className="min-w-0 truncate">
-          {selectedOption?.family ?? "Choose fallback"}
-        </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-[#61646F]" />
-      </button>
-
-      {open ? (
-        <div className="absolute left-0 right-0 top-[44px] z-[80] overflow-hidden rounded-xl border border-[#E4E6EE] bg-white shadow-[0_18px_45px_rgba(16,24,40,0.14)]">
-          <div className="grid h-10 grid-cols-[16px_minmax(0,1fr)_20px] items-center gap-2 border-b border-[#EEF0F5] px-3">
-            <Search className="h-4 w-4 text-[#737784]" />
-            <input
-              ref={inputRef}
-              aria-label={`Search fallback fonts for ${fontName}`}
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setScrollTop(0);
-                if (listRef.current) {
-                  listRef.current.scrollTop = 0;
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setOpen(false);
-                }
-              }}
-              placeholder="Search fonts"
-              className="h-8 min-w-0 border-0 bg-transparent p-0 text-sm font-medium text-[#20222B] outline-none placeholder:text-[#9A9EA9]"
-            />
-            {query ? (
-              <button
-                type="button"
-                aria-label="Clear font search"
-                onClick={() => {
-                  setQuery("");
-                  inputRef.current?.focus();
-                }}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-[#737784] hover:bg-[#F3F4F7] hover:text-[#20222B]"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
-          </div>
-
-          <div
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search fonts"
+            className="font-syne text-sm"
+          />
+          <CommandList
             ref={listRef}
-            role="listbox"
-            aria-label={`Fallback font for ${fontName}`}
-            className="overflow-y-auto [scrollbar-color:#CBD0DC_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#CBD0DC] [&::-webkit-scrollbar-track]:bg-transparent"
+            className="overflow-y-auto overflow-x-hidden"
             style={{ height: viewportHeight }}
-            onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+            onScroll={handleListScroll}
           >
             {filteredOptions.length === 0 ? (
-              <div className="flex h-20 items-center justify-center text-sm font-medium text-[#777B86]">
+              <CommandEmpty>
                 {options.length === 0 ? "Loading fonts..." : "No fonts found"}
-              </div>
+              </CommandEmpty>
             ) : (
-              <div
-                className="relative"
+              <CommandGroup
+                className="relative p-1"
                 style={{
                   height: filteredOptions.length * FONT_FALLBACK_OPTION_HEIGHT,
                 }}
@@ -570,34 +566,32 @@ function FontFallbackPicker({
                   const optionIndex = firstVisibleIndex + offset;
                   const isSelected = option.family === selectedOption?.family;
                   return (
-                    <button
+                    <CommandItem
                       key={option.family}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      title={option.family}
-                      onClick={() => handleSelect(option)}
-                      className={`absolute left-0 right-0 flex h-10 items-center justify-between gap-3 px-3 text-left text-sm transition ${isSelected
-                        ? "bg-[#F4F3FF] font-semibold text-[#5146E5]"
-                        : "bg-white font-medium text-[#242630] hover:bg-[#FAFAFF]"
-                        }`}
+                      value={option.family}
+                      onSelect={() => handleSelect(option)}
+                      className="absolute left-1 right-1 h-10 cursor-pointer justify-between rounded-lg px-3 font-syne text-sm font-medium text-[#242630] data-[selected=true]:bg-[#F6F5FF]"
                       style={{
-                        top: optionIndex * FONT_FALLBACK_OPTION_HEIGHT,
+                        top: optionIndex * FONT_FALLBACK_OPTION_HEIGHT + 4,
                       }}
                     >
                       <span className="min-w-0 truncate">{option.family}</span>
-                      <span className="shrink-0 text-xs font-semibold text-[#8B8E99]">
-                        Aa
-                      </span>
-                    </button>
+                      {isSelected ? (
+                        <Check className="h-4 w-4 shrink-0 text-[#5146E5]" />
+                      ) : (
+                        <span className="shrink-0 text-xs font-semibold text-[#8B8E99]">
+                          Aa
+                        </span>
+                      )}
+                    </CommandItem>
                   );
                 })}
-              </div>
+              </CommandGroup>
             )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -606,48 +600,31 @@ function AnalyzePanel({
   uploadedFonts,
   isUploading,
   uploadFont,
-  hasPendingMissingFonts,
   googleFontOptions,
   selectedFallbackFonts,
   onFallbackFontChange,
+  onLoadGoogleFontOptions,
+  onContinue,
 }: {
   fontsData: FontData | null;
   uploadedFonts: UploadedFont[];
   isUploading: boolean;
   uploadFont: (fontName: string, file: File) => string | null;
-  hasPendingMissingFonts: boolean;
   googleFontOptions: GoogleFontOption[];
   selectedFallbackFonts: Record<string, GoogleFontOption>;
   onFallbackFontChange: (fontName: string, option: GoogleFontOption) => void;
+  onLoadGoogleFontOptions: () => void;
+  onContinue: () => void;
 }) {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [resolvingFont, setResolvingFont] = useState<FontItem | null>(null);
   const missingFonts = fontsData?.unavailable_fonts ?? [];
   const fontChips = fontsData ? uniqueFontChips(fontsData) : [];
-  const missingFontKeys = new Set(missingFonts.map((font) => chipLabel(font).toLowerCase()));
+  const missingFontsByKey = new Map(
+    missingFonts.map((font) => [chipLabel(font).toLowerCase(), font]),
+  );
 
   const uploadedFontNames = new Set(uploadedFonts.map((font) => font.fontName));
-  const pendingMissingFonts = missingFonts.filter(
-    (font) => !uploadedFontNames.has(font.name),
-  );
-  const fontsStepComplete =
-    missingFonts.length === 0 || pendingMissingFonts.length === 0 || isUploading;
-  const availableFontCount = fontsData?.available_fonts.length ?? 0;
-  const missingFontCount = missingFonts.length;
-  const uploadedMissingCount = missingFonts.filter((font) =>
-    uploadedFontNames.has(font.name),
-  ).length;
-  const totalDetectedFonts = availableFontCount + missingFontCount;
-  const resolvedFontCount = availableFontCount + uploadedMissingCount;
-  const fontStatusLabel = isUploading
-    ? "Preparing Preview"
-    : fontsStepComplete
-      ? "Ready"
-      : "Needs Fonts";
-  const fontStatusClass = isUploading
-    ? "border-[#E7D8FF] bg-[#F6F1FF] text-[#6941C6]"
-    : fontsStepComplete
-      ? "border-[#CFEBDD] bg-[#F0FBF5] text-[#227A50]"
-      : "border-[#DADDE6] bg-white text-[#343741]";
 
   const handleFontFile = (fontName: string, event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -655,236 +632,205 @@ function AnalyzePanel({
     uploadFont(fontName, file);
     event.target.value = "";
   };
+  const resolvingFontName = resolvingFont?.name ?? "";
+  const resolvingFontUploaded = resolvingFontName
+    ? uploadedFontNames.has(resolvingFontName)
+    : false;
+  const resolvingFallback = resolvingFontName
+    ? selectedFallbackFonts[resolvingFontName]
+    : undefined;
 
   return (
     <main className="flex min-h-screen flex-col bg-white px-4 pb-28 font-syne sm:px-6 sm:pb-32 2xl:px-10 2xl:pb-36">
       <TemplateStudioTitle compact />
-      <section className="mx-auto mt-8 w-full max-w-[1040px] sm:mt-10 2xl:mt-12 2xl:max-w-[1180px]">
-        <div className="rounded-[28px] border border-[#E8EAF0] bg-[#FAFAFC] p-4 sm:p-5 2xl:p-6">
-          <div className="px-1 py-1">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex min-w-0 items-start gap-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#5146E5] ring-1 ring-[#E8EAF0]">
-                  <Type className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-xl font-semibold leading-tight text-[#171821] 2xl:text-2xl">
-                    Review Fonts
-                  </h2>
-                  <p className="mt-1 max-w-[620px] text-sm leading-relaxed text-[#686C78] 2xl:text-[15px]">
-                    Resolve missing fonts with exact uploads or keep the selected fallbacks.
-                  </p>
-                  <p className="mt-3 text-xs font-medium text-[#777B86]">
-                    {totalDetectedFonts} detected / {resolvedFontCount} resolved / {pendingMissingFonts.length} need action
-                  </p>
-                </div>
-              </div>
+      <section className="mx-auto mt-8 w-full max-w-[600px] sm:mt-10 2xl:mt-12 2xl:max-w-[900px]">
 
-              <span
-                className={`inline-flex w-fit shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${fontStatusClass}`}
-              >
-                {isUploading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : fontsStepComplete ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : null}
-                {fontStatusLabel}
-              </span>
-            </div>
+
+
+
+        <div className="relative z-10 ml-8 2xl:ml-10 w-max rounded-t-[28px] 2xl:rounded-t-[32px] border border-b-0 border-[#EDEEF4] bg-white px-3 2xl:px-4 pb-2.5 2xl:pb-3 pt-2 2xl:pt-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              const firstMissing = missingFonts[0];
+              if (firstMissing) setResolvingFont(firstMissing);
+            }}
+            className="flex h-[34px] 2xl:h-[42px] items-center gap-1.5 2xl:gap-2 rounded-[80px] bg-white px-3.5 2xl:px-4 text-[12px] 2xl:text-sm font-semibold text-black shadow-[0_0_4px_rgba(0,0,0,0.06)]"
+          >
+            <Upload className="h-3.5 w-3.5 2xl:h-4 2xl:w-4 text-[#7A5AF8]" />
+            Fonts Upload
+          </button>
+        </div>
+
+        <div className="relative -mt-px rounded-[28px] w-full  2xl:rounded-[32px] border border-[#EDEEF4] bg-white p-5 2xl:p-3 shadow-[0_0_16px_rgba(80,71,230,0.08)] transition-shadow duration-200 ">
+          <div className="flex flex-wrap gap-3 pt-2 min-h-[140px] ">
+            {fontChips.length > 0 ? (
+              fontChips.map((font, index) => {
+                const label = chipLabel(font);
+                const missingFont = missingFontsByKey.get(label.toLowerCase());
+                const isMissing = Boolean(missingFont);
+                const isUploaded = missingFont
+                  ? uploadedFontNames.has(missingFont.name)
+                  : false;
+                return (
+                  <button
+                    key={`${font.name}-${index}`}
+                    type="button"
+                    disabled={!missingFont || isUploading}
+                    onClick={() => {
+                      if (missingFont) setResolvingFont(missingFont);
+                    }}
+                    className={`relative flex   h-[59px] items-center justify-center rounded-xl border px-4 text-center text-sm font-semibold transition ${isMissing
+                      ? isUploaded
+                        ? "border-[#CFEBDD] bg-[#F4FBF7] text-[#236C4A] hover:border-[#9FD7BA]"
+                        : "border-[#F3C78F] bg-[#FFF8F1] text-[#D12B1F] hover:border-[#E8AA5D]"
+                      : "border-[#E8EAF0] bg-white text-[#171821]"
+                      } disabled:cursor-default`}
+                    title={label}
+                  >
+                    <span className="line-clamp-2 text-xs">{label}</span>
+                    {isMissing ? (
+                      <span className="absolute -right-2 -top-2 flex h-[26px] w-[46px] items-center justify-center rounded-full border border-[#EDEEEF] bg-white text-[#171821] shadow-sm">
+                        {isUploaded ? (
+                          <Check className="h-3.5 w-3.5 text-[#237A50]" />
+                        ) : (
+                          <Upload className="h-3.5 w-3.5" />
+                        )}
+                      </span>
+                    ) : null}
+
+                  </button>
+                );
+              })
+            ) : (
+              <div className="col-span-full flex min-h-[140px] items-center justify-center rounded-xl border border-[#E8EAF0] bg-white text-sm font-medium text-[#686C78]">
+                No fonts detected
+              </div>
+            )}
           </div>
 
-          <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
-            <aside className="order-2 rounded-2xl bg-white p-4 ring-1 ring-[#ECEEF4] sm:p-5 2xl:p-6">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[#22242D]">
-                  Detected in this deck
-                </h3>
-                <span className="text-xs font-medium text-[#7B7F8C]">
-                  {missingFontCount} missing
-                </span>
-              </div>
-
-              <div className="flex max-h-[340px] flex-wrap gap-2 overflow-y-auto pr-1 [scrollbar-color:#CBD0DC_transparent] [scrollbar-width:thin] 2xl:max-h-[420px] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#CBD0DC] [&::-webkit-scrollbar-track]:bg-transparent">
-                {fontChips.length > 0 ? (
-                  fontChips.map((font, index) => {
-                    const label = chipLabel(font);
-                    const isMissing = missingFontKeys.has(label.toLowerCase());
-                    return (
-                      <span
-                        key={`${font.name}-${index}`}
-                        className={`max-w-full truncate rounded-full border px-3 py-1.5 text-xs font-medium ${isMissing
-                          ? "border-[#DADDE6] bg-white text-[#4A4D57]"
-                          : "border-[#CFEBDD] bg-[#F4FBF7] text-[#236C4A]"
-                          }`}
-                        title={label}
-                      >
-                        {label}
-                      </span>
-                    );
-                  })
-                ) : (
-                  <span className="rounded-full border border-[#E1E2E8] bg-[#F3F4F7] px-3 py-1.5 text-xs font-medium text-[#555862]">
-                    No fonts detected
-                  </span>
-                )}
-              </div>
-
-              {uploadedMissingCount > 0 ? (
-                <div className="mt-5 flex items-center gap-2 rounded-xl border border-[#CFEBDD] bg-[#F3FBF6] px-4 py-3 text-sm font-medium text-[#236C4A]">
-                  <Check className="h-4 w-4" />
-                  {uploadedMissingCount} missing font{uploadedMissingCount === 1 ? "" : "s"} uploaded.
-                </div>
-              ) : null}
-            </aside>
-
-            <div className="order-1 rounded-2xl bg-white p-4 ring-1 ring-[#ECEEF4] sm:p-5 2xl:p-6">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-[#22242D]">
-                    Missing fonts
-                  </h3>
-                  <p className="mt-1 text-xs leading-relaxed text-[#737784]">
-                    Upload a matching file, or choose a fallback.
-                  </p>
-                </div>
-                <span className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[#E4E6EE] px-3 text-xs font-semibold text-[#555862]">
-                  {pendingMissingFonts.length} left
-                </span>
-              </div>
-
-              {hasPendingMissingFonts && !isUploading ? (
-                <p className="mb-4 text-xs leading-relaxed text-[#686C78]">
-                  Exact font files preserve typography. Fallbacks are used when a file is not uploaded.
-                </p>
-              ) : null}
-
-              {missingFonts.length > 0 ? (
-                <div>
-                  {missingFonts.map((font, index) => {
-                    const fontName = font.name;
-                    const isUploaded = uploadedFontNames.has(fontName);
-                    const selectedFallback = selectedFallbackFonts[fontName];
-                    return (
-                      <div
-                        key={`${fontName}-${index}`}
-                        className="border-t border-[#EEF0F5] py-4 first:border-t-0 first:pt-0 last:pb-0"
-                      >
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="min-w-0 truncate text-sm font-semibold text-[#242630]" title={fontName}>
-                            {fontName}
-                          </p>
-                          {isUploaded ? (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#ECFDF3] px-2 py-1 text-[10px] font-semibold text-[#237A50]">
-                              <Check className="h-3 w-3" />
-                              Uploaded
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <input
-                          ref={(node) => {
-                            fileInputRefs.current[fontName] = node;
-                          }}
-                          type="file"
-                          accept=".ttf,.otf,.woff,.woff2,.eot"
-                          className="hidden"
-                          onChange={(event) => handleFontFile(fontName, event)}
-                        />
-
-                        <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)]">
-                          <button
-                            type="button"
-                            onClick={() => fileInputRefs.current[fontName]?.click()}
-                            disabled={isUploading}
-                            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#DADDE6] bg-white px-3 text-sm font-semibold text-[#25272F] transition hover:border-[#A8ADBA] hover:bg-[#F8F9FB] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <Upload className="h-4 w-4" />
-                            {isUploaded ? "Replace file" : "Upload font"}
-                          </button>
-
-                          <FontFallbackPicker
-                            fontName={fontName}
-                            options={googleFontOptions}
-                            selectedOption={selectedFallback}
-                            disabled={isUploading}
-                            onChange={(option) =>
-                              onFallbackFontChange(fontName, option)
-                            }
-                          />
-                        </div>
-
-                        {selectedFallback ? (
-                          <p
-                            className="mt-2 truncate text-xs font-medium text-[#80838F]"
-                            title={`${fontName} -> ${selectedFallback.family} (${selectedFallback.cssUrl})`}
-                          >
-                            Fallback: {selectedFallback.family}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
+          <div className="mt-6 flex justify-end px-1 pb-1">
+            <GradientPillButton
+              onClick={onContinue}
+              disabled={isUploading}
+              className="h-9 min-w-[120px] px-6 text-sm font-semibold"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating...
+                </>
               ) : (
-                <div className="flex min-h-[260px] flex-col items-center justify-center rounded-xl bg-[#F6FBF8] px-6 text-center">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#2CA36B] text-white">
-                    <Check className="h-5 w-5" />
-                  </span>
-                  <p className="mt-3 text-sm font-semibold text-[#236C4A]">
-                    All fonts resolved
-                  </p>
-                  <p className="mt-1 text-xs text-[#70737D]">
-                    Continue to create the preview.
-                  </p>
-                </div>
+                <>
+                  Continue
+                  <ChevronRight className="h-4 w-4" />
+                </>
               )}
-            </div>
+            </GradientPillButton>
           </div>
         </div>
 
-        {isUploading ? (
-          <div className="mt-5 rounded-2xl border border-[#E6E7EC] bg-white p-5 2xl:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-black text-white">
-                <LayoutPanelTop className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-semibold text-[#171821]">
-                      Creating Preview
-                    </h2>
-                    <p className="mt-1 text-sm text-[#70737D]">
-                      Extracting slides, applying fonts, and rendering previews.
-                    </p>
-                  </div>
-                  <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[#7A5AF8]" />
+        {resolvingFont ? (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 px-4 font-syne">
+            <div className="relative w-full max-w-[550px] rounded-2xl bg-white shadow-[0_22px_70px_rgba(16,24,40,0.22)]">
+              <button
+                type="button"
+                onClick={() => setResolvingFont(null)}
+                aria-label="Close"
+                className="absolute -right-14 top-0 flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#20222B] shadow-sm"
+              >
+                <X className="h-6 w-6" />
+              </button>
+
+              <div className="flex items-center justify-between gap-4 border-b border-[#EEF0F5] px-5 py-4">
+                <div className="min-w-0">
+                  <h3 className=" text-lg font-semibold text-[#191919]">
+                    Resolve Missing Font
+                  </h3>
+                  <p className="mt-1 text-xs text-[#808080]">
+                    {resolvingFontName} is missing.
+                  </p>
                 </div>
-                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                  {["Extracting slides", "Preparing fonts", "Rendering preview"].map(
-                    (label, index) => (
-                      <div
-                        key={label}
-                        className={`flex items-center gap-2 rounded-xl px-3 py-2 ${index === 2
-                          ? "bg-[#F8F3FF] text-[#6941C6]"
-                          : "bg-[#FAFBFC] text-[#30323A]"
-                          }`}
-                      >
-                        {index === 2 ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5 text-[#2CA36B]" />
-                        )}
-                        <span className="font-semibold">{label}</span>
-                      </div>
-                    ),
-                  )}
+                <button
+                  type="button"
+                  onClick={() => setResolvingFont(null)}
+                  className="h-9 rounded-full px-5 text-sm font-medium text-black"
+                  style={{ background: pillGradient }}
+                >
+                  Save
+                </button>
+              </div>
+
+              <div className="space-y-4 px-5 py-4">
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-[#30323A]">
+                    Upload original font file
+                  </p>
+                  <input
+                    ref={(node) => {
+                      fileInputRefs.current[resolvingFontName] = node;
+                    }}
+                    type="file"
+                    accept=".ttf,.otf,.woff,.woff2,.eot"
+                    className="hidden"
+                    onChange={(event) => handleFontFile(resolvingFontName, event)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRefs.current[resolvingFontName]?.click()}
+                    disabled={isUploading}
+                    className="flex h-[78px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#DADDE6] bg-white text-sm font-medium text-[#606470] transition hover:border-[#B8BCC8] hover:bg-[#FAFBFC] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3EFFF] text-[#7A3DF0]">
+                      {resolvingFontUploaded ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                    </span>
+                    {resolvingFontUploaded ? "Font file uploaded" : "Upload .ttf / .otf"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                  <span className="h-px bg-[#EEF0F5]" />
+                  <span className="text-xs font-medium text-[#686C78]">or</span>
+                  <span className="h-px bg-[#EEF0F5]" />
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-[#30323A]">
+                    Fallback font
+                  </p>
+                  <FontFallbackPicker
+                    fontName={resolvingFontName}
+                    options={googleFontOptions}
+                    selectedOption={resolvingFallback}
+                    disabled={isUploading}
+                    onLoadOptions={onLoadGoogleFontOptions}
+                    onChange={(option) =>
+                      onFallbackFontChange(resolvingFontName, option)
+                    }
+                  />
                 </div>
               </div>
             </div>
           </div>
         ) : null}
+
       </section>
+
+      <div className="mt-auto w-full pb-5 pt-12 2xl:pb-8 2xl:pt-16">
+        <div className="mx-auto flex max-w-[558px] items-center gap-2 rounded-[6px] bg-[#F4F7FB] px-3 py-2 text-[11px] leading-tight text-[#505462] 2xl:max-w-[700px] 2xl:px-4 2xl:py-2.5 2xl:text-[13px]">
+          <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-[#0B4FBD] text-[10px] font-bold text-white 2xl:h-4 2xl:w-4 2xl:text-[11px]">
+            i
+          </span>
+          <p>
+            Exact font files maintain typography and spacing. Fallback fonts may
+            slightly change the layout and text wrapping.
+          </p>
+        </div>
+      </div>
     </main>
   );
 }
@@ -1475,10 +1421,12 @@ const CustomTemplatePage = ({
   const [reviewSlideIndex, setReviewSlideIndex] = useState(0);
   const [templateModalMode, setTemplateModalMode] = useState<"create" | "save" | null>(null);
   const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false);
-  const [googleFontOptions, setGoogleFontOptions] = useState<GoogleFontOption[]>([]);
+  const [googleFontOptions, setGoogleFontOptions] =
+    useState<GoogleFontOption[]>(GOOGLE_FONT_OPTIONS);
   const [selectedFallbackFonts, setSelectedFallbackFonts] = useState<
     Record<string, GoogleFontOption>
   >({});
+  const googleFontLoadStartedRef = useRef(false);
 
   const {
     selectedFile,
@@ -1581,18 +1529,16 @@ const CustomTemplatePage = ({
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const handleLoadGoogleFontOptions = useCallback(() => {
+    if (googleFontLoadStartedRef.current) return;
+
+    googleFontLoadStartedRef.current = true;
     loadGoogleFontOptions()
-      .then((options) => {
-        if (!cancelled) setGoogleFontOptions(options);
-      })
+      .then((options) => setGoogleFontOptions(options))
       .catch((error) => {
+        googleFontLoadStartedRef.current = false;
         console.error("Failed to load Google font options", error);
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
@@ -1777,23 +1723,7 @@ const CustomTemplatePage = ({
 
   const bottomAction = useMemo(() => {
     if (showAnalyze) {
-      return (
-        <GradientPillButton
-          onClick={handleFontUploadAndPreview}
-          disabled={state.isLoading}
-          className={state.isLoading ? "disabled:opacity-100" : ""}
-          fullWidth
-        >
-          {state.isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin 2xl:h-5 2xl:w-5" />
-              Creating Preview...
-            </>
-          ) : (
-            "Continue"
-          )}
-        </GradientPillButton>
-      );
+      return null;
     }
 
     if (showPreview) {
@@ -1824,7 +1754,6 @@ const CustomTemplatePage = ({
   }, [
     generatedSlidesReady,
     isSubmittingTemplate,
-    handleFontUploadAndPreview,
     showAnalyze,
     showPreview,
     showReview,
@@ -1853,10 +1782,11 @@ const CustomTemplatePage = ({
             uploadedFonts={uploadedFonts}
             isUploading={state.isLoading}
             uploadFont={uploadFont}
-            hasPendingMissingFonts={hasPendingMissingFonts}
             googleFontOptions={googleFontOptions}
             selectedFallbackFonts={selectedFallbackFonts}
             onFallbackFontChange={handleFallbackFontChange}
+            onLoadGoogleFontOptions={handleLoadGoogleFontOptions}
+            onContinue={handleFontUploadAndPreview}
           />
         ) : null}
 

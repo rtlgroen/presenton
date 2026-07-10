@@ -966,6 +966,7 @@ def _chart_content_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "title": {"type": ["string", "null"]},
+            "title_color": {"type": ["string", "null"]},
             "categories": {
                 "type": "array",
                 "items": {"type": "string"},

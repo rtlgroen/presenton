@@ -831,6 +831,7 @@ def test_update_slide_element_updates_new_chart_model_fields():
             "chart": {
                 "chartType": "line",
                 "title": "GHG Emissions 2024-2025",
+                "titleColor": "#102030",
                 "categories": ["CO2", "CH4", "N2O"],
                 "series": [
                     {"name": "2024 Gt", "values": [36.4, 2.1, 0.8]},
@@ -848,6 +849,7 @@ def test_update_slide_element_updates_new_chart_model_fields():
     assert result["ok"] is True
     assert chart["chart_type"] == "line"
     assert chart["title"] == "GHG Emissions 2024-2025"
+    assert chart["title_color"] == "#102030"
     assert chart["series"][0]["values"] == [36.4, 2.1, 0.8]
     assert chart["data_labels"] == "top"
     assert chart["legend"] is True

@@ -20,6 +20,7 @@ import { validateLayoutCodeForClient } from "../utils/layoutCodeValidation";
 /** Must match `VISION_LAYOUT_ERROR_MARKER` in FastAPI `utils/template_vision_errors.py`. */
 const TEMPLATE_VISION_MODEL_MARKER = "TEMPLATE_VISION_MODEL_REQUIRED";
 const TEMPLATE_V2_LAYOUT_BATCH_SIZE = 1;
+const MAX_PROCESSING_PROGRESS_PERCENT = 95;
 
 type CreatedTemplateV2Layout = { index: number; layout: TemplateV2Layout };
 type FailedTemplateV2Layout = { index: number; error: string };
@@ -1143,7 +1144,10 @@ export const useTemplateCreation = ({
     // Calculate progress
     const completedSlides = slides.filter(s => s.processed || s.error).length;
     const progressPercentage = state.totalSlides > 0
-        ? Math.round((completedSlides / state.totalSlides) * 100)
+        ? Math.min(
+            MAX_PROCESSING_PROGRESS_PERCENT,
+            Math.round((completedSlides / state.totalSlides) * 100)
+        )
         : 0;
 
     return {

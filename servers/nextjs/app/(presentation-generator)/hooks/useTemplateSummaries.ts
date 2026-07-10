@@ -15,6 +15,12 @@ export function splitTemplatesByDefault(templates: TemplateListItem[]) {
   return { defaultTemplates, customTemplates };
 }
 
+function filterTemplatesWithLayouts(templates: TemplateListItem[]) {
+  return templates.filter(
+    (template) => template.layout_count == null || template.layout_count > 0
+  );
+}
+
 export function useTemplateSummaries({
   includeProcessingTemplateTasks = false,
 }: {
@@ -29,6 +35,7 @@ export function useTemplateSummaries({
   useEffect(() => {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    let hadProcessingTemplateTasks = false;
 
     const loadProcessingTemplateTasks = async () => {
       if (!includeProcessingTemplateTasks) {
@@ -44,21 +51,23 @@ export function useTemplateSummaries({
       }
     };
 
+    const loadTemplateSummaries = async () => {
+      const response = await TemplateService.getTemplateSummaries();
+      return filterTemplatesWithLayouts(response.items ?? []);
+    };
+
     const loadInitialTemplates = async () => {
       setLoading(true);
       try {
-        const [response, processingTasks] = await Promise.all([
-          TemplateService.getTemplateSummaries(),
+        const [loadedTemplates, processingTasks] = await Promise.all([
+          loadTemplateSummaries(),
           loadProcessingTemplateTasks(),
         ]);
         if (!cancelled) {
-          setTemplates(
-            (response.items ?? []).filter(
-              (template) =>
-                template.layout_count == null || template.layout_count > 0
-            )
-          );
-          setProcessingTemplateTasks(processingTasks ?? []);
+          const nextProcessingTasks = processingTasks ?? [];
+          hadProcessingTemplateTasks = nextProcessingTasks.length > 0;
+          setTemplates(loadedTemplates);
+          setProcessingTemplateTasks(nextProcessingTasks);
         }
       } catch (error) {
         console.error("Failed to load templates", error);
@@ -77,7 +86,23 @@ export function useTemplateSummaries({
       intervalId = setInterval(() => {
         loadProcessingTemplateTasks().then((processingTasks) => {
           if (!cancelled) {
-            setProcessingTemplateTasks(processingTasks ?? []);
+            const nextProcessingTasks = processingTasks ?? [];
+            const shouldRefreshTemplates =
+              hadProcessingTemplateTasks || nextProcessingTasks.length > 0;
+            hadProcessingTemplateTasks = nextProcessingTasks.length > 0;
+            setProcessingTemplateTasks(nextProcessingTasks);
+
+            if (shouldRefreshTemplates) {
+              loadTemplateSummaries()
+                .then((loadedTemplates) => {
+                  if (!cancelled) {
+                    setTemplates(loadedTemplates);
+                  }
+                })
+                .catch((error) => {
+                  console.error("Failed to refresh templates", error);
+                });
+            }
           }
         });
       }, 30000);

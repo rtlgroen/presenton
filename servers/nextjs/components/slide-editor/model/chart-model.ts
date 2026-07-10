@@ -100,6 +100,7 @@ export function rawChartToEditorChart(element: RawElement): ChartElement {
     categories: normalizedCategories,
     series: normalizedSeries,
     colors: chartColors,
+    title_color: element.title_color ?? element.titleColor,
     axis_color: element.axis_color ?? element.axisColor,
     grid_color: element.grid_color ?? element.gridColor,
     x_axis: element.x_axis ?? element.xAxis,
@@ -154,6 +155,11 @@ export function editorChartToRawChart(source: RawElement, chart: UnknownRecord) 
     layout: source.layout,
     chart_type: chart.chart_type ?? chart.chartType ?? source.chart_type,
     colors: chart.colors ?? source.colors,
+    title_color:
+      chart.title_color ??
+      chart.titleColor ??
+      source.title_color ??
+      source.titleColor,
     axis_color: chart.axis_color ?? chart.axisColor ?? source.axis_color,
     grid_color: chart.grid_color ?? chart.gridColor ?? source.grid_color,
     x_axis: chart.x_axis ?? chart.xAxis ?? source.x_axis,

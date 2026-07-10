@@ -894,6 +894,7 @@ function adaptChart(raw: UnknownRecord): SlideElement {
     chart_type: chartType,
     data: data.length > 0 ? data : [{ label: "Data", value: 0 }],
     title: truncateString(readString(raw.title) ?? "", 80) || null,
+    title_color: readColor(readValue(raw, "title_color") ?? raw.titleColor),
     color,
     axis_color: readColor(readValue(raw, "axis_color")),
     grid_color: readColor(readValue(raw, "grid_color")),

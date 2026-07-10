@@ -161,7 +161,7 @@ export const ProcessingTemplateListCard = memo(
     const progressPercent =
       totalLayouts > 0
         ? Math.min(
-            100,
+            95,
             Math.max(0, Math.round((createdLayouts / totalLayouts) * 100))
           )
         : 0;

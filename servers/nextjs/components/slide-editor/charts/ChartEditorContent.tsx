@@ -377,6 +377,13 @@ function ChartCustomizePanel({
           value={chart.title ?? ""}
           onChange={(title) => onChange({ ...chart, title: title || null })}
         />
+        <ColorRow
+          label="Title color"
+          value={chart.title_color ?? "344054"}
+          onChange={(titleColor) =>
+            onChange({ ...chart, title_color: titleColor })
+          }
+        />
         <DataLabelsControl
           value={chart.data_labels ?? null}
           onChange={(dataLabels) =>

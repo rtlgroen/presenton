@@ -712,11 +712,13 @@ export function TemplateV2HtmlSlidePreview({
   fonts,
   fixedSize = false,
   className = "",
+  contentClassName = "",
 }: {
   slide: unknown;
   fonts?: unknown;
   fixedSize?: boolean;
   className?: string;
+  contentClassName?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -889,7 +891,7 @@ export function TemplateV2HtmlSlidePreview({
         <div
           ref={contentRef}
           aria-label="Template v2 slide preview"
-          className="block h-full w-full bg-white"
+          className={`block h-full w-full bg-white ${contentClassName}`}
           style={{ pointerEvents: "none" }}
           dangerouslySetInnerHTML={htmlMarkup}
         />
