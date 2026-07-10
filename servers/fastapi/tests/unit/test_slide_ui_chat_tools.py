@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import uuid
 from unittest.mock import AsyncMock, patch
@@ -1099,10 +1100,193 @@ def test_update_component_ungroups_container_child():
     assert result["result"]["updated"] is True
     assert result["result"]["created_component_ids"] == [
         "card_part_1",
-        "card_part_2",
     ]
-    assert slide.ui["components"][1]["position"] == {"x": 32.0, "y": 38.0}
-    assert slide.ui["components"][1]["size"] == {"width": 216.0, "height": 104.0}
+    assert slide.ui["components"][0]["position"] == {"x": 32.0, "y": 38.0}
+    assert slide.ui["components"][0]["size"] == {"width": 216.0, "height": 104.0}
+    assert slide.ui["components"][0]["elements"][0]["type"] == "text"
+    assert slide.ui["components"][0]["elements"][0]["runs"] == [
+        {"text": "Nested title"}
+    ]
+    assert session.commit_count == 1
+
+
+def test_update_component_ungroups_one_level_for_flex_group_children():
+    slide = _slide()
+    slide.ui["components"] = [
+        {
+            "id": "cards",
+            "description": "Flex with grouped children.",
+            "position": {"x": 10, "y": 20},
+            "size": {"width": 300, "height": 100},
+            "elements": [
+                {
+                    "type": "flex",
+                    "direction": "row",
+                    "gap": 10,
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 300, "height": 100},
+                    "children": [
+                        {
+                            "type": "group",
+                            "name": "Left card",
+                            "elements": [
+                                {
+                                    "type": "text",
+                                    "name": "Left title",
+                                    "position": {"x": 8, "y": 10},
+                                    "size": {"width": 120, "height": 24},
+                                    "runs": [{"text": "Left"}],
+                                }
+                            ],
+                        },
+                        {
+                            "type": "group",
+                            "name": "Right card",
+                            "elements": [
+                                {
+                                    "type": "text",
+                                    "name": "Right title",
+                                    "position": {"x": 8, "y": 10},
+                                    "size": {"width": 120, "height": 24},
+                                    "runs": [{"text": "Right"}],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+    ]
+    tools, session = _tools(slide)
+
+    result = _call(
+        tools,
+        "updateComponent",
+        {"index": 0, "componentId": "cards", "action": "ungroup"},
+    )
+
+    assert result["ok"] is True
+    assert result["result"]["updated"] is True
+    assert result["result"]["created_component_ids"] == [
+        "cards_part_1",
+        "cards_part_2",
+    ]
+    assert [item["id"] for item in slide.ui["components"]] == [
+        "cards_part_1",
+        "cards_part_2",
+    ]
+    assert slide.ui["components"][0]["position"] == {"x": 10.0, "y": 20.0}
+    assert slide.ui["components"][0]["size"] == {"width": 145.0, "height": 100.0}
+    assert slide.ui["components"][1]["position"] == {"x": 165.0, "y": 20.0}
+    assert slide.ui["components"][1]["elements"][0]["type"] == "group"
+    assert slide.ui["components"][1]["elements"][0]["elements"] == [
+        {
+            "type": "text",
+            "name": "Right title",
+            "position": {"x": 8, "y": 10},
+            "size": {"width": 120, "height": 24},
+            "runs": [{"text": "Right"}],
+        }
+    ]
+    assert session.commit_count == 1
+
+
+def test_update_component_ungroups_grid_immediate_children_only():
+    slide = _slide()
+    feature_item = {
+        "type": "flex",
+        "size": {"width": 310, "height": 100.25},
+        "direction": "row",
+        "gap": 16,
+        "children": [
+            {
+                "type": "container",
+                "size": {"width": 48, "height": 48},
+                "fill": {"color": "#9333EA", "opacity": 1},
+                "child": {
+                    "type": "image",
+                    "size": {"width": 24, "height": 24},
+                    "data": "/static/icons/bold/messenger-logo-bold.svg",
+                    "name": "feature_icon",
+                },
+            },
+            {
+                "type": "flex",
+                "size": {"width": 246, "height": 96.25},
+                "direction": "column",
+                "gap": 4,
+                "children": [
+                    {
+                        "type": "text",
+                        "size": {"width": 246, "height": 28},
+                        "runs": [{"text": "Fine PM2.5"}],
+                        "name": "feature_heading",
+                    },
+                    {
+                        "type": "text",
+                        "size": {"width": 246, "height": 68.25},
+                        "runs": [{"text": "Tiny particles enter lungs."}],
+                        "name": "feature_body",
+                    },
+                ],
+            },
+        ],
+        "name": "feature_item",
+    }
+    slide.ui["components"] = [
+        {
+            "id": "feature_grid",
+            "description": "Two-by-two grid of feature items.",
+            "position": {"x": 96, "y": 291.75},
+            "size": {"width": 674, "height": 256.5},
+            "elements": [
+                {
+                    "type": "grid",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 674, "height": 256.5},
+                    "columns": 2,
+                    "rows": 2,
+                    "column_gap": 54,
+                    "row_gap": 56,
+                    "children": [copy.deepcopy(feature_item) for _ in range(4)],
+                    "name": "feature_item_grid",
+                }
+            ],
+        }
+    ]
+    tools, session = _tools(slide)
+
+    result = _call(
+        tools,
+        "updateComponent",
+        {"index": 0, "componentId": "feature_grid", "action": "ungroup"},
+    )
+
+    assert result["ok"] is True
+    assert result["result"]["created_component_ids"] == [
+        "feature_grid_part_1",
+        "feature_grid_part_2",
+        "feature_grid_part_3",
+        "feature_grid_part_4",
+    ]
+    assert [component["position"] for component in slide.ui["components"]] == [
+        {"x": 96.0, "y": 291.75},
+        {"x": 460.0, "y": 291.75},
+        {"x": 96.0, "y": 448.0},
+        {"x": 460.0, "y": 448.0},
+    ]
+    assert [component["size"] for component in slide.ui["components"]] == [
+        {"width": 310.0, "height": 100.25},
+        {"width": 310.0, "height": 100.25},
+        {"width": 310.0, "height": 100.25},
+        {"width": 310.0, "height": 100.25},
+    ]
+    assert slide.ui["components"][0]["elements"][0]["type"] == "flex"
+    assert slide.ui["components"][0]["elements"][0]["children"][0]["type"] == "container"
+    assert (
+        slide.ui["components"][0]["elements"][0]["children"][1]["children"][0]["runs"]
+        == [{"text": "Fine PM2.5"}]
+    )
     assert session.commit_count == 1
 
 

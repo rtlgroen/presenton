@@ -1575,8 +1575,8 @@ class PresentationChatMemoryLayer:
                 if idx != component_index and isinstance(item, dict)
             },
         )
-        if len(parts) < 2:
-            raise ValueError("Component does not contain multiple safely separable elements.")
+        if not parts:
+            raise ValueError("Component does not contain safely separable elements.")
 
         components[component_index : component_index + 1] = parts
         await self._save_slide_ui(slide, ui)

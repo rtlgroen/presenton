@@ -20,7 +20,6 @@ type UngroupDeps = {
   childArrayInfo: (element: RawRecord) => ChildArrayInfo | null;
   componentBox: (component: RawRecord) => TemplateV2UngroupBox;
   elementBox: (element: RawRecord) => TemplateV2UngroupBox;
-  isBoxVisualType: (type: string | null) => boolean;
   layoutChildren: (
     parent: RawRecord,
     children: unknown[],
@@ -83,56 +82,62 @@ function ungroupedComponentsFromComponent(
       readString(component.description) ??
       `component_${componentIndex + 1}`,
   );
-  return readArray(component.elements)
-    .filter(isRecord)
-    .flatMap((element) => {
-      const box = deps.elementBox(element);
-      return ungroupElementTree(
-        element,
-        {
-          x: componentBoxValue.x + box.x,
-          y: componentBoxValue.y + box.y,
-          width: box.width,
-          height: box.height,
-        },
-        deps,
-      );
-    })
-    .map((entry, index) => ungroupedComponent(entry, idBase, index));
+  const elements = readArray(component.elements).filter(isRecord);
+  const entries =
+    elements.length === 1
+      ? ungroupElementOneLevel(
+          elements[0],
+          absoluteElementBox(elements[0], componentBoxValue, deps),
+          deps,
+        )
+      : elements.map((element) => ({
+          element,
+          box: absoluteElementBox(element, componentBoxValue, deps),
+        }));
+
+  return entries.map((entry, index) => ungroupedComponent(entry, idBase, index));
 }
 
-function ungroupElementTree(
+function absoluteElementBox(
+  element: RawRecord,
+  componentBoxValue: TemplateV2UngroupBox,
+  deps: UngroupDeps,
+): TemplateV2UngroupBox {
+  const box = deps.elementBox(element);
+  return {
+    x: componentBoxValue.x + box.x,
+    y: componentBoxValue.y + box.y,
+    width: box.width,
+    height: box.height,
+  };
+}
+
+function ungroupElementOneLevel(
   element: RawRecord,
   box: TemplateV2UngroupBox,
   deps: UngroupDeps,
 ): Array<{ element: RawRecord; box: TemplateV2UngroupBox }> {
   const childInfo = deps.childArrayInfo(element);
-  if (!childInfo) return [{ element, box }];
+  if (!childInfo) return [];
 
-  const currentLevel = elementHasVisibleBoxStyle(element, deps)
-    ? [{ element: stripElementChildren(element), box }]
-    : [];
-  const children = deps
+  return deps
     .layoutChildren(
       element,
       childInfo.items,
       { x: 0, y: 0, width: box.width, height: box.height },
     )
-    .flatMap((item) => {
+    .map((item) => {
       const childBox = item.box ?? deps.elementBox(item.child);
-      return ungroupElementTree(
-        item.child,
-        {
+      return {
+        element: item.child,
+        box: {
           x: box.x + childBox.x,
           y: box.y + childBox.y,
           width: childBox.width,
           height: childBox.height,
         },
-        deps,
-      );
+      };
     });
-
-  return [...currentLevel, ...children];
 }
 
 function hasUngroupableLayout(element: RawRecord): boolean {
@@ -167,15 +172,6 @@ function ungroupedComponent(
   };
 }
 
-function stripElementChildren(element: RawRecord): RawRecord {
-  const rest = { ...element };
-  delete rest.child;
-  delete rest.children;
-  delete rest.elements;
-  delete rest.item;
-  return rest;
-}
-
 function childArrayInfoFromRecord(element: RawRecord): ChildArrayInfo | null {
   if (Array.isArray(element.children)) return { items: element.children };
   if (Array.isArray(element.elements)) return { items: element.elements };
@@ -196,28 +192,6 @@ function isUngroupableLayoutType(type: string | null) {
   return isFlowLayoutType(type) || type === "group";
 }
 
-function elementHasVisibleBoxStyle(
-  element: RawRecord,
-  deps: UngroupDeps,
-) {
-  const type = readString(element.type);
-  if (!deps.isBoxVisualType(type)) return false;
-  const fill = asRecord(element.fill);
-  const stroke = asRecord(element.stroke);
-  const shadow = asRecord(element.shadow);
-  return Boolean(
-    readString(fill?.color) ||
-      readNumber(fill?.opacity) != null ||
-      readString(stroke?.color) ||
-      (readNumber(stroke?.width) ?? 0) > 0 ||
-      readString(shadow?.color) ||
-      (readNumber(shadow?.opacity) ?? 0) > 0 ||
-      element.border_radius != null ||
-      element.borderRadius != null ||
-      readString(element.color),
-  );
-}
-
 function readArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
@@ -234,10 +208,6 @@ function isRecord(value: unknown): value is RawRecord {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
-}
-
-function readNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function normalizeId(value: string) {

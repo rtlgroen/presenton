@@ -125,7 +125,6 @@ import {
   eventTargetsThisSlide,
   getElementAtSelection,
   syncComponentHeightToElement,
-  isBoxVisualType,
   isEditableTarget,
   isManualPositioned,
   isRecord,
@@ -1434,7 +1433,6 @@ function TemplateV2KonvaSlideComponent({
         childArrayInfo,
         componentBox,
         elementBox,
-        isBoxVisualType,
         layoutChildren,
       },
     );
