@@ -16,134 +16,13 @@ import {
   isChatGptAuthRequiredMessage,
   requestChatGptReauth,
 } from "@/utils/chatgptAuth";
+import {
+  mergeSingleSlidePreservingResolvedAssets,
+  mergeSlidesPreservingResolvedAssets,
+} from "../utils/streamAssetMerge";
 
 const MAX_STREAM_RETRIES = 3;
 const STREAM_RETRY_DELAY_MS = 1_000;
-
-/** Chunk JSON replays each slide as first streamed; don't clobber URLs filled by `slide_assets`. */
-const PLACEHOLDER_ASSET_MARKERS = [
-  "/static/images/placeholder",
-  "/static/icons/placeholder",
-  "placeholder.jpg",
-  "placeholder.svg",
-];
-
-function isPlaceholderAssetUrl(url: unknown): boolean {
-  if (typeof url !== "string" || !url.trim()) return false;
-  const u = url.toLowerCase();
-  return PLACEHOLDER_ASSET_MARKERS.some((m) => u.includes(m));
-}
-
-function mergeContentPreservingResolvedAssets(prev: any, incoming: any): any {
-  if (incoming === undefined || incoming === null) return prev;
-  if (prev === undefined || prev === null) return incoming;
-
-  if (Array.isArray(incoming)) {
-    if (!Array.isArray(prev)) return incoming;
-    return incoming.map((item, i) =>
-      mergeContentPreservingResolvedAssets(prev[i], item)
-    );
-  }
-
-  if (typeof incoming !== "object") return incoming;
-  if (typeof prev !== "object") return incoming;
-
-  const result: Record<string, unknown> = { ...incoming };
-
-  for (const key of Object.keys(incoming)) {
-    const pv = prev[key];
-    const iv = incoming[key];
-
-    if (iv !== null && typeof iv === "object") {
-      if (Array.isArray(iv) && Array.isArray(pv)) {
-        result[key] = iv.map((item, idx) =>
-          mergeContentPreservingResolvedAssets(pv[idx], item)
-        );
-      } else if (
-        !Array.isArray(iv) &&
-        pv !== null &&
-        typeof pv === "object" &&
-        !Array.isArray(pv)
-      ) {
-        result[key] = mergeContentPreservingResolvedAssets(pv, iv);
-      }
-      continue;
-    }
-
-    if (
-      key === "__image_url__" &&
-      typeof iv === "string" &&
-      typeof pv === "string"
-    ) {
-      if (isPlaceholderAssetUrl(iv) && !isPlaceholderAssetUrl(pv)) {
-        result[key] = pv;
-      }
-    }
-    if (
-      key === "__icon_url__" &&
-      typeof iv === "string" &&
-      typeof pv === "string"
-    ) {
-      if (isPlaceholderAssetUrl(iv) && !isPlaceholderAssetUrl(pv)) {
-        result[key] = pv;
-      }
-    }
-  }
-
-  return result;
-}
-
-function mergeSlidesPreservingResolvedAssets(
-  prevSlides: any[] | undefined,
-  incomingSlides: any[]
-): any[] {
-  if (!prevSlides?.length) return incomingSlides;
-  return incomingSlides.map((incoming, idx) => {
-    const prev = prevSlides[idx];
-    if (!prev) return incoming;
-    return {
-      ...incoming,
-      content: mergeContentPreservingResolvedAssets(
-        prev.content,
-        incoming.content
-      ),
-    };
-  });
-}
-
-function mergeSingleSlidePreservingResolvedAssets(
-  prevSlides: any[] | undefined,
-  incomingSlide: any
-): any[] {
-  const nextSlides = [...(prevSlides ?? [])];
-  const incomingIndex =
-    typeof incomingSlide?.index === "number" ? incomingSlide.index : nextSlides.length;
-  const existingIndex = nextSlides.findIndex(
-    (slide) => typeof slide?.index === "number" && slide.index === incomingIndex
-  );
-  const existingSlide =
-    existingIndex >= 0 ? nextSlides[existingIndex] : nextSlides[incomingIndex];
-  const mergedSlide = existingSlide
-    ? {
-        ...existingSlide,
-        ...incomingSlide,
-        content: mergeContentPreservingResolvedAssets(
-          existingSlide.content,
-          incomingSlide.content
-        ),
-      }
-    : incomingSlide;
-
-  if (existingIndex >= 0) {
-    nextSlides[existingIndex] = mergedSlide;
-  } else {
-    nextSlides.push(mergedSlide);
-  }
-
-  return nextSlides.sort(
-    (a, b) => (typeof a?.index === "number" ? a.index : 0) - (typeof b?.index === "number" ? b.index : 0)
-  );
-}
 
 function mergePresentationPreservingTemplateData(
   incoming: PresentationData
@@ -158,6 +37,9 @@ function mergePresentationPreservingTemplateData(
     version: incoming.version ?? prev.version,
     theme: incoming.theme ?? prev.theme,
     structure: (incoming as any).structure ?? (prev as any).structure,
+    slides: Array.isArray(incoming.slides)
+      ? mergeSlidesPreservingResolvedAssets(prev.slides, incoming.slides)
+      : prev.slides,
   } as PresentationData;
 }
 
