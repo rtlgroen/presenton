@@ -9,7 +9,16 @@ import re
 import traceback
 from typing import Annotated, Any, List, Literal, Optional, Tuple
 import dirtyjson
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Path, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1359,15 +1368,23 @@ def _build_export_cookie_header(request: Request) -> Optional[str]:
 
 
 @PRESENTATION_ROUTER.get("/all", response_model=List[PresentationWithSlides])
-async def get_all_presentations(sql_session: AsyncSession = Depends(get_async_session)):
+async def get_all_presentations(
+    version: Annotated[
+        Optional[PresentationVersion],
+        Query(description="Only include presentations matching this version."),
+    ] = None,
+    sql_session: AsyncSession = Depends(get_async_session),
+):
     query = (
         select(PresentationModel, SlideModel)
         .join(
             SlideModel,
             (SlideModel.presentation == PresentationModel.id) & (SlideModel.index == 0),
         )
-        .order_by(PresentationModel.created_at.desc())
     )
+    if version is not None:
+        query = query.where(PresentationModel.version == version)
+    query = query.order_by(PresentationModel.created_at.desc())
 
     results = await sql_session.execute(query)
     rows = results.all()

@@ -1,11 +1,12 @@
 import { getHeader, getHeaderForFormData } from "./header";
-import { IconSearch, ImageGenerate, ImageSearch, PreviousGeneratedImagesResponse } from "./params";
+import { IconSearch, ImageGenerate, PreviousGeneratedImagesResponse } from "./params";
 import { ApiResponseHandler } from "./api-error-handler";
 import { getApiUrl, resolveBackendAssetUrl } from "@/utils/api";
 import {
   limitOutlines,
   MAX_NUMBER_OF_SLIDES,
 } from "@/utils/presentationLimits";
+import type { PresentationVersion } from "./dashboard";
 
 export class PresentationGenerationApi {
   static async uploadDoc(documents: File[]) {
@@ -73,7 +74,7 @@ export class PresentationGenerationApi {
 
   }: {
     content: string;
-    version?: "v1-standard" | "v1-standard";
+    version?: PresentationVersion;
     n_slides: number | null;
     file_paths?: string[];
     language: string | null;

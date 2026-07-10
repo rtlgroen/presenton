@@ -4,9 +4,11 @@ import {
 import { ApiResponseHandler } from "@/app/(presentation-generator)/services/api/api-error-handler";
 import { getApiUrl } from "@/utils/api";
 
+export type PresentationVersion = "v1-standard" | "v2-standard";
+
 export interface PresentationResponse {
   id: string;
-  version?: "v1-standard" | "v1-standard";
+  version?: PresentationVersion;
   title: string;
   created_at: string;
   updated_at: string;
@@ -30,10 +32,17 @@ export interface PresentationResponse {
 
 export class DashboardApi {
 
-  static async getPresentations(): Promise<PresentationResponse[]> {
+  static async getPresentations(
+    version?: PresentationVersion
+  ): Promise<PresentationResponse[]> {
     try {
+      const params = new URLSearchParams();
+      if (version) {
+        params.set("version", version);
+      }
+      const query = params.toString();
       const response = await fetch(
-        getApiUrl(`/api/v1/ppt/presentation/all`),
+        getApiUrl(`/api/v1/ppt/presentation/all${query ? `?${query}` : ""}`),
         {
           method: "GET",
         }
