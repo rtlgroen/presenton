@@ -883,11 +883,20 @@ const BlocksPanel = ({
   return (
     <div className="h-full overflow-y-auto px-5 pb-8 pt-8 hide-scrollbar">
       <style jsx global>{`
+        .template-block-preview,
+        .template-block-preview-surface,
+        .template-block-preview-content,
+        .template-block-preview-content > div {
+          transition:
+            background 180ms ease,
+            background-color 180ms ease;
+        }
+
         .template-block-variant:hover .template-block-preview,
         .template-block-variant:hover .template-block-preview-surface,
         .template-block-variant:hover .template-block-preview-content,
         .template-block-variant:hover .template-block-preview-content > div {
-          background: #000 !important;
+          background: #a2a2a3 !important;
         }
       `}</style>
       <h3 className="mb-3 text-[15px] font-semibold leading-5 text-[#101323]">
