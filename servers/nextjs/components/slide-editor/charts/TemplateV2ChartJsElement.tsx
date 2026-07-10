@@ -11,6 +11,7 @@ import type {
 import { Group, Image as KonvaImage, Rect } from "react-konva";
 import {
   ellipsizeChartText,
+  markdownToPlainChartText,
   normalizeChartTypeName,
 } from "@/components/slide-editor/charts/chart-data";
 import type { DataLabelPosition } from "@/components/slide-editor/types";
@@ -266,7 +267,7 @@ function createChartJsConfig(
     readString(element.title_color ?? element.titleColor),
     "#344054",
   );
-  const title = readString(element.title)?.trim() ?? "";
+  const title = markdownToPlainChartText(readString(element.title) ?? "");
   const dataLabelPosition = readDataLabelPosition(
     hasOwn(element, "data_labels") ? element.data_labels : element.dataLabels,
   );
@@ -278,17 +279,21 @@ function createChartJsConfig(
   const showXAxis = readBoolean(element.x_axis ?? element.xAxis) ?? true;
   const showYAxis = readBoolean(element.y_axis ?? element.yAxis) ?? true;
   const xAxisTitle =
-    readString(
-      "x_axis_title" in element
-        ? element.x_axis_title
-        : element.xAxisTitle,
-    )?.trim() ?? "";
+    markdownToPlainChartText(
+      readString(
+        "x_axis_title" in element
+          ? element.x_axis_title
+          : element.xAxisTitle,
+      ) ?? "",
+    );
   const yAxisTitle =
-    readString(
-      "y_axis_title" in element
-        ? element.y_axis_title
-        : element.yAxisTitle,
-    )?.trim() ?? "";
+    markdownToPlainChartText(
+      readString(
+        "y_axis_title" in element
+          ? element.y_axis_title
+          : element.yAxisTitle,
+      ) ?? "",
+    );
   const fontSize = clamp(height * 0.033, 9, 18);
   const titleFontSize = clamp(height * 0.044, 11, 26);
   const valueFontSize = clamp(height * 0.029, 8, 15);

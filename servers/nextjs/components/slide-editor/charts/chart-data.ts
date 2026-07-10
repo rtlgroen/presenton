@@ -37,6 +37,28 @@ export function limitChartText(value: string) {
   return value.slice(0, CHART_TEXT_MAX_LENGTH);
 }
 
+export function markdownToPlainChartText(value: string) {
+  return value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}#{1,6}\s+/, "")
+        .replace(/^\s{0,3}>\s?/, "")
+        .replace(/^\s*[-+*]\s+/, ""),
+    )
+    .join("\n")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/~~([^~\n]+)~~/g, "$1")
+    .replace(/(^|[^\w])(\*\*|__)([^*\n_]+)\2(?=$|[^\w])/g, "$1$3")
+    .replace(/(^|[^\w])([*_])([^*\n_]+)\2(?=$|[^\w])/g, "$1$3")
+    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, "$1")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+
 export function ellipsizeChartText(value: string, maxLength = 28) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;

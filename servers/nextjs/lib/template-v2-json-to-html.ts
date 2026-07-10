@@ -1,4 +1,5 @@
 import { resolveBackendAssetUrl } from "@/utils/api";
+import { markdownToPlainChartText } from "@/components/slide-editor/charts/chart-data";
 import { normalizeRawTextMarkdownElement } from "@/components/slide-editor/text/template-v2-text";
 
 type JsonRecord = Record<string, unknown>;
@@ -807,7 +808,7 @@ function chartConfig(item: JsonRecord, height: number): JsonRecord {
   );
   const titleColor =
     safeChartColor(readString(item.titleColor ?? item.title_color), "#344054");
-  const title = readString(item.title)?.trim() ?? "";
+  const title = markdownToPlainChartText(readString(item.title) ?? "");
   const fontSize = clamp(height * 0.033, 9, 18);
   const titleFontSize = clamp(height * 0.044, 11, 26);
   const valueFontSize = clamp(height * 0.029, 8, 15);
@@ -835,16 +836,20 @@ function chartConfig(item: JsonRecord, height: number): JsonRecord {
   );
   const xAxis = readOptionalBoolean(item.x_axis ?? item.xAxis, true);
   const yAxis = readOptionalBoolean(item.y_axis ?? item.yAxis, true);
-  const xAxisTitle = readString(
-    Object.prototype.hasOwnProperty.call(item, "x_axis_title")
-      ? item.x_axis_title
-      : item.xAxisTitle
-  )?.trim() ?? "";
-  const yAxisTitle = readString(
-    Object.prototype.hasOwnProperty.call(item, "y_axis_title")
-      ? item.y_axis_title
-      : item.yAxisTitle
-  )?.trim() ?? "";
+  const xAxisTitle = markdownToPlainChartText(
+    readString(
+      Object.prototype.hasOwnProperty.call(item, "x_axis_title")
+        ? item.x_axis_title
+        : item.xAxisTitle
+    ) ?? ""
+  );
+  const yAxisTitle = markdownToPlainChartText(
+    readString(
+      Object.prototype.hasOwnProperty.call(item, "y_axis_title")
+        ? item.y_axis_title
+        : item.yAxisTitle
+    ) ?? ""
+  );
   const config: JsonRecord = {
     type: chartJsType(chartKind),
     data: {
