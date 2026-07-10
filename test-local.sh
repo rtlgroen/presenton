@@ -32,7 +32,9 @@ run_check() {
 test_repository_tools() {
     cd "$SCRIPT_DIR" &&
         npm ci &&
-        npm test
+        npm test &&
+        npm run sync:presentation-export &&
+        npm run check:presentation-export
 }
 
 test_fastapi() {

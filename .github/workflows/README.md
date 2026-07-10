@@ -58,4 +58,6 @@ npx cypress run --component --browser electron
 ```bash
 npm ci
 npm test
+npm run sync:presentation-export
+npm run check:presentation-export
 ```
