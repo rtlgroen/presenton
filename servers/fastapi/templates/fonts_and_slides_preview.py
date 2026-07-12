@@ -140,6 +140,8 @@ class _PreviewLogger:
 
 PREVIEW_WIDTH = 1280
 PREVIEW_HEIGHT = 720
+TAILWIND_CDN_URL = "https://cdn.tailwindcss.com"
+DEFAULT_CHART_JS_URL = "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"
 MAX_TEMPLATE_PREVIEW_SLIDES = 50
 MAX_FONT_CHECK_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
 FONT_CHECK_UPLOAD_SIZE_ERROR = "File size must be less than 100MB."
@@ -381,6 +383,186 @@ def _font_css_family_aliases(font_css: str) -> str:
     return "\n".join(aliases)
 
 
+def _css_attribute_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _css_url_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "")
+
+
+def _font_face_css_for_declared_fonts(font_css: str) -> str:
+    if not font_css:
+        return ""
+
+    rules: List[str] = []
+    seen: Set[Tuple[str, str, int, str]] = set()
+    font_face_blocks = re.findall(
+        r"@font-face\s*{[^{}]*}",
+        font_css,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    for block in font_face_blocks:
+        family_match = re.search(
+            r"font-family\s*:\s*['\"]?([^;'\"}]+)['\"]?",
+            block,
+            flags=re.IGNORECASE,
+        )
+        src_match = re.search(
+            r"url\(\s*['\"]?([^)'\"\s]+)['\"]?\s*\)",
+            block,
+            flags=re.IGNORECASE,
+        )
+        if not family_match or not src_match:
+            continue
+
+        declared_family = family_match.group(1).strip()
+        source_url = src_match.group(1).strip()
+        resolved_path = resolve_app_path_to_filesystem(source_url)
+        if not declared_family or not resolved_path:
+            continue
+
+        font_detail = get_font_details(resolved_path)
+        if font_detail.error:
+            continue
+
+        variant = _font_detail_variant(font_detail, os.path.basename(resolved_path))
+        if variant == "unsupported":
+            variant = "regular"
+        font_weight = _font_weight_for_css(font_detail, variant)
+        font_style = _font_style_for_css(variant)
+        family_names = {
+            declared_family,
+            " ".join(declared_family.replace("_", " ").split()),
+            font_detail.family_name,
+            font_detail.full_name,
+            font_detail.postscript_name,
+        }
+        for family_name in sorted(name for name in family_names if name):
+            key = (family_name, source_url, font_weight, font_style)
+            if key in seen:
+                continue
+            seen.add(key)
+            rules.append(
+                "@font-face { "
+                f'font-family: "{_css_string(family_name)}"; '
+                f'src: url("{_css_url_value(source_url)}"); '
+                f"font-weight: {font_weight}; "
+                f"font-style: {font_style}; "
+                "font-display: swap; "
+                "}"
+            )
+
+    return "\n".join(rules)
+
+
+def _tailwind_fallback_css_for_slide_html(slide_html: str) -> str:
+    if not slide_html:
+        return ""
+
+    class_values = re.findall(
+        r"\bclass\s*=\s*(['\"])(.*?)\1",
+        slide_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    classes: Set[str] = set()
+    for _quote, class_value in class_values:
+        classes.update(token for token in class_value.split() if token)
+
+    static_rules = {
+        "absolute": "position:absolute;",
+        "relative": "position:relative;",
+        "inset-0": "inset:0;",
+        "overflow-hidden": "overflow:hidden;",
+        "overflow-visible": "overflow:visible;",
+        "flex": "display:flex;",
+        "flex-col": "flex-direction:column;",
+        "justify-center": "justify-content:center;",
+        "items-center": "align-items:center;",
+        "text-left": "text-align:left;",
+        "text-center": "text-align:center;",
+        "text-right": "text-align:right;",
+        "font-bold": "font-weight:700;",
+        "w-full": "width:100%;",
+        "h-full": "height:100%;",
+        "min-h-[1.2em]": "min-height:1.2em;",
+        "object-cover": "object-fit:cover;",
+        "pointer-events-none": "pointer-events:none;",
+    }
+    spacing_scale = {"5": "1.25rem"}
+
+    rules: List[str] = []
+    seen: Set[str] = set()
+
+    def append_rule(class_name: str, declarations: str) -> None:
+        if class_name in seen:
+            return
+        seen.add(class_name)
+        rules.append(
+            f'[class~="{_css_attribute_value(class_name)}"]{{{declarations}}}'
+        )
+
+    for class_name in sorted(classes):
+        if class_name in static_rules:
+            append_rule(class_name, static_rules[class_name])
+            continue
+
+        match = re.fullmatch(r"(left|top|right|bottom)-\[(.+)\]", class_name)
+        if match:
+            append_rule(class_name, f"{match.group(1)}:{match.group(2)};")
+            continue
+
+        match = re.fullmatch(r"([wh])-\[(.+)\]", class_name)
+        if match:
+            property_name = "width" if match.group(1) == "w" else "height"
+            append_rule(class_name, f"{property_name}:{match.group(2)};")
+            continue
+
+        match = re.fullmatch(r"mb-(\d+)", class_name)
+        if match and match.group(1) in spacing_scale:
+            append_rule(class_name, f"margin-bottom:{spacing_scale[match.group(1)]};")
+            continue
+
+        match = re.fullmatch(r"rotate-\[(.+)\]", class_name)
+        if match:
+            append_rule(class_name, f"transform:rotate({match.group(1)});")
+            continue
+
+        match = re.fullmatch(
+            r"bg-\[(#[0-9A-Fa-f]{3,8}|rgba?\([^\]]+\))\]",
+            class_name,
+        )
+        if match:
+            append_rule(class_name, f"background-color:{match.group(1)};")
+            continue
+
+        match = re.fullmatch(
+            r"text-\[(#[0-9A-Fa-f]{3,8}|rgba?\([^\]]+\))\]",
+            class_name,
+        )
+        if match:
+            append_rule(class_name, f"color:{match.group(1)};")
+            continue
+
+        match = re.fullmatch(r"text-\[([0-9.]+(?:px|rem|em|%)?)\]", class_name)
+        if match:
+            size = match.group(1)
+            if re.fullmatch(r"[0-9.]+", size):
+                size = f"{size}px"
+            append_rule(class_name, f"font-size:{size};")
+            continue
+
+        match = re.fullmatch(r"font-\[['\"](.+)['\"]\]", class_name)
+        if match:
+            family = match.group(1)
+            append_rule(
+                class_name,
+                f'font-family:"{_css_string(family)}", Arial, sans-serif;',
+            )
+
+    return "\n".join(rules)
+
+
 def _app_data_directory() -> str:
     app_data_dir = get_app_data_directory_env() or "/tmp/presenton"
     os.makedirs(app_data_dir, exist_ok=True)
@@ -401,6 +583,14 @@ def _get_template_preview_session_dir(session_id: uuid.UUID) -> str:
     return session_dir
 
 
+def _chart_js_url() -> str:
+    return (
+        os.getenv("NEXT_PUBLIC_CHART_JS_URL")
+        or os.getenv("CHART_JS_URL")
+        or DEFAULT_CHART_JS_URL
+    )
+
+
 def _build_slide_preview_html(
     slide_html: str,
     font_css: str,
@@ -414,7 +604,8 @@ def _build_slide_preview_html(
 <head>
   <meta charset="utf-8" />
   <base href="{fastapi_base}" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="{html.escape(TAILWIND_CDN_URL, quote=True)}"></script>
+  <script src="{html.escape(_chart_js_url(), quote=True)}"></script>
   {font_links}
   <style>
     html,
@@ -515,9 +706,16 @@ async def render_pptx_slides_to_images(
     )
 
     localized_slide_htmls = []
-    localized_font_css = _localize_preview_asset_urls(
-        "\n".join(css for css in (pptx_document.font_css, local_font_css) if css)
+    font_css = "\n".join(
+        css
+        for css in (
+            pptx_document.font_css,
+            _font_face_css_for_declared_fonts(pptx_document.font_css),
+            local_font_css,
+        )
+        if css
     )
+    localized_font_css = _localize_preview_asset_urls(font_css)
     localized_font_css = "\n".join(
         css
         for css in (
@@ -535,10 +733,15 @@ async def render_pptx_slides_to_images(
         font_links = "\n".join(
             link for link in (explicit_font_links, inferred_font_links) if link
         )
+        slide_fallback_css = _tailwind_fallback_css_for_slide_html(
+            localized_slide_html
+        )
         localized_slide_htmls.append(
             _build_slide_preview_html(
                 localized_slide_html,
-                localized_font_css,
+                "\n".join(
+                    css for css in (slide_fallback_css, localized_font_css) if css
+                ),
                 font_links=font_links,
                 width=width,
                 height=height,
