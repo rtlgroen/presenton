@@ -9,7 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { withHash } from "@/components/slide-editor/utils/color";
-import type { Font, TextRun } from "@/components/slide-editor/types";
+import type { Font, Marker, TextRun } from "@/components/slide-editor/types";
 import {
   type TemplateV2InlineEditBox,
   type TemplateV2InlineEditKind,
@@ -41,6 +41,7 @@ export function TemplateV2InlineEditor({
   box,
   draft,
   kind,
+  listMarker,
   runs,
   style,
   onChange,
@@ -51,6 +52,7 @@ export function TemplateV2InlineEditor({
   box: TemplateV2InlineEditBox;
   draft: string;
   kind: TemplateV2InlineEditKind;
+  listMarker?: Marker | null;
   runs?: TextRun[];
   style?: TemplateV2TextEditStyle;
   onChange: (draft: string) => void;
@@ -157,6 +159,7 @@ export function TemplateV2InlineEditor({
         <TiptapInlineTextEditor
           baseFont={baseTextFont}
           editorStyle={editorStyle}
+          listMarker={kind === "text-list" ? listMarker : null}
           runs={textEditorRuns}
           onBlurOutside={() => closeTextEditor(true)}
           onCommitShortcut={() => closeTextEditor(true)}

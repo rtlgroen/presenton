@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Palette, SlidersHorizontal, Type } from "lucide-react";
+import { Palette, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ColorField,
@@ -14,13 +14,9 @@ import {
   preventInvalidNumberInput,
   sanitizeNumericInput,
 } from "@/components/slide-editor/toolbar/numericInput";
-import { withHash } from "@/components/slide-editor/utils/color";
 
 type RawRecord = Record<string, unknown>;
-type InfographicPanelId =
-  | "infographic-colors"
-  | "infographic-range"
-  | "infographic-schema";
+type InfographicPanelId = "infographic-colors" | "infographic-range";
 
 const INFOGRAPHIC_TYPE_OPTIONS: Array<{
   label: string;
@@ -51,8 +47,6 @@ export function TemplateV2InfographicToolbarControls({
   const value = readNumber(element.value, minValue);
   const baseColor = readColor(element.base_color, "E5E7EB");
   const highlightColor = readColor(element.highlight_color, "2563EB");
-  const name = typeof element.name === "string" ? element.name : "";
-  const decorative = element.decorative === true;
 
   return (
     <>
@@ -134,42 +128,6 @@ export function TemplateV2InfographicToolbarControls({
           </Panel>
         ) : null}
       </div>
-
-      <div className="relative">
-        <ToolbarIconButton
-          title="Infographic details"
-          open={openPanel === "infographic-schema"}
-          onClick={() => onToggle("infographic-schema")}
-        >
-          <Type size={16} strokeWidth={1.8} aria-hidden />
-        </ToolbarIconButton>
-        {openPanel === "infographic-schema" ? (
-          <Panel className="left-auto right-0 w-[260px] translate-x-0 space-y-3 p-3">
-            <NameField
-              value={name}
-              onCommit={(nextName) => onChange({ name: nextName })}
-            />
-            <label className="flex items-center justify-between gap-3 text-xs text-[#4B5563]">
-              <span className="font-semibold">Decorative</span>
-              <input
-                type="checkbox"
-                aria-label="Decorative infographic"
-                checked={decorative}
-                onChange={(event) =>
-                  onChange({ decorative: event.target.checked })
-                }
-                className="h-4 w-4 accent-[#7C51F8]"
-              />
-            </label>
-          </Panel>
-        ) : null}
-      </div>
-
-      <span
-        aria-hidden
-        className="h-4 w-4 rounded-full border border-black/10"
-        style={{ backgroundColor: withHash(highlightColor) }}
-      />
     </>
   );
 }
@@ -205,50 +163,6 @@ function ToolbarIconButton({
     >
       {children}
     </button>
-  );
-}
-
-function NameField({
-  onCommit,
-  value,
-}: {
-  onCommit: (value: string) => void;
-  value: string;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    if (focused) return;
-    setDraft(value);
-  }, [focused, value]);
-
-  const commit = () => {
-    if (draft !== value) onCommit(draft);
-  };
-
-  return (
-    <label className="flex items-center justify-between gap-3 text-xs text-[#4B5563]">
-      <span className="font-semibold">Name</span>
-      <input
-        type="text"
-        aria-label="Infographic name"
-        value={draft}
-        onFocus={() => setFocused(true)}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          setFocused(false);
-          commit();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            commit();
-          }
-        }}
-        className="h-8 min-w-0 flex-1 rounded-md border border-[#EDEEEF] bg-white px-2 text-xs text-[#191919] outline-none focus:border-[#7C51F8]"
-      />
-    </label>
   );
 }
 

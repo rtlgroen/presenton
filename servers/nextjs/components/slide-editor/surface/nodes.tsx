@@ -24,6 +24,7 @@ import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-he
 import { textRunsContent } from "@/components/slide-editor/text/text-runs";
 import {
   displayText,
+  layoutTextListRenderItems,
   layoutRenderTextRuns,
   lineRenderHeight,
   lineStartX,
@@ -31,7 +32,7 @@ import {
   rawFont,
   rawRenderTextRuns,
   rawTextContent,
-  rawTextListRenderTextRuns,
+  textListVisualLocalBox,
   textVisualLocalBox,
   type RenderTextRun,
 } from "@/components/slide-editor/text/template-v2-text";
@@ -633,9 +634,7 @@ function constrainedWrappedTextVisualBox(
 
   const constrainedBox = { ...box, width };
   return type === "text-list"
-    ? textVisualLocalBox(element, constrainedBox, {
-        runs: rawTextListRenderTextRuns(element),
-      })
+    ? textListVisualLocalBox(element, constrainedBox)
     : textVisualLocalBox(element, constrainedBox);
 }
 
@@ -1053,11 +1052,10 @@ function RawElementVisual({
   }
   if (type === "text-list") {
     return (
-      <RawRichTextElement
+      <RawTextListElement
         element={element}
         width={width}
         height={height}
-        runs={rawTextListRenderTextRuns(element)}
         interactive={interactive}
       />
     );
@@ -1207,6 +1205,45 @@ function RawRichTextElement({
 
 function textFill(font: { color: string; opacity?: number | null }) {
   return colorWithOpacity(withHash(font.color), font.opacity ?? 1);
+}
+
+function RawTextListElement({
+  element,
+  width,
+  height,
+  interactive,
+}: {
+  element: RawElement;
+  width: number;
+  height: number;
+  interactive: boolean;
+}) {
+  const { tokens } = layoutTextListRenderItems(element, width, height);
+
+  return (
+    <Group listening={interactive}>
+      {tokens.map((token, tokenIndex) => (
+        <Text
+          key={`${tokenIndex}:${token.x}:${token.y}`}
+          x={token.x}
+          y={token.y}
+          height={token.height}
+          text={token.text}
+          fill={textFill(token.font)}
+          fontFamily={`${token.font.family}, Helvetica, sans-serif`}
+          fontSize={token.font.size}
+          fontStyle={`${token.font.bold ? "bold" : "normal"} ${token.font.italic ? "italic" : ""}`}
+          textDecoration={token.font.underline ? "underline" : ""}
+          verticalAlign="middle"
+          lineHeight={token.font.lineHeight}
+          letterSpacing={token.font.letterSpacing}
+          wrap="none"
+          {...shadowProps(element)}
+          listening={interactive}
+        />
+      ))}
+    </Group>
+  );
 }
 
 function RawImageElement({

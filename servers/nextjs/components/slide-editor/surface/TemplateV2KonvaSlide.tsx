@@ -35,6 +35,7 @@ import {
   setRawTextRunsContent,
 } from "@/components/slide-editor/text/template-v2-text";
 import type {
+  Marker,
   SlideElement,
   TextRun,
 } from "@/components/slide-editor/types";
@@ -89,6 +90,7 @@ import {
 } from "@/components/slide-editor/selection/toolbarTarget";
 import { updateComponentLayoutElement } from "@/components/slide-editor/layout/layoutResize";
 import {
+  componentLayerActionForShortcut,
   reorderComponentLayer,
   type ComponentLayerAction,
 } from "@/components/slide-editor/selection/layering";
@@ -204,6 +206,15 @@ function syncEditingScenePixelRatio(layer: Konva.Layer | null) {
   if (Math.abs(canvas.getPixelRatio() - pixelRatio) < 0.01) return;
   canvas.setPixelRatio(pixelRatio);
   layer.batchDraw();
+}
+
+function componentIndexForLayerShortcut(selection: Selection) {
+  if (!selection) return null;
+  if (selection.kind !== "component" && selection.kind !== "element") {
+    return null;
+  }
+  if (selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) return null;
+  return selection.componentIndex;
 }
 
 export {
@@ -1152,11 +1163,15 @@ function TemplateV2KonvaSlideComponent({
       } else if (type === "text-list") {
         const runs = wordWrappedTextRuns(rawTextListRunsForEditor(element));
         const style = rawTextStyle(element);
+        const marker = readString(element.marker);
+        const listMarker: Marker =
+          marker === "number" || marker === "none" ? marker : "bullet";
         startInlineEdit({
           kind: "text-list",
           selection: elementSelection,
           draft: textRunsContent(runs),
           runs,
+          listMarker,
           frame: autoSizeInlineTextFrame(frame, runs, style),
           style,
         });
@@ -1517,6 +1532,36 @@ function TemplateV2KonvaSlideComponent({
     },
     [reorderComponentLayerAtIndex, selection],
   );
+
+  useEffect(() => {
+    if (!isEditMode || typeof document === "undefined") return;
+
+    const handleLayerShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        !isSurfaceActive() ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+
+      const action = componentLayerActionForShortcut(event);
+      if (!action) return;
+
+      const componentIndex = componentIndexForLayerShortcut(selectionRef.current);
+      if (componentIndex == null) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      reorderComponentLayerAtIndex(componentIndex, action);
+    };
+
+    document.addEventListener("keydown", handleLayerShortcut, true);
+    return () =>
+      document.removeEventListener("keydown", handleLayerShortcut, true);
+  }, [isEditMode, isSurfaceActive, reorderComponentLayerAtIndex]);
 
   const targetComponentActions =
     useMemo<TemplateV2SelectionComponentActions | null>(() => {
@@ -2018,6 +2063,7 @@ function TemplateV2KonvaSlideComponent({
           key={keyForSelection(inlineEdit.selection)}
           draft={inlineEdit.draft}
           kind={inlineEdit.kind}
+          listMarker={inlineEdit.listMarker}
           box={inlineEditBox}
           runs={inlineEdit.runs}
           style={inlineEdit.style}

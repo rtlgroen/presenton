@@ -23,6 +23,11 @@ export type LaidToken = {
   width: number;
   height: number;
 };
+export type TextListRenderItem = {
+  marker: string;
+  markerFont: RenderTextFont;
+  runs: RenderTextRun[];
+};
 export type TemplateV2TextBox = {
   x: number;
   y: number;
@@ -366,6 +371,38 @@ export function rawTextListRenderTextRuns(
     }));
 }
 
+export function rawTextListRenderItems(
+  element: TemplateV2RawTextElement,
+): TextListRenderItem[] {
+  const baseFont = rawFont(element);
+  const fallbackFont = fontToSource(baseFont);
+  const items = readArray(element.items);
+
+  return items.map((item, index) => {
+    const itemRuns = renderMarkdownTextRuns(
+      normalizeStyledSourceRunBoundaries(
+        rawTextListItemSourceRuns(item, baseFont),
+      ),
+    );
+    const markerFont = fontFromRecord(
+      asRecord(itemRuns[0]?.font ?? fallbackFont),
+      baseFont,
+    );
+    const runs = itemRuns
+      .filter((run) => run.text)
+      .map((run) => ({
+        text: run.text,
+        font: fontFromRecord(asRecord(run.font), baseFont),
+      }));
+
+    return {
+      marker: textListMarkerPrefix(element.marker, index),
+      markerFont,
+      runs: runs.length > 0 ? runs : [{ text: " ", font: markerFont }],
+    };
+  });
+}
+
 export function rawTextListItemText(item: unknown) {
   if (typeof item === "string") return item;
   if (Array.isArray(item)) {
@@ -600,6 +637,38 @@ export function textVisualLocalBox(
   };
 }
 
+export function textListVisualLocalBox(
+  element: TemplateV2RawTextElement,
+  box: TemplateV2TextBox,
+): TemplateV2TextBox {
+  const { tokens, contentHeight } = layoutTextListRenderItems(
+    element,
+    box.width,
+    box.height,
+  );
+
+  if (tokens.length === 0) return box;
+
+  const left = Math.min(0, ...tokens.map((token) => token.x));
+  const top = Math.min(0, ...tokens.map((token) => token.y));
+  const right = Math.max(
+    box.width,
+    ...tokens.map((token) => token.x + token.width),
+  );
+  const bottom = Math.max(
+    box.height,
+    contentHeight,
+    ...tokens.map((token) => token.y + token.height),
+  );
+
+  return {
+    x: box.x + left,
+    y: box.y + top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top),
+  };
+}
+
 function measureRenderTextRunsHeight(
   runs: RenderTextRun[],
   width: number,
@@ -733,6 +802,127 @@ export function layoutRichText(
     y += line.height;
   }
   return { tokens: laid, contentHeight };
+}
+
+export function layoutTextListRenderItems(
+  element: TemplateV2RawTextElement,
+  width: number,
+  height: number,
+): { tokens: LaidToken[]; contentHeight: number } {
+  const font = rawFont(element);
+  const items = rawTextListRenderItems(element);
+  const textRuns = rawTextListRenderTextRuns(element);
+  const content = textRunsContent(textRuns);
+  const align = readString(asRecord(element.alignment)?.horizontal) ?? "left";
+  const verticalAlign =
+    readString(asRecord(element.alignment)?.vertical) ?? "top";
+  const textLineHeight = effectiveLineHeight({
+    text: displayText(content),
+    width,
+    fontSize: font.size,
+    lineHeight: font.lineHeight,
+    fallback: 1.15,
+    wrap: TEXT_RENDER_WRAP,
+  });
+
+  type PlannedLine = {
+    marker: RenderTextRun & { width: number } | null;
+    segments: Array<RenderTextRun & { width: number }>;
+    indentWidth: number;
+    height: number;
+    width: number;
+  };
+
+  const plannedLines: PlannedLine[] = [];
+  const sourceItems =
+    items.length > 0
+      ? items
+      : [{ marker: "", markerFont: font, runs: [{ text: " ", font }] }];
+
+  for (const item of sourceItems) {
+    const markerWidth = item.marker
+      ? measureRenderText(item.marker, item.markerFont)
+      : 0;
+    const contentWidth = Math.max(1, width - markerWidth);
+    const contentLines = layoutRenderTextRuns(
+      item.runs.length > 0 ? item.runs : [{ text: " ", font: item.markerFont }],
+      contentWidth,
+      TEXT_RENDER_WRAP,
+    );
+    const lines = contentLines.length > 0 ? contentLines : [[]];
+
+    lines.forEach((line, lineIndex) => {
+      const marker =
+        lineIndex === 0 && item.marker
+          ? { text: item.marker, font: item.markerFont, width: markerWidth }
+          : null;
+      const markerHeight = marker
+        ? marker.font.size * (marker.font.lineHeight ?? textLineHeight)
+        : 0;
+      const contentHeight =
+        line.length > 0 ? lineRenderHeight(line, textLineHeight) : 0;
+      const lineHeight = Math.max(
+        1,
+        markerHeight,
+        contentHeight,
+        font.size * textLineHeight,
+      );
+      const lineWidth =
+        markerWidth + line.reduce((sum, segment) => sum + segment.width, 0);
+      plannedLines.push({
+        marker,
+        segments: line,
+        indentWidth: markerWidth,
+        height: lineHeight,
+        width: lineWidth,
+      });
+    });
+  }
+
+  const contentHeight = plannedLines.reduce(
+    (sum, line) => sum + line.height,
+    0,
+  );
+  let y = verticalTextStartY(verticalAlign, height, contentHeight, false);
+  const tokens: LaidToken[] = [];
+
+  for (const line of plannedLines) {
+    const startX = lineStartX(align, width, line.width, false);
+    let x = startX;
+
+    if (line.marker) {
+      const markerHeight =
+        line.marker.font.size *
+        (line.marker.font.lineHeight ?? textLineHeight);
+      tokens.push({
+        text: line.marker.text,
+        font: line.marker.font,
+        x,
+        y: y + (line.height - markerHeight),
+        width: line.marker.width,
+        height: markerHeight,
+      });
+    }
+
+    x += line.indentWidth;
+    for (const segment of line.segments) {
+      const segmentHeight =
+        segment.font.size * (segment.font.lineHeight ?? textLineHeight);
+      tokens.push({
+        text: segment.text,
+        font: segment.font,
+        x,
+        y: y + (line.height - segmentHeight),
+        width: segment.width,
+        height: segmentHeight,
+      });
+      x += segment.width;
+    }
+
+    y += line.height;
+  }
+
+  return { tokens, contentHeight };
 }
 
 export function layoutRenderTextRuns(

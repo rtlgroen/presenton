@@ -16,7 +16,6 @@ import {
   rawFontRecordForEditor,
   rawTableCellText,
   rawTextContent,
-  rawTextListRenderTextRuns,
   rawTextListItemText,
   rawTextListRunsForEditor,
   rawTextRunsForEditor,
@@ -26,6 +25,7 @@ import {
   setRawTextListRunsContent,
   setRawTextRunsContent,
   normalizeRawTextMarkdownElement,
+  textListVisualLocalBox,
   textVisualLocalBox,
 } from "@/components/slide-editor/text/template-v2-text";
 import {
@@ -1284,9 +1284,7 @@ export function elementBox(element: RawElement): Box {
     return textVisualLocalBox(element, box);
   }
   if (type === "text-list") {
-    return textVisualLocalBox(element, box, {
-      runs: rawTextListRenderTextRuns(element),
-    });
+    return textListVisualLocalBox(element, box);
   }
   return box;
 }

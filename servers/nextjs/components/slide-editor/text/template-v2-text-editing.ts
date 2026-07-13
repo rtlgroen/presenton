@@ -1,4 +1,4 @@
-import type { TextRun } from "@/components/slide-editor/types";
+import type { Marker, TextRun } from "@/components/slide-editor/types";
 import type { TextSelectionRange } from "@/components/slide-editor/text/text-runs";
 import {
   fontFromRecord,
@@ -38,6 +38,7 @@ export type TemplateV2InlineEdit<Selection> =
       frame?: TemplateV2InlineEditBox | null;
       style?: TemplateV2TextEditStyle;
       runs?: TextRun[];
+      listMarker?: Marker | null;
       textSelectionRange?: TextSelectionRange | null;
     }
   | null;

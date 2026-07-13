@@ -4,10 +4,30 @@ export type ComponentLayerAction =
   | "bring-forward"
   | "bring-to-front";
 
+type ComponentLayerShortcutEvent = Pick<
+  KeyboardEvent,
+  "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey"
+>;
+
 export type ComponentLayerReorderResult<T> = {
   components: T[];
   componentIndex: number;
 };
+
+export function componentLayerActionForShortcut(
+  event: ComponentLayerShortcutEvent,
+): ComponentLayerAction | null {
+  if (!(event.metaKey || event.ctrlKey) || !event.altKey) return null;
+
+  switch (normalizedArrowKey(event.key)) {
+    case "ArrowUp":
+      return event.shiftKey ? "bring-to-front" : "bring-forward";
+    case "ArrowDown":
+      return event.shiftKey ? "send-to-back" : "send-backward";
+    default:
+      return null;
+  }
+}
 
 export function canApplyComponentLayerAction(
   componentIndex: number,
@@ -73,4 +93,10 @@ function moveArrayItem<T>(
   const [item] = next.splice(fromIndex, 1);
   next.splice(toIndex, 0, item);
   return next;
+}
+
+function normalizedArrowKey(key: string) {
+  if (key === "ArrowUp" || key === "Up") return "ArrowUp";
+  if (key === "ArrowDown" || key === "Down") return "ArrowDown";
+  return key;
 }

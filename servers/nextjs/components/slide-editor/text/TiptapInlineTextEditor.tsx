@@ -17,7 +17,7 @@ import {
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import type { Font, TextRun } from "@/components/slide-editor/types";
+import type { Font, Marker, TextRun } from "@/components/slide-editor/types";
 import {
   mergeAdjacentTextRuns,
   type TextSelectionRange,
@@ -91,6 +91,7 @@ export function TiptapInlineTextEditor({
   contentClassName,
   contentStyle,
   editorStyle,
+  listMarker,
   runs,
   onBlurOutside,
   onCommitShortcut,
@@ -103,6 +104,7 @@ export function TiptapInlineTextEditor({
   contentClassName?: string;
   contentStyle?: CSSProperties;
   editorStyle: CSSProperties;
+  listMarker?: Marker | null;
   runs: TextRun[];
   onBlurOutside: () => void;
   onCommitShortcut: () => void;
@@ -138,6 +140,7 @@ export function TiptapInlineTextEditor({
     initialContentSignature,
   );
   const stableBaseFontRef = useLatestRef(stableBaseFont);
+  const listMarkerRef = useLatestRef(listMarker ?? null);
   const content = useMemo(
     () => textRunsToTiptapContent(runs, stableBaseFont),
     [runs, stableBaseFont],
@@ -213,7 +216,7 @@ export function TiptapInlineTextEditor({
       handleDOMEvents: {
         beforeinput: (view, event) => {
           if (!(event instanceof InputEvent)) return false;
-          if (!applyBeforeInput(view, event)) return false;
+          if (!applyBeforeInput(view, event, listMarkerRef.current)) return false;
           event.preventDefault();
           event.stopPropagation();
           return true;
@@ -226,7 +229,7 @@ export function TiptapInlineTextEditor({
           event.stopPropagation();
           return false;
         },
-        keydown: (_view, event) => {
+        keydown: (view, event) => {
           event.stopPropagation();
           if (event.key === "Escape") {
             event.preventDefault();
@@ -238,6 +241,10 @@ export function TiptapInlineTextEditor({
             flushPendingRuns();
             callbacksRef.current.onCommitShortcut();
             return true;
+          }
+          if (event.key === "Enter" && listMarkerRef.current != null) {
+            event.preventDefault();
+            return applyLineBreakBeforeInput(view, listMarkerRef.current);
           }
           return false;
         },
@@ -391,7 +398,11 @@ function useLatestRef<T>(value: T) {
   return ref;
 }
 
-function applyBeforeInput(view: Editor["view"], event: InputEvent) {
+function applyBeforeInput(
+  view: Editor["view"],
+  event: InputEvent,
+  listMarker?: Marker | null,
+) {
   if (event.isComposing || event.inputType === "insertCompositionText") {
     return false;
   }
@@ -412,16 +423,52 @@ function applyBeforeInput(view: Editor["view"], event: InputEvent) {
     event.inputType === "insertLineBreak" ||
     event.inputType === "insertParagraph"
   ) {
-    const hardBreak = view.state.schema.nodes.hardBreak;
-    if (!hardBreak) return false;
-    view.dispatch(
-      view.state.tr
-        .replaceSelectionWith(hardBreak.create())
-        .scrollIntoView(),
-    );
-    return true;
+    return applyLineBreakBeforeInput(view, listMarker);
   }
   return false;
+}
+
+function applyLineBreakBeforeInput(
+  view: Editor["view"],
+  listMarker?: Marker | null,
+) {
+  const hardBreak = view.state.schema.nodes.hardBreak;
+  if (!hardBreak) return false;
+
+  const markerPrefix = nextListMarkerPrefix(view, listMarker);
+  const transaction = view.state.tr
+    .replaceSelectionWith(hardBreak.create())
+    .scrollIntoView();
+
+  if (markerPrefix) {
+    transaction.insertText(
+      markerPrefix,
+      transaction.selection.from,
+      transaction.selection.to,
+    );
+  }
+
+  view.dispatch(transaction);
+  return true;
+}
+
+function nextListMarkerPrefix(
+  view: Editor["view"],
+  listMarker?: Marker | null,
+) {
+  if (!listMarker || listMarker === "none") return "";
+  if (listMarker === "bullet") return "• ";
+
+  const textBefore = view.state.doc.textBetween(
+    0,
+    view.state.selection.from,
+    "\n",
+    "\n",
+  );
+  const previousItemCount = textBefore
+    .split("\n")
+    .filter((line) => line.trim().length > 0).length;
+  return `${previousItemCount + 1}. `;
 }
 
 function isManualDeleteInput(inputType: string) {
