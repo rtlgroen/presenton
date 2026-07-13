@@ -3282,13 +3282,11 @@ class PresentationChatMemoryLayer:
         if not isinstance(elements, list):
             return
 
-        for element in elements:
-            if isinstance(element, dict):
-                cls._apply_template_v2_element_content(
-                    element,
-                    content,
-                    theme=theme,
-                )
+        cls._apply_template_v2_elements_content(
+            elements,
+            content,
+            theme=theme,
+        )
 
     @classmethod
     def _apply_template_v2_element_content(
@@ -3298,6 +3296,7 @@ class PresentationChatMemoryLayer:
         *,
         theme: dict[str, Any] | None = None,
         direct_value: bool = False,
+        preferred_content_keys: list[str] | None = None,
     ) -> None:
         content_values = content if isinstance(content, dict) else {}
         element_type = element.get("type")
@@ -3308,6 +3307,7 @@ class PresentationChatMemoryLayer:
             has_value, value = cls._template_v2_content_value(
                 content_values,
                 name,
+                preferred_keys=preferred_content_keys,
             )
 
         if (
@@ -3364,23 +3364,74 @@ class PresentationChatMemoryLayer:
                 element["children"] = next_children
                 return
 
-            for child_element in children:
-                if isinstance(child_element, dict):
-                    cls._apply_template_v2_element_content(
-                        child_element,
-                        nested_content,
-                        theme=theme,
-                        direct_value=nested_direct_value,
-                    )
+            cls._apply_template_v2_elements_content(
+                children,
+                nested_content,
+                theme=theme,
+                direct_value=nested_direct_value,
+            )
+
+    @classmethod
+    def _apply_template_v2_elements_content(
+        cls,
+        elements: list[Any],
+        content: Any,
+        *,
+        theme: dict[str, Any] | None = None,
+        direct_value: bool = False,
+    ) -> None:
+        content_values = content if isinstance(content, dict) else {}
+        name_occurrences: dict[str, int] = {}
+        for element in elements:
+            if not isinstance(element, dict):
+                continue
+            preferred_keys = cls._template_v2_repeated_sibling_content_keys(
+                element,
+                content_values,
+                name_occurrences,
+            )
+            cls._apply_template_v2_element_content(
+                element,
+                content,
+                theme=theme,
+                direct_value=direct_value,
+                preferred_content_keys=preferred_keys,
+            )
+
+    @staticmethod
+    def _template_v2_repeated_sibling_content_keys(
+        element: dict[str, Any],
+        content: dict[str, Any],
+        name_occurrences: dict[str, int],
+    ) -> list[str] | None:
+        name = element.get("name")
+        if not isinstance(name, str) or not name:
+            return None
+
+        occurrence_index = name_occurrences.get(name, 0)
+        name_occurrences[name] = occurrence_index + 1
+        if occurrence_index == 0:
+            return None
+
+        suffixed_key = f"{name}_{occurrence_index + 1}"
+        return [suffixed_key] if suffixed_key in content else None
 
     @staticmethod
     def _template_v2_content_value(
         content: dict[str, Any],
         name: str,
+        *,
+        preferred_keys: list[str] | None = None,
     ) -> tuple[bool, Any]:
-        for candidate in PresentationChatMemoryLayer._template_v2_content_name_candidates(
-            name
-        ):
+        candidates: list[str] = []
+        for candidate in [
+            *(preferred_keys or []),
+            *PresentationChatMemoryLayer._template_v2_content_name_candidates(name),
+        ]:
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+
+        for candidate in candidates:
             if candidate in content:
                 return True, content[candidate]
         return False, None

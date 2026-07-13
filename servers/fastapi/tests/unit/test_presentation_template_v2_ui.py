@@ -2,6 +2,78 @@ from api.v1.ppt.endpoints import presentation as presentation_endpoint
 from services.chat.memory_layer import PresentationChatMemoryLayer
 
 
+def _duplicate_named_groups_ui():
+    def block_group():
+        return {
+            "type": "group",
+            "name": "numbered_text_block",
+            "children": [
+                {
+                    "type": "text",
+                    "decorative": False,
+                    "name": "block_number_text",
+                    "runs": [{"text": "1"}],
+                },
+                {
+                    "type": "text",
+                    "decorative": False,
+                    "name": "block_heading_text",
+                    "runs": [{"text": "Old heading"}],
+                },
+                {
+                    "type": "text",
+                    "decorative": False,
+                    "name": "block_body_text",
+                    "runs": [{"text": "Old body"}],
+                },
+            ],
+        }
+
+    return {
+        "id": "two_column_numbered_layout",
+        "components": [
+            {
+                "id": "numbered_content_area",
+                "elements": [block_group() for _ in range(4)],
+            }
+        ],
+    }
+
+
+def _duplicate_named_groups_content():
+    return {
+        "numbered_content_area": {
+            "numbered_text_block": {
+                "block_number_text": "1",
+                "block_heading_text": "Core Favorites",
+                "block_body_text": "Keep fan favorites available.",
+            },
+            "numbered_text_block_2": {
+                "block_number_text": "2",
+                "block_heading_text": "Limited-Time Items",
+                "block_body_text": "Rotate limited offers.",
+            },
+            "numbered_text_block_3": {
+                "block_number_text": "3",
+                "block_heading_text": "Customization",
+                "block_body_text": "Let guests adjust ingredients.",
+            },
+            "numbered_text_block_4": {
+                "block_number_text": "4",
+                "block_heading_text": "Occasion Fit",
+                "block_body_text": "Use combos and shareables.",
+            },
+        }
+    }
+
+
+def _duplicate_named_group_headings(ui):
+    return [
+        group["children"][1]["runs"][0]["text"]
+        for group in ui["components"][0]["elements"]
+    ]
+
+
 def test_apply_template_v2_content_to_ui_uses_schema_content_keys():
     ui = {
         "id": "layout-1",
@@ -184,6 +256,40 @@ def test_apply_template_v2_content_to_ui_uses_schema_content_keys():
     assert "text" not in hydrated["components"][1]["elements"][0]
     assert "text" not in hydrated["components"][2]["elements"][0]
     assert ui["components"][0]["elements"][0]["runs"][0]["text"] == "Old headline"
+
+
+def test_apply_template_v2_content_to_ui_uses_suffixed_content_for_duplicate_group_names():
+    hydrated = presentation_endpoint._apply_template_v2_content_to_ui(
+        _duplicate_named_groups_ui(),
+        _duplicate_named_groups_content(),
+    )
+
+    assert _duplicate_named_group_headings(hydrated) == [
+        "Core Favorites",
+        "Limited-Time Items",
+        "Customization",
+        "Occasion Fit",
+    ]
+    assert [
+        group["children"][0]["runs"][0]["text"]
+        for group in hydrated["components"][0]["elements"]
+    ] == ["1", "2", "3", "4"]
+
+
+def test_chat_template_v2_content_uses_suffixed_content_for_duplicate_group_names():
+    ui = _duplicate_named_groups_ui()
+
+    PresentationChatMemoryLayer._apply_template_v2_content_to_ui(
+        ui,
+        _duplicate_named_groups_content(),
+    )
+
+    assert _duplicate_named_group_headings(ui) == [
+        "Core Favorites",
+        "Limited-Time Items",
+        "Customization",
+        "Occasion Fit",
+    ]
 
 
 def test_apply_template_v2_content_to_ui_handles_empty_text_runs():

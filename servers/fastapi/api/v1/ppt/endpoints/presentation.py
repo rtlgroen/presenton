@@ -670,10 +670,10 @@ def _apply_template_v2_content_to_ui(
 
         elements = component.get("elements")
         if isinstance(elements, list):
-            component["elements"] = [
-                _apply_template_v2_content_to_element(element, component_content)
-                for element in elements
-            ]
+            component["elements"] = _apply_template_v2_content_to_element_list(
+                elements,
+                component_content,
+            )
 
     return hydrated_ui
 
@@ -683,6 +683,7 @@ def _apply_template_v2_content_to_element(
     content: Any,
     *,
     direct_value: bool = False,
+    preferred_content_keys: list[str] | None = None,
 ) -> Any:
     if not isinstance(element, dict):
         return element
@@ -693,7 +694,11 @@ def _apply_template_v2_content_to_element(
     has_value = False
     value = None
     if name:
-        has_value, value = _template_v2_content_value(content_values, name)
+        has_value, value = _template_v2_content_value(
+            content_values,
+            name,
+            preferred_keys=preferred_content_keys,
+        )
 
     if (
         element.get("decorative") is False
@@ -747,8 +752,18 @@ def _apply_template_v2_content_to_element(
 def _template_v2_content_value(
     content: dict[str, Any],
     name: str,
+    *,
+    preferred_keys: list[str] | None = None,
 ) -> tuple[bool, Any]:
-    for candidate in _template_v2_content_name_candidates(name):
+    candidates: list[str] = []
+    for candidate in [
+        *(preferred_keys or []),
+        *_template_v2_content_name_candidates(name),
+    ]:
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    for candidate in candidates:
         if candidate in content:
             return True, content[candidate]
     return False, None
@@ -786,14 +801,58 @@ def _apply_template_v2_content_to_children(
             for index, item in enumerate(value)
         ]
 
-    return [
-        _apply_template_v2_content_to_element(
-            child,
-            content,
-            direct_value=direct_value,
+    return _apply_template_v2_content_to_element_list(
+        children,
+        content,
+        direct_value=direct_value,
+    )
+
+
+def _apply_template_v2_content_to_element_list(
+    elements: list[Any],
+    content: Any,
+    *,
+    direct_value: bool = False,
+) -> list[Any]:
+    content_values = content if isinstance(content, dict) else {}
+    name_occurrences: dict[str, int] = {}
+    hydrated_elements: list[Any] = []
+    for element in elements:
+        preferred_keys = _template_v2_repeated_sibling_content_keys(
+            element,
+            content_values,
+            name_occurrences,
         )
-        for child in children
-    ]
+        hydrated_elements.append(
+            _apply_template_v2_content_to_element(
+                element,
+                content,
+                direct_value=direct_value,
+                preferred_content_keys=preferred_keys,
+            )
+        )
+    return hydrated_elements
+
+
+def _template_v2_repeated_sibling_content_keys(
+    element: Any,
+    content: dict[str, Any],
+    name_occurrences: dict[str, int],
+) -> list[str] | None:
+    if not isinstance(element, dict):
+        return None
+
+    name = element.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+
+    occurrence_index = name_occurrences.get(name, 0)
+    name_occurrences[name] = occurrence_index + 1
+    if occurrence_index == 0:
+        return None
+
+    suffixed_key = f"{name}_{occurrence_index + 1}"
+    return [suffixed_key] if suffixed_key in content else None
 
 
 def _apply_template_v2_content_value(element: dict[str, Any], value: Any) -> dict[str, Any]:
