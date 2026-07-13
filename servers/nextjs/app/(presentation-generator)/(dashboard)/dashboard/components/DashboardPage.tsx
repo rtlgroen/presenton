@@ -288,25 +288,25 @@ const DashboardPage: React.FC = () => {
           </button>
         </div>
         {!isLoading && sortedLegacyPresentations.length > 0 && (
-          <details className="group/archive mb-6 overflow-hidden rounded-xl border border-amber-200 bg-amber-50/70">
-            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 marker:content-none sm:px-5 [&::-webkit-details-marker]:hidden">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+          <details className="group/archive mb-6 overflow-hidden rounded-[12px] border border-[#EDEEEF] bg-[#FBFBFD] shadow-[0_12px_28px_rgba(16,19,35,0.04)]">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 marker:content-none transition-colors hover:bg-[#F7F6F9] sm:px-5 [&::-webkit-details-marker]:hidden">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D9D6FE] bg-[#F4F3FF] text-[#7A5AF8]">
                 <Archive className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-amber-950">
+                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#191919]">
                   Unsupported presentations
-                  <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-xs text-amber-900">
+                  <span className="rounded-full border border-[#D9D6FE] bg-white px-2 py-0.5 text-xs font-medium text-[#7A5AF8]">
                     {sortedLegacyPresentations.length}
                   </span>
                 </span>
-                <span className="mt-0.5 block text-xs leading-5 text-amber-800">
+                <span className="mt-0.5 block text-xs leading-5 text-[#666666]">
                   These decks were created in an older version and cannot be opened here. Downgrade to a compatible Presenton version if you need to access them.
                 </span>
               </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-amber-700 transition-transform group-open/archive:rotate-180" aria-hidden="true" />
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#666666] transition-transform group-open/archive:rotate-180" aria-hidden="true" />
             </summary>
-            <div className="border-t border-amber-200 bg-white/70 p-4 sm:p-5">
+            <div className="border-t border-[#EDEEEF] bg-white p-4 sm:p-5">
               <PresentationGrid
                 presentations={sortedLegacyPresentations}
                 onPresentationDeleted={removePresentation}

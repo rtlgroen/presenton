@@ -158,7 +158,7 @@ export const PresentationCard = ({
       title={isUnsupported ? "Unsupported in this version of Presenton" : undefined}
       className={`bg-[#F8FBFB] font-syne shadow-none sm:shadow-none presentation-card rounded-[12px] p-0 group transition-all duration-500 slide-theme overflow-hidden flex flex-col ${
         isUnsupported
-          ? "cursor-not-allowed border-amber-200"
+          ? "cursor-not-allowed border-[#EDEEEF]"
           : "cursor-pointer hover:shadow-md"
       }`}
     >
@@ -171,21 +171,17 @@ export const PresentationCard = ({
         </p> */}
 
         <img src="/card_bg.svg" alt="" className="absolute top-0 left-0 w-full h-full object-cover" />
-        {isUnsupported && (
-          <span className="absolute left-3 top-3 z-50 inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 shadow-sm">
-            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-            Unsupported
-          </span>
-        )}
         <div className={isUnsupported
-          ? "relative mx-5 mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-amber-200 bg-amber-50"
+          ? "relative mx-5 mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-[#EDEEEF] bg-white/90"
           : "scale-[0.75] mt-4 border border-gray-300 rounded-lg overflow-hidden"
         }>
 
           {isUnsupported ? (
-            <div className="flex flex-col items-center gap-2 px-5 text-center text-amber-800">
-              <Archive className="h-8 w-8" aria-hidden="true" />
-              <p className="text-xs font-medium">Preview unavailable in this version</p>
+            <div className="flex flex-col items-center gap-2 px-5 text-center text-[#666666]">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F3FF] text-[#7A5AF8]">
+                <Archive className="h-[18px] w-[18px]" aria-hidden="true" />
+              </span>
+              <p className="text-xs font-medium">Preview unavailable</p>
             </div>
           ) : useTemplateV2HtmlPreview ? (
             <TemplateV2HtmlSlidePreview
@@ -208,9 +204,6 @@ export const PresentationCard = ({
                 <MarkdownRenderer content={title} className="text-sm mb-0  font-syne text-[#191919] font-semibold  overflow-hidden line-clamp-1" />
               </div>
               <p className="text-[#808080] text-sm font-syne">
-                {isUnsupported && (
-                  <span className="font-medium text-amber-700">Unsupported · </span>
-                )}
                 {new Date(presentation?.created_at).toLocaleDateString()}
               </p>
 
