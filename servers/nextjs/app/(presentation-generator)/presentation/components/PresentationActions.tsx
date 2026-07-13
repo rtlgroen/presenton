@@ -24,6 +24,7 @@ import {
   Table2,
   Type,
   ListMinus,
+  Search,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -953,7 +954,7 @@ const BlocksPanel = ({
           }}
           aria-label="Create block"
         >
-          <Send
+          <Search
             className="h-[clamp(12px,0.9vw,14px)] w-[clamp(12px,0.9vw,14px)] text-[#101323]"
             strokeWidth={1.9}
           />
