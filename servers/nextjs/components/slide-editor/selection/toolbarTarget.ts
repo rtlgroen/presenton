@@ -5,6 +5,7 @@ import {
 } from "@/components/slide-editor/layout/LayoutToolbar";
 import {
   isTemplateV2InfographicToolbarElement,
+  type TemplateV2InfographicToolbarElement,
 } from "@/components/slide-editor/layout/InfographicToolbarControls";
 import { findFirstComponentLayoutElement } from "@/components/slide-editor/layout/layoutToolbarTarget";
 import { rawChartToEditorChart } from "@/components/slide-editor/model/chart-model";
@@ -331,7 +332,10 @@ function findFirstComponentTableElement(
 function findFirstComponentInfographicElement(
   elements: unknown[],
   parentPath: number[] = [],
-): { element: RawRecord; elementPath: number[] } | null {
+): {
+  element: TemplateV2InfographicToolbarElement;
+  elementPath: number[];
+} | null {
   for (let index = 0; index < elements.length; index += 1) {
     const element = asRecord(elements[index]);
     if (!element) continue;
