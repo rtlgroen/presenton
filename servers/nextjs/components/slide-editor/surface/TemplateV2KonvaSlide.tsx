@@ -416,6 +416,9 @@ function TemplateV2KonvaSlideComponent({
       uiDraft,
     ],
   );
+  const horizontalResizeOnly =
+    editorToolbarTarget?.element.type === "line" ||
+    readString(selectedElement?.type) === "line";
   const toolbarElement = useMemo(
     () => {
       if (!selectedElement || !selectedBox) return null;
@@ -1919,7 +1922,7 @@ function TemplateV2KonvaSlideComponent({
               selectedKey={selectedKey}
               selectedKeys={selectedKeys}
               selectionKind={selection?.kind ?? null}
-              horizontalResizeOnly={editorToolbarTarget?.element.type === "line"}
+              horizontalResizeOnly={horizontalResizeOnly}
               suppressSelectedOutline={Boolean(
                 selectedTableCell ||
                   inlineEdit ||

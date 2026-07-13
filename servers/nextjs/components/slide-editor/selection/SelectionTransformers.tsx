@@ -83,12 +83,21 @@ function drawRotationHandle(context: Konva.Context, shape: Konva.Shape) {
 function preventInvertedTransform(
   oldBox: TransformerBox,
   newBox: TransformerBox,
+  allowThinBox = false,
 ) {
+  const minWidth = allowThinBox ? 1 : MIN_TRANSFORM_BOX_SIZE;
+  const minHeight = allowThinBox ? 1 : MIN_TRANSFORM_BOX_SIZE;
+  const hasMinimumVisibleSize = allowThinBox
+    ? Math.max(Math.abs(newBox.width), Math.abs(newBox.height)) >=
+      MIN_TRANSFORM_BOX_SIZE
+    : true;
+
   if (
     !Number.isFinite(newBox.width) ||
     !Number.isFinite(newBox.height) ||
-    newBox.width < MIN_TRANSFORM_BOX_SIZE ||
-    newBox.height < MIN_TRANSFORM_BOX_SIZE
+    Math.abs(newBox.width) < minWidth ||
+    Math.abs(newBox.height) < minHeight ||
+    !hasMinimumVisibleSize
   ) {
     return oldBox;
   }
@@ -292,14 +301,23 @@ export function TemplateV2SelectionTransformers({
 }: TemplateV2SelectionTransformersProps) {
   const selectedTransformerRef = useRef<Konva.Transformer | null>(null);
   const contextTransformerRef = useRef<Konva.Transformer | null>(null);
+  const isLineElementSelection =
+    selectionKind === "element" && horizontalResizeOnly;
+  const canTransformSelection =
+    selectionKind === "component" || isLineElementSelection;
   const boundAnchorDrag = useCallback(
     (_oldPoint: TransformerPoint, newPoint: TransformerPoint) =>
       preventInvertedAnchorDrag(selectedTransformerRef.current, newPoint),
     [],
   );
+  const boundTransformBox = useCallback(
+    (oldBox: TransformerBox, newBox: TransformerBox) =>
+      preventInvertedTransform(oldBox, newBox, horizontalResizeOnly),
+    [horizontalResizeOnly],
+  );
   const isMultiComponentSelection = selectionKind === "multi-component";
   const selectedNode =
-    selectionKind === "component" && selectedKey
+    canTransformSelection && selectedKey
       ? nodeRefs.current?.get(selectedKey)
       : null;
   const bottomCenterRotationAnchorAngle =
@@ -337,7 +355,7 @@ export function TemplateV2SelectionTransformers({
     }
 
     const selectedRotationNode =
-      selectionKind === "component" && selectedNodes.length === 1
+      canTransformSelection && selectedNodes.length === 1
         ? selectedNodes[0]
         : null;
     const refreshBottomCenterRotationAnchor = () => {
@@ -387,6 +405,7 @@ export function TemplateV2SelectionTransformers({
     selectedKey,
     selectedKeys,
     selectionKind,
+    canTransformSelection,
     suppressSelectedOutline,
   ]);
 
@@ -419,19 +438,19 @@ export function TemplateV2SelectionTransformers({
         borderEnabled
         borderStroke={isMultiComponentSelection ? "#D9D9DE" : "#7A5AF8"}
         borderStrokeWidth={1}
-        boundBoxFunc={preventInvertedTransform}
+        boundBoxFunc={boundTransformBox}
         enabledAnchors={
-          selectionKind === "component"
+          canTransformSelection
             ? horizontalResizeOnly
               ? HORIZONTAL_ONLY_ANCHORS
               : undefined
             : []
         }
         flipEnabled={false}
-        resizeEnabled={selectionKind === "component"}
+        resizeEnabled={canTransformSelection}
         rotateAnchorAngle={bottomCenterRotationAnchorAngle}
         rotateAnchorOffset={BOTTOM_CENTER_ROTATION_ANCHOR_OFFSET}
-        rotateEnabled={selectionKind === "component"}
+        rotateEnabled={canTransformSelection}
         rotateLineVisible={false}
       />
       {multiSelectionMemberKeys.map((key) => (
