@@ -3,6 +3,9 @@ import {
   isTemplateV2LayoutElement,
   type TemplateV2ToolbarElement,
 } from "@/components/slide-editor/layout/LayoutToolbar";
+import {
+  isTemplateV2InfographicToolbarElement,
+} from "@/components/slide-editor/layout/InfographicToolbarControls";
 import { findFirstComponentLayoutElement } from "@/components/slide-editor/layout/layoutToolbarTarget";
 import { rawChartToEditorChart } from "@/components/slide-editor/model/chart-model";
 import { rawElementForEditorToolbar } from "@/components/slide-editor/model/model";
@@ -65,7 +68,8 @@ export function getTemplateV2SelectionToolbarTarget({
     selectedElement &&
     selectedBox &&
     (isTemplateV2LayoutElement(selectedElement) ||
-      isTemplateV2GroupElement(selectedElement))
+      isTemplateV2GroupElement(selectedElement) ||
+      isTemplateV2InfographicToolbarElement(selectedElement))
   ) {
     return {
       selection,
@@ -76,19 +80,20 @@ export function getTemplateV2SelectionToolbarTarget({
 
   if (selection?.kind !== "component" || !selectedComponent) return null;
 
-  const layoutRoot = findFirstComponentLayoutElement(
-    readArray(selectedComponent.elements),
-  );
-  if (!layoutRoot) return null;
+  const componentElements = readArray(selectedComponent.elements);
+  const toolbarRoot =
+    findFirstComponentLayoutElement(componentElements) ??
+    findFirstComponentInfographicElement(componentElements);
+  if (!toolbarRoot) return null;
 
   const elementSelection: TemplateV2ToolbarElementSelection = {
     kind: "element",
     componentIndex: selection.componentIndex,
-    elementPath: layoutRoot.elementPath,
+    elementPath: toolbarRoot.elementPath,
   };
   const box = absoluteBoxForSelection(elementSelection);
   return box
-    ? { selection: elementSelection, element: layoutRoot.element, box }
+    ? { selection: elementSelection, element: toolbarRoot.element, box }
     : null;
 }
 
@@ -315,6 +320,26 @@ function findFirstComponentTableElement(
       return { element, elementPath };
     }
     const nested = findFirstComponentTableElement(
+      childElements(element),
+      elementPath,
+    );
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function findFirstComponentInfographicElement(
+  elements: unknown[],
+  parentPath: number[] = [],
+): { element: RawRecord; elementPath: number[] } | null {
+  for (let index = 0; index < elements.length; index += 1) {
+    const element = asRecord(elements[index]);
+    if (!element) continue;
+    const elementPath = [...parentPath, index];
+    if (isTemplateV2InfographicToolbarElement(element)) {
+      return { element, elementPath };
+    }
+    const nested = findFirstComponentInfographicElement(
       childElements(element),
       elementPath,
     );

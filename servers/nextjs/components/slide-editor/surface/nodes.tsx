@@ -339,18 +339,16 @@ function componentFromNodeTransform(
 }
 
 function syncComponentNodeBox(node: Konva.Group, box: Box) {
-  node.position({
+  node.setAttrs({
     x: box.x + box.width / 2,
     y: box.y + box.height / 2,
+    width: box.width,
+    height: box.height,
+    offsetX: box.width / 2,
+    offsetY: box.height / 2,
+    scaleX: 1,
+    scaleY: 1,
   });
-  node.width(box.width);
-  node.height(box.height);
-  node.offsetX(box.width / 2);
-  node.offsetY(box.height / 2);
-  node.scaleX(1);
-  node.scaleY(1);
-  componentTransformerForNode(node)?.forceUpdate();
-  node.getLayer()?.batchDraw();
 }
 
 function componentFromSideNodeTransform(
@@ -363,11 +361,6 @@ function componentFromSideNodeTransform(
   const minimumSize = minimumComponentSizeForElementBoundsResize(component);
   const transformedWidth = Math.max(1, node.width() * node.scaleX());
   const transformedHeight = Math.max(1, node.height() * node.scaleY());
-  const transformedPosition = positionFromNodeInParent(node, STAGE_BOX, {
-    ...box,
-    width: transformedWidth,
-    height: transformedHeight,
-  });
   let x = sourceBox.x;
   let y = sourceBox.y;
   let width = sourceBox.width;
@@ -376,7 +369,7 @@ function componentFromSideNodeTransform(
   if (anchor === "middle-left") {
     const right = sourceBox.x + sourceBox.width;
     width = clamp(
-      right - transformedPosition.x,
+      transformedWidth,
       minimumSize.width,
       Math.max(minimumSize.width, right),
     );
@@ -384,7 +377,7 @@ function componentFromSideNodeTransform(
   } else if (anchor === "top-center") {
     const bottom = sourceBox.y + sourceBox.height;
     height = clamp(
-      bottom - transformedPosition.y,
+      transformedHeight,
       minimumSize.height,
       Math.max(minimumSize.height, bottom),
     );
@@ -538,13 +531,14 @@ export function RawComponentNode({
         if (!isComponentSideResizeAnchor(anchor)) return;
         if (!hasTransformScale(node)) return;
         const current = transformPreviewRef.current ?? component;
+        const source = transformSourceRef.current ?? component;
         const next = isTopOrLeftSideResizeAnchor(anchor)
           ? componentFromSideNodeTransform(
-              current,
+              source,
               node,
               anchor,
               transformSourceBoxRef.current ??
-                componentBox(transformSourceRef.current ?? component),
+                componentBox(source),
             )
           : componentFromNodeTransform(current, node, anchor);
         transformPreviewRef.current = next;
@@ -565,13 +559,14 @@ export function RawComponentNode({
         if (isComponentSideResizeAnchor(sideAnchor)) {
           if (hasTransformScale(node)) {
             const current = transformPreviewRef.current ?? component;
+            const source = transformSourceRef.current ?? component;
             next = isTopOrLeftSideResizeAnchor(sideAnchor)
               ? componentFromSideNodeTransform(
-                  current,
+                  source,
                   node,
                   sideAnchor,
                   transformSourceBoxRef.current ??
-                    componentBox(transformSourceRef.current ?? component),
+                    componentBox(source),
                 )
               : componentFromNodeTransform(current, node, sideAnchor);
           } else {

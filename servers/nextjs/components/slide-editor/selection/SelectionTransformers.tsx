@@ -104,6 +104,26 @@ function preventInvertedTransform(
   return newBox;
 }
 
+function pinFixedSideTransformBox(
+  anchor: string | null | undefined,
+  oldBox: TransformerBox,
+  newBox: TransformerBox,
+) {
+  if (anchor === "middle-left") {
+    return {
+      ...newBox,
+      x: oldBox.x + oldBox.width - newBox.width,
+    };
+  }
+  if (anchor === "top-center") {
+    return {
+      ...newBox,
+      y: oldBox.y + oldBox.height - newBox.height,
+    };
+  }
+  return newBox;
+}
+
 function preventInvertedAnchorDrag(
   transformer: Konva.Transformer | null,
   newPoint: TransformerPoint,
@@ -311,8 +331,19 @@ export function TemplateV2SelectionTransformers({
     [],
   );
   const boundTransformBox = useCallback(
-    (oldBox: TransformerBox, newBox: TransformerBox) =>
-      preventInvertedTransform(oldBox, newBox, horizontalResizeOnly),
+    (oldBox: TransformerBox, newBox: TransformerBox) => {
+      const boundedBox = preventInvertedTransform(
+        oldBox,
+        newBox,
+        horizontalResizeOnly,
+      );
+      if (boundedBox === oldBox) return oldBox;
+      return pinFixedSideTransformBox(
+        selectedTransformerRef.current?.getActiveAnchor(),
+        oldBox,
+        boundedBox,
+      );
+    },
     [horizontalResizeOnly],
   );
   const isMultiComponentSelection = selectionKind === "multi-component";

@@ -1312,7 +1312,8 @@ function TemplateV2KonvaSlideComponent({
       if (!layoutToolbarTarget) return;
       trackEvent(MixpanelEvent.Editor_Element_Style_Changed, {
         ...editorAnalyticsProps({
-          element_type: "layout",
+          element_type:
+            readString(layoutToolbarTarget.element.type) || "layout",
           change_source: "layout_toolbar",
         }),
       });
@@ -1969,6 +1970,7 @@ function TemplateV2KonvaSlideComponent({
         selectedElement &&
         selectedBox &&
         toolbarElement &&
+        !layoutToolbarTarget &&
         !chartToolbarTarget &&
         !tableToolbarTarget &&
         !isTemplateV2LayoutElement(selectedElement) &&

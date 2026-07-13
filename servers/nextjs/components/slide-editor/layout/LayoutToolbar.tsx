@@ -31,6 +31,11 @@ import {
   TemplateV2LineToolbarControls,
   type TemplateV2LineToolbarElement,
 } from "@/components/slide-editor/layout/LineToolbarControls";
+import {
+  isTemplateV2InfographicToolbarElement,
+  TemplateV2InfographicToolbarControls,
+  type TemplateV2InfographicToolbarElement,
+} from "@/components/slide-editor/layout/InfographicToolbarControls";
 import { FloatingToolbarBoundsProvider } from "@/components/slide-editor/toolbar/FloatingToolbar";
 import {
   numericInputMode,
@@ -59,6 +64,9 @@ type PanelId =
   | "line-style"
   | "line-opacity"
   | "chart-colors"
+  | "infographic-colors"
+  | "infographic-range"
+  | "infographic-schema"
   | "component-menu"
   | null;
 
@@ -76,6 +84,7 @@ export type TemplateV2LayoutElement = RawRecord & {
 export type TemplateV2ToolbarElement =
   | TemplateV2LayoutElement
   | TemplateV2LineToolbarElement
+  | TemplateV2InfographicToolbarElement
   | ChartSlideElement
   | TableSlideElement;
 
@@ -321,6 +330,9 @@ export function TemplateV2LayoutToolbar({
   const hasLineControls = Boolean(
     element && onChange && isTemplateV2LineToolbarElement(element),
   );
+  const hasInfographicControls = Boolean(
+    element && onChange && isTemplateV2InfographicToolbarElement(element),
+  );
   const hasChartControls = Boolean(
     element && onChartChange && isTemplateV2ChartToolbarElement(element),
   );
@@ -328,7 +340,10 @@ export function TemplateV2LayoutToolbar({
     element && onTableChange && isTemplateV2TableToolbarElement(element),
   );
   const hasLayoutControls =
-    hasFlowControls || hasContainerControls || hasLineControls;
+    hasFlowControls ||
+    hasContainerControls ||
+    hasLineControls ||
+    hasInfographicControls;
   const hasToolbarControls =
     hasLayoutControls || hasChartControls || hasTableControls;
   const ungroupAction = componentActions?.canUngroup
@@ -388,6 +403,16 @@ export function TemplateV2LayoutToolbar({
           onChange &&
           isTemplateV2LineToolbarElement(element) ? (
           <TemplateV2LineToolbarControls
+            element={element}
+            onChange={onChange}
+            openPanel={openPanel}
+            onToggle={togglePanel}
+          />
+        ) : hasInfographicControls &&
+          element &&
+          onChange &&
+          isTemplateV2InfographicToolbarElement(element) ? (
+          <TemplateV2InfographicToolbarControls
             element={element}
             onChange={onChange}
             openPanel={openPanel}
