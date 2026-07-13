@@ -1,7 +1,7 @@
 {
   "id": "general",
   "name": "General",
-  "description": "General purpose layouts for common presentation elements",
+  "description": "Flexible, well-balanced layouts for everyday presentations, from simple title slides and agendas to content-rich sections.",
   "thumbnail": "static/thumbnail.png",
   "merged_components": [
     {

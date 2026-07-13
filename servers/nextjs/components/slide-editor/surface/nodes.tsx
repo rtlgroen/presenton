@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import type Konva from "konva";
 import {
   Arc,
@@ -125,14 +126,41 @@ const VERTICAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
   "bottom-center",
 ]);
 
+function isComponentSideResizeAnchor(
+  anchor: ComponentTransformAnchor | null,
+) {
+  return Boolean(
+    anchor &&
+      (HORIZONTAL_RESIZE_ANCHORS.has(anchor) ||
+        VERTICAL_RESIZE_ANCHORS.has(anchor)),
+  );
+}
+
+function isTopOrLeftSideResizeAnchor(
+  anchor: ComponentTransformAnchor | null,
+) {
+  return anchor === "top-center" || anchor === "middle-left";
+}
+
+function hasTransformScale(node: Konva.Node) {
+  return (
+    Math.abs(node.scaleX() - 1) >= 0.001 ||
+    Math.abs(node.scaleY() - 1) >= 0.001
+  );
+}
+
+function componentTransformerForNode(node: Konva.Node) {
+  const stage = node.getStage();
+  if (!stage) return null;
+  return stage
+    .find<Konva.Transformer>("Transformer")
+    .find((candidate) => candidate.getNodes().includes(node));
+}
+
 function componentTransformAnchorForNode(
   node: Konva.Node,
 ): ComponentTransformAnchor | null {
-  const stage = node.getStage();
-  if (!stage) return null;
-  const transformer = stage
-    .find<Konva.Transformer>("Transformer")
-    .find((candidate) => candidate.getNodes().includes(node));
+  const transformer = componentTransformerForNode(node);
   const activeAnchor = transformer?.getActiveAnchor();
   return isComponentTransformAnchor(activeAnchor) ? activeAnchor : null;
 }
@@ -240,10 +268,18 @@ function minimumComponentSizeForElementBoundsResize(component: RawComponent) {
 }
 
 function positionFromComponentTransform(
+  box: Box,
   node: Konva.Node,
   nextBox: ComponentTransformBox,
   anchor: ComponentTransformAnchor | null,
 ): Point {
+  if (isComponentSideResizeAnchor(anchor)) {
+    return {
+      x: clamp(box.x, 0, Math.max(0, STAGE_BOX.width - nextBox.width)),
+      y: clamp(box.y, 0, Math.max(0, STAGE_BOX.height - nextBox.height)),
+    };
+  }
+
   const rawPosition = positionFromNodeInParent(node, STAGE_BOX, {
     ...nextBox,
     width: nextBox.rawWidth,
@@ -277,7 +313,7 @@ function componentFromNodeTransform(
   const resizeMode = componentResizeModeForTransform(anchor, scaleX, scaleY);
   node.scaleX(1);
   node.scaleY(1);
-  const position = positionFromComponentTransform(node, nextBox, anchor);
+  const position = positionFromComponentTransform(box, node, nextBox, anchor);
   const nextComponentBox = {
     ...position,
     width: nextBox.width,
@@ -299,6 +335,76 @@ function componentFromNodeTransform(
     ...nextComponentBox,
     scaleX: nextBox.scaleX,
     scaleY: nextBox.scaleY,
+  });
+}
+
+function syncComponentNodeBox(node: Konva.Group, box: Box) {
+  node.position({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  });
+  node.width(box.width);
+  node.height(box.height);
+  node.offsetX(box.width / 2);
+  node.offsetY(box.height / 2);
+  node.scaleX(1);
+  node.scaleY(1);
+  componentTransformerForNode(node)?.forceUpdate();
+  node.getLayer()?.batchDraw();
+}
+
+function componentFromSideNodeTransform(
+  component: RawComponent,
+  node: Konva.Group,
+  anchor: ComponentTransformAnchor,
+  sourceBox: Box,
+) {
+  const box = componentBox(component);
+  const minimumSize = minimumComponentSizeForElementBoundsResize(component);
+  const transformedWidth = Math.max(1, node.width() * node.scaleX());
+  const transformedHeight = Math.max(1, node.height() * node.scaleY());
+  const transformedPosition = positionFromNodeInParent(node, STAGE_BOX, {
+    ...box,
+    width: transformedWidth,
+    height: transformedHeight,
+  });
+  let x = sourceBox.x;
+  let y = sourceBox.y;
+  let width = sourceBox.width;
+  let height = sourceBox.height;
+
+  if (anchor === "middle-left") {
+    const right = sourceBox.x + sourceBox.width;
+    width = clamp(
+      right - transformedPosition.x,
+      minimumSize.width,
+      Math.max(minimumSize.width, right),
+    );
+    x = right - width;
+  } else if (anchor === "top-center") {
+    const bottom = sourceBox.y + sourceBox.height;
+    height = clamp(
+      bottom - transformedPosition.y,
+      minimumSize.height,
+      Math.max(minimumSize.height, bottom),
+    );
+    y = bottom - height;
+  }
+
+  const nextBox = {
+    x,
+    y,
+    width,
+    height,
+    rotation: node.rotation(),
+  };
+
+  syncComponentNodeBox(node, nextBox);
+
+  return resizeComponentElementBounds(component, {
+    ...nextBox,
+    scaleX: box.width > 0 ? width / box.width : 1,
+    scaleY: box.height > 0 ? height / box.height : 1,
   });
 }
 
@@ -354,7 +460,10 @@ export function RawComponentNode({
   fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
+  const transformSourceRef = useRef<RawComponent | null>(null);
+  const transformSourceBoxRef = useRef<Box | null>(null);
   const transformPreviewRef = useRef<RawComponent | null>(null);
+  const transformPreviewAnchorRef = useRef<ComponentTransformAnchor | null>(null);
   const [transformPreview, setTransformPreview] =
     useState<RawComponent | null>(null);
   const renderedComponent = transformPreview ?? component;
@@ -364,10 +473,6 @@ export function RawComponentNode({
   const elements = readArray(renderedComponent.elements).filter(
     isRecord,
   ) as RawElement[];
-  const clipBounds = isEditMode
-    ? null
-    : componentTextClipBounds(elements, box);
-
   return (
     <Group
       ref={(node) => {
@@ -381,10 +486,6 @@ export function RawComponentNode({
       offsetX={box.width / 2}
       offsetY={box.height / 2}
       rotation={readNumber(renderedComponent.rotation) ?? 0}
-      clipX={clipBounds?.x}
-      clipY={clipBounds?.y}
-      clipWidth={clipBounds?.width}
-      clipHeight={clipBounds?.height}
       draggable={isEditMode}
       onMouseDown={(event) => {
         if (!isEditMode) return;
@@ -422,7 +523,10 @@ export function RawComponentNode({
         onComponentDragEnd(componentIndex, node);
       }}
       onTransformStart={() => {
+        transformSourceRef.current = component;
+        transformSourceBoxRef.current = componentBox(component);
         transformPreviewRef.current = null;
+        transformPreviewAnchorRef.current = null;
         setTransformPreview(null);
       }}
       onTransform={(event) => {
@@ -431,22 +535,21 @@ export function RawComponentNode({
         const node = groupRef.current;
         if (!node) return;
         const anchor = componentTransformAnchorForNode(node);
-        if (anchor === "rotater") return;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        if (
-          Math.abs(scaleX - 1) < 0.001 &&
-          Math.abs(scaleY - 1) < 0.001
-        ) {
-          return;
-        }
-        const next = componentFromNodeTransform(
-          transformPreviewRef.current ?? component,
-          node,
-          anchor,
-        );
+        if (!isComponentSideResizeAnchor(anchor)) return;
+        if (!hasTransformScale(node)) return;
+        const current = transformPreviewRef.current ?? component;
+        const next = isTopOrLeftSideResizeAnchor(anchor)
+          ? componentFromSideNodeTransform(
+              current,
+              node,
+              anchor,
+              transformSourceBoxRef.current ??
+                componentBox(transformSourceRef.current ?? component),
+            )
+          : componentFromNodeTransform(current, node, anchor);
         transformPreviewRef.current = next;
-        setTransformPreview(next);
+        transformPreviewAnchorRef.current = anchor;
+        flushSync(() => setTransformPreview(next));
       }}
       onTransformEnd={(event) => {
         if (!isEditMode) return;
@@ -454,14 +557,40 @@ export function RawComponentNode({
         const node = groupRef.current;
         if (!node) return;
         const anchor = componentTransformAnchorForNode(node);
-        const next = componentFromNodeTransform(
-          transformPreviewRef.current ?? component,
-          node,
-          anchor,
-        );
+        const previewAnchor = transformPreviewAnchorRef.current;
+        const sideAnchor = isComponentSideResizeAnchor(anchor)
+          ? anchor
+          : previewAnchor;
+        let next: RawComponent;
+        if (isComponentSideResizeAnchor(sideAnchor)) {
+          if (hasTransformScale(node)) {
+            const current = transformPreviewRef.current ?? component;
+            next = isTopOrLeftSideResizeAnchor(sideAnchor)
+              ? componentFromSideNodeTransform(
+                  current,
+                  node,
+                  sideAnchor,
+                  transformSourceBoxRef.current ??
+                    componentBox(transformSourceRef.current ?? component),
+                )
+              : componentFromNodeTransform(current, node, sideAnchor);
+          } else {
+            next =
+              transformPreviewRef.current ??
+              transformSourceRef.current ??
+              component;
+          }
+        } else {
+          next = componentFromNodeTransform(component, node, anchor);
+        }
+        transformSourceRef.current = null;
+        transformSourceBoxRef.current = null;
         transformPreviewRef.current = null;
-        setTransformPreview(null);
-        onComponentChange(componentIndex, () => next);
+        transformPreviewAnchorRef.current = null;
+        flushSync(() => {
+          setTransformPreview(null);
+          onComponentChange(componentIndex, () => next);
+        });
       }}
     >
       {isEditMode ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}
@@ -493,58 +622,6 @@ export function RawComponentNode({
       ))}
     </Group>
   );
-}
-
-function componentTextClipBounds(elements: RawElement[], componentBox: Box): Box {
-  let left = 0;
-  let top = 0;
-  let right = componentBox.width;
-  let bottom = componentBox.height;
-
-  const includeBox = (box: Box, offsetX: number, offsetY: number) => {
-    left = Math.min(left, offsetX + box.x);
-    top = Math.min(top, offsetY + box.y);
-    right = Math.max(right, offsetX + box.x + box.width);
-    bottom = Math.max(bottom, offsetY + box.y + box.height);
-  };
-
-  const visitElement = (
-    element: RawElement,
-    box: Box,
-    offsetX: number,
-    offsetY: number,
-  ) => {
-    const visualBox = constrainedWrappedTextVisualBox(element, box, {
-      x: 0,
-      y: 0,
-      width: Math.max(1, componentBox.width - offsetX),
-      height: componentBox.height,
-    });
-    const type = readString(element.type);
-    if (type === "text" || type === "text-list") {
-      includeBox(visualBox, offsetX, offsetY);
-    }
-
-    const childInfo = childArrayInfo(element);
-    if (!childInfo) return;
-    layoutChildren(element, childInfo.items, box).forEach((childLayout) => {
-      visitElement(
-        childLayout.child,
-        childLayout.box ?? elementBox(childLayout.child),
-        offsetX + box.x,
-        offsetY + box.y,
-      );
-    });
-  };
-
-  elements.forEach((element) => visitElement(element, elementBox(element), 0, 0));
-
-  return {
-    x: left,
-    y: top,
-    width: Math.max(1, right - left),
-    height: Math.max(1, bottom - top),
-  };
 }
 
 function constrainedWrappedTextVisualBox(

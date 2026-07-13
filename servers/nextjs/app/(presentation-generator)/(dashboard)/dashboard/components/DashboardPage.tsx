@@ -4,8 +4,9 @@ import React, { useState, useEffect, useMemo } from "react";
 
 import { DashboardApi } from "@/app/(presentation-generator)/services/api/dashboard";
 import { PresentationGrid } from "@/app/(presentation-generator)/(dashboard)/dashboard/components/PresentationGrid";
+import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Github, Plus } from "lucide-react";
 import { trackEvent, MixpanelEvent } from "@/utils/mixpanel";
 import { usePathname } from "next/navigation";
 
@@ -34,6 +35,133 @@ const FloatingActionCards = () => (
     />
   </div>
 );
+
+const dashboardHeaderPill =
+  "inline-flex shrink-0 items-center rounded-full border border-[#EDEEEF] bg-white text-[#191919] transition-colors hover:bg-[#FAFAFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] focus-visible:ring-offset-2";
+
+function DashboardHeader({ pathname }: { pathname: string }) {
+  return (
+    <header className="sticky top-0 z-50 flex min-h-[98px] w-full items-center justify-between gap-6 bg-white px-6 py-7 max-lg:flex-col max-lg:items-start">
+      <h1 className="font-unbounded text-[28px] font-normal leading-none tracking-[-0.84px] text-[#101323]">
+        Dashboard
+      </h1>
+      {/* 
+      <div className="max-w-full overflow-x-auto hide-scrollbar lg:overflow-visible">
+        <div className="flex h-[42.24px] w-[500.22px] max-w-none items-center gap-3 rounded-full border border-[#EDEEEF] pl-3">
+          <div className="flex h-[42.24px] items-center gap-[18px] rounded-full border border-[#EDEEEF] px-3 py-1">
+            <Link
+              href="/settings"
+              className={`${dashboardHeaderPill} h-[26.1px] gap-[6px] px-[6px] py-[6px]`}
+              onClick={() =>
+                trackEvent(MixpanelEvent.Navigation, {
+                  from: pathname,
+                  to: "/settings",
+                  source: "dashboard_header_settings",
+                })
+              }
+            >
+              <span className="relative -my-1 flex h-[34.1px] w-[39.78px] shrink-0 items-center rounded-full border border-[#EDEEEF] bg-[#EDEEEF]">
+                <span className="absolute left-0 top-[6px] flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full border border-[#EDEEEF] bg-white">
+                  <Image
+                    src="/providers/OpenAI-black.png"
+                    alt=""
+                    aria-hidden="true"
+                    width={14}
+                    height={14}
+                    className="h-[14px] w-[14px] object-contain"
+                  />
+                </span>
+                <span className="absolute left-[17.6px] top-[6px] flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full border border-[#EDEEEF] bg-white">
+                  <Image
+                    src="/providers/gemini-color.svg"
+                    alt=""
+                    aria-hidden="true"
+                    width={14}
+                    height={14}
+                    className="h-[14px] w-[14px] object-contain"
+                  />
+                </span>
+              </span>
+              <span className="font-syne text-sm font-medium leading-[17.6px] tracking-[0.56px]">
+                Settings
+              </span>
+            </Link>
+
+            <span className="h-5 w-px shrink-0 bg-[#EDEEEF]" aria-hidden="true" />
+
+            <Link
+              href="https://github.com/presenton/presenton"
+              target="_blank"
+              rel="noreferrer"
+              className={`${dashboardHeaderPill} h-[29.6px] gap-[8.8px] px-[6px] py-[6px]`}
+              onClick={() =>
+                trackEvent(MixpanelEvent.Navigation, {
+                  from: pathname,
+                  to: "https://github.com/presenton/presenton",
+                  source: "dashboard_header_github",
+                })
+              }
+            >
+              <Github className="h-[17.6px] w-[17.6px] text-[#191919]" strokeWidth={1.1} />
+              <span className="flex items-center gap-[6.6px] font-syne text-sm font-normal leading-none tracking-[-0.14px] text-[#191919]">
+                Star
+                <span className="h-[2.2px] w-[2.2px] rounded-full bg-[#C3C3CB]" />
+                <span className="text-xs font-medium tracking-[-0.12px]">57.4k</span>
+              </span>
+            </Link>
+
+            <span className="h-5 w-px shrink-0 bg-[#EDEEEF]" aria-hidden="true" />
+
+            <Link
+              href="https://discord.com/invite/9ZsKKxudNE"
+              target="_blank"
+              rel="noreferrer"
+              className={`${dashboardHeaderPill} h-[29.6px] gap-[8.8px] px-[6px] py-[6px]`}
+              onClick={() =>
+                trackEvent(MixpanelEvent.Navigation, {
+                  from: pathname,
+                  to: "https://discord.com/invite/9ZsKKxudNE",
+                  source: "dashboard_header_discord",
+                })
+              }
+            >
+              <span className="flex h-[17.6px] w-[17.6px] items-center justify-center">
+                <Image
+                  src="/discord.png"
+                  alt=""
+                  aria-hidden="true"
+                  width={18}
+                  height={18}
+                  className="h-[17.6px] w-[17.6px] rounded-full object-cover"
+                />
+              </span>
+              <span className="font-syne text-sm font-normal leading-none tracking-[-0.14px] text-[#191919]">
+                Join Discord
+              </span>
+            </Link>
+          </div>
+
+          <Link
+            href="/upload"
+            aria-label="Create presentation"
+            className="relative flex h-[42.24px] w-[42.24px] shrink-0 items-center justify-center rounded-full border border-[#D9D6FE] bg-[#FAFAFF] text-[#7A5AF8] transition-colors hover:bg-[#F3F0FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] focus-visible:ring-offset-2"
+            onClick={() =>
+              trackEvent(MixpanelEvent.Dashboard_New_Presentation_Clicked, {
+                pathname,
+                source: "dashboard_header_create",
+              })
+            }
+          >
+            <Plus className="h-4 w-4" strokeWidth={1.33} aria-hidden="true" />
+            <span className="absolute right-[1.28px] top-[-1px] flex h-[13.2px] w-[13.2px] items-center justify-center rounded-full border border-[#D9D6FE] bg-white">
+              <span className="h-[7.92px] w-[7.92px] rounded-full bg-[#7A5AF8]" />
+            </span>
+          </Link>
+        </div>
+      </div> */}
+    </header>
+  );
+}
 
 const DashboardPage: React.FC = () => {
   const pathname = usePathname();
@@ -96,15 +224,9 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full px-3 pb-10 sm:px-6 relative">
-      <div className="sticky top-0 right-0 z-50 py-[28px] backdrop-blur mb-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[28px] tracking-[-0.84px] font-syne font-normal text-[#101828] flex items-center gap-2">
-            Slide Presentation
-          </h3>
-        </div>
-      </div>
-      <section className="relative z-10 overflow-visible  ">
+    <div className="relative min-h-screen w-full pb-10">
+      <DashboardHeader pathname={pathname} />
+      <section className="relative z-10 overflow-visible px-3 sm:px-6">
         <h2 className="font-syne text-base bg-transparent font-medium pb-3.5  text-[#333333] ">
           Actions
         </h2>
@@ -131,7 +253,7 @@ const DashboardPage: React.FC = () => {
           </span>
         </Link>
       </section>
-      <section className="relative z-10 mt-12">
+      <section className="relative z-10 mt-12 px-3 sm:px-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-syne text-base font-medium  text-[#333333] ">
             Decks
@@ -148,9 +270,8 @@ const DashboardPage: React.FC = () => {
             }
           >
             <ArrowUpDown
-              className={`h-4 w-4 transition-transform duration-300 ${
-                deckSortDirection === "asc" ? "rotate-180" : ""
-              }`}
+              className={`h-4 w-4 transition-transform duration-300 ${deckSortDirection === "asc" ? "rotate-180" : ""
+                }`}
             />
           </button>
         </div>
