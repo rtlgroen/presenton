@@ -1617,12 +1617,51 @@ function contrastRatio(first: number, second: number) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function formatChartValue(value: number) {
+const COMPACT_NUMBER_SUFFIXES = [
+  "",
+  "K",
+  "M",
+  "B",
+  "T",
+  "Qa",
+  "Qi",
+  "Sx",
+  "Sp",
+  "Oc",
+  "No",
+  "Dc",
+];
+
+function formatCompactNumber(value: number) {
   if (!Number.isFinite(value)) return "0";
-  if (Math.abs(value) >= 1000) {
-    return Intl.NumberFormat("en", { notation: "compact" }).format(value);
+  const absolute = Math.abs(value);
+  if (absolute < 1000) {
+    return Number.isInteger(value) ? `${value}` : value.toFixed(1).replace(/\.0$/, "");
   }
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1).replace(/\.0$/, "");
+
+  let suffixIndex = Math.floor(Math.log10(absolute) / 3);
+  if (suffixIndex >= COMPACT_NUMBER_SUFFIXES.length) {
+    return value.toExponential(2).replace(/\.?0+e/, "e");
+  }
+
+  let scaled = value / 1000 ** suffixIndex;
+  let formatted = formatScaledCompactNumber(scaled);
+  if (Math.abs(Number(formatted)) >= 1000 && suffixIndex < COMPACT_NUMBER_SUFFIXES.length - 1) {
+    suffixIndex += 1;
+    scaled = value / 1000 ** suffixIndex;
+    formatted = formatScaledCompactNumber(scaled);
+  }
+  return `${formatted}${COMPACT_NUMBER_SUFFIXES[suffixIndex]}`;
+}
+
+function formatScaledCompactNumber(value: number) {
+  const absolute = Math.abs(value);
+  const decimals = absolute >= 100 ? 0 : absolute >= 10 ? 1 : 2;
+  return Number(value.toFixed(decimals)).toString();
+}
+
+function formatChartValue(value: number) {
+  return formatCompactNumber(value);
 }
 
 function formatAxisTick(value: string | number) {
