@@ -332,7 +332,10 @@ function findFirstComponentTableElement(
 function findFirstComponentInfographicElement(
   elements: unknown[],
   parentPath: number[] = [],
-): { element: TemplateV2InfographicToolbarElement; elementPath: number[] } | null {
+): {
+  element: TemplateV2InfographicToolbarElement;
+  elementPath: number[];
+} | null {
   for (let index = 0; index < elements.length; index += 1) {
     const element = asRecord(elements[index]);
     if (!element) continue;
