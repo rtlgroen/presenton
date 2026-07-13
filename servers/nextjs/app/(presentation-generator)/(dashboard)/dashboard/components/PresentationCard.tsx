@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 
 import { Card } from "@/components/ui/card";
 import { DashboardApi } from "@/app/(presentation-generator)/services/api/dashboard";
-import { AlertTriangle, Copy, EllipsisVertical, Loader2, Trash } from "lucide-react";
+import { Archive, AlertTriangle, Copy, EllipsisVertical, Loader2, Trash } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
@@ -39,21 +39,9 @@ export const PresentationCard = ({
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isDuplicating, setIsDuplicating] = React.useState(false);
+  const isUnsupported = presentation?.version === "v1-standard";
 
-  const handlePreview = (e: React.MouseEvent) => {
-    e.preventDefault();
-    trackEvent(MixpanelEvent.Dashboard_Presentation_Opened, {
-      pathname,
-      presentation_id: id,
-      title_length: (title || "").length,
-      slide_count: presentation?.slides?.length || 0,
-    });
-    router.push(`/presentation?id=${id}&type=standard`);
-  };
-  useEffect(() => {
-    applyTheme(presentation.theme)
-  }, [])
-  const applyTheme = async (theme: any) => {
+  const applyTheme = React.useCallback(async (theme: any) => {
     const element = document.getElementById(`dashboard-presentation-card-${id}`)
     if (!element) return;
 
@@ -88,9 +76,30 @@ export const PresentationCard = ({
     element.style.setProperty('font-family', `"${theme.data.fonts.textFont.name}"`)
     element.style.setProperty('--heading-font-family', `"${theme.data.fonts.textFont.name}"`)
     element.style.setProperty('--body-font-family', `"${theme.data.fonts.textFont.name}"`)
+  }, [id])
 
-
-  }
+  const handlePreview = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isUnsupported) {
+      notify.warning(
+        "Unsupported presentation",
+        "This deck was created in an older Presenton version. Downgrade to a compatible version to open it."
+      );
+      return;
+    }
+    trackEvent(MixpanelEvent.Dashboard_Presentation_Opened, {
+      pathname,
+      presentation_id: id,
+      title_length: (title || "").length,
+      slide_count: presentation?.slides?.length || 0,
+    });
+    router.push(`/presentation?id=${id}&type=standard`);
+  };
+  useEffect(() => {
+    if (!isUnsupported) {
+      applyTheme(presentation.theme)
+    }
+  }, [applyTheme, isUnsupported, presentation.theme])
 
   const handleDelete = async () => {
     if (isDeleting) return;
@@ -145,7 +154,13 @@ export const PresentationCard = ({
     <Card
       suppressHydrationWarning={true}
       onClick={handlePreview}
-      className="bg-[#F8FBFB] font-syne shadow-none sm:shadow-none  presentation-card rounded-[12px] p-0 group hover:shadow-md transition-all duration-500 slide-theme cursor-pointer overflow-hidden flex flex-col"
+      aria-disabled={isUnsupported}
+      title={isUnsupported ? "Unsupported in this version of Presenton" : undefined}
+      className={`bg-[#F8FBFB] font-syne shadow-none sm:shadow-none presentation-card rounded-[12px] p-0 group transition-all duration-500 slide-theme overflow-hidden flex flex-col ${
+        isUnsupported
+          ? "cursor-not-allowed border-amber-200"
+          : "cursor-pointer hover:shadow-md"
+      }`}
     >
       <div
         id={`dashboard-presentation-card-${id}`}
@@ -156,9 +171,23 @@ export const PresentationCard = ({
         </p> */}
 
         <img src="/card_bg.svg" alt="" className="absolute top-0 left-0 w-full h-full object-cover" />
-        <div className="scale-[0.75] mt-4  border border-gray-300 rounded-lg overflow-hidden">
+        {isUnsupported && (
+          <span className="absolute left-3 top-3 z-50 inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 shadow-sm">
+            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+            Unsupported
+          </span>
+        )}
+        <div className={isUnsupported
+          ? "relative mx-5 mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-amber-200 bg-amber-50"
+          : "scale-[0.75] mt-4 border border-gray-300 rounded-lg overflow-hidden"
+        }>
 
-          {useTemplateV2HtmlPreview ? (
+          {isUnsupported ? (
+            <div className="flex flex-col items-center gap-2 px-5 text-center text-amber-800">
+              <Archive className="h-8 w-8" aria-hidden="true" />
+              <p className="text-xs font-medium">Preview unavailable in this version</p>
+            </div>
+          ) : useTemplateV2HtmlPreview ? (
             <TemplateV2HtmlSlidePreview
               slide={firstSlide}
               fonts={presentation.fonts}
@@ -179,6 +208,9 @@ export const PresentationCard = ({
                 <MarkdownRenderer content={title} className="text-sm mb-0  font-syne text-[#191919] font-semibold  overflow-hidden line-clamp-1" />
               </div>
               <p className="text-[#808080] text-sm font-syne">
+                {isUnsupported && (
+                  <span className="font-medium text-amber-700">Unsupported · </span>
+                )}
                 {new Date(presentation?.created_at).toLocaleDateString()}
               </p>
 
@@ -188,22 +220,24 @@ export const PresentationCard = ({
                 <EllipsisVertical className="w-6 h-6 text-gray-500" />
               </PopoverTrigger>
               <PopoverContent align="end" className="bg-white w-[200px]">
-                <button
-                  className="flex items-center justify-between w-full px-2 py-1 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isDuplicating}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void handleDuplicate();
-                  }}
-                >
-                  <p>{isDuplicating ? "Duplicating..." : "Duplicate"}</p>
-                  {isDuplicating ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-                  ) : (
-                    <Copy className="h-4 w-4 text-gray-500" />
-                  )}
-                </button>
+                {!isUnsupported && (
+                  <button
+                    className="flex items-center justify-between w-full px-2 py-1 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isDuplicating}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleDuplicate();
+                    }}
+                  >
+                    <p>{isDuplicating ? "Duplicating..." : "Duplicate"}</p>
+                    {isDuplicating ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                    ) : (
+                      <Copy className="h-4 w-4 text-gray-500" />
+                    )}
+                  </button>
+                )}
                 <button
                   className="flex items-center justify-between w-full px-2 py-1 hover:bg-gray-100"
                   onClick={(e) => {

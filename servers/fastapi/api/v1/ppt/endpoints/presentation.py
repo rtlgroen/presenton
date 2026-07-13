@@ -1432,20 +1432,40 @@ async def get_all_presentations(
         Optional[PresentationVersion],
         Query(description="Only include presentations matching this version."),
     ] = None,
+    include_slides: Annotated[
+        bool,
+        Query(
+            description=(
+                "Include the first slide and resolved fonts for dashboard previews. "
+                "Disable this for metadata-only presentation lists."
+            )
+        ),
+    ] = True,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
-    query = (
-        select(PresentationModel, SlideModel)
-        .join(
+    if include_slides:
+        query = select(PresentationModel, SlideModel).join(
             SlideModel,
             (SlideModel.presentation == PresentationModel.id) & (SlideModel.index == 0),
         )
-    )
+    else:
+        query = select(PresentationModel)
+
     if version is not None:
         query = query.where(PresentationModel.version == version)
     query = query.order_by(PresentationModel.created_at.desc())
 
     results = await sql_session.execute(query)
+    if not include_slides:
+        return [
+            PresentationWithSlides(
+                **_presentation_response_data(presentation),
+                slides=[],
+                fonts=None,
+            )
+            for presentation in results.scalars().all()
+        ]
+
     rows = results.all()
     presentations_with_slides = []
     for presentation, first_slide in rows:

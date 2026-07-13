@@ -33,12 +33,16 @@ export interface PresentationResponse {
 export class DashboardApi {
 
   static async getPresentations(
-    version?: PresentationVersion
+    version?: PresentationVersion,
+    options?: { includeSlides?: boolean }
   ): Promise<PresentationResponse[]> {
     try {
       const params = new URLSearchParams();
       if (version) {
         params.set("version", version);
+      }
+      if (options?.includeSlides === false) {
+        params.set("include_slides", "false");
       }
       const query = params.toString();
       const response = await fetch(

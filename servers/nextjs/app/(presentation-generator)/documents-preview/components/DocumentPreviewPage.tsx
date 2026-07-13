@@ -154,7 +154,7 @@ const DocumentsPreviewPage: React.FC = () => {
       const createResponse = await PresentationGenerationApi.createPresentation(
         {
           content: config?.prompt ?? "",
-          version: "v1-standard",
+          version: "v2-standard",
           n_slides: parseLimitedSlideCount(config?.slides),
           file_paths: documentPaths,
           language: config?.language ?? "",

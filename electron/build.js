@@ -594,8 +594,13 @@ const config = {
   files: [
     "resources",
     "app_dist",
-    "node_modules",
     "NOTICE"
+  ],
+  extraResources: [
+    {
+      from: path.join(__dirname, "..", "scripts", "user-config-env.cjs"),
+      to: "user-config-env.cjs",
+    },
   ],
   afterPack,
   mac: {
@@ -640,6 +645,7 @@ const config = {
     artifactName: "Presenton-${version}.${ext}",
     target: ["AppImage", "deb"],
     icon: "build/icons",
+    category: "Office",
   },
   deb: {
     afterInstall: "build/after-install.tpl",

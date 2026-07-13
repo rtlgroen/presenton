@@ -46,17 +46,17 @@ async function readConfigBody(request: Request): Promise<Record<string, unknown>
 
 export async function GET() {
   if (!canChangeKeys) {
-    return NextResponse.json({
-      error: "You are not allowed to access this resource",
-      status: 403,
-    });
+    return NextResponse.json(
+      { error: "You are not allowed to access this resource", status: 403 },
+      { status: 403 }
+    );
   }
   const userConfigPath = getUserConfigPath();
   if (!userConfigPath) {
-    return NextResponse.json({
-      error: "User config path not found",
-      status: 500,
-    });
+    return NextResponse.json(
+      { error: "User config path not found", status: 500 },
+      { status: 500 }
+    );
   }
 
   try {
@@ -73,9 +73,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!canChangeKeys) {
-    return NextResponse.json({
-      error: "You are not allowed to access this resource",
-    });
+    return NextResponse.json(
+      { error: "You are not allowed to access this resource", status: 403 },
+      { status: 403 }
+    );
   }
 
   const userConfigPath = getUserConfigPath();

@@ -65,7 +65,7 @@ def test_export_node_env_recreates_puppeteer_directories(monkeypatch, tmp_path):
     puppeteer_cache = tmp_path / "cache" / "puppeteer"
     monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data))
     monkeypatch.setenv("TEMP_DIRECTORY", str(temp_dir))
-    monkeypatch.setenv("NEXT_PUBLIC_FAST_API", "http://127.0.0.1:5001")
+    monkeypatch.delenv("NEXT_PUBLIC_FAST_API", raising=False)
     monkeypatch.setenv("PUPPETEER_TMP_DIR", str(puppeteer_temp))
     monkeypatch.setenv("PUPPETEER_CACHE_DIR", str(puppeteer_cache))
 
@@ -74,6 +74,7 @@ def test_export_node_env_recreates_puppeteer_directories(monkeypatch, tmp_path):
 
     assert env["PUPPETEER_TMP_DIR"] == str(puppeteer_temp)
     assert env["PUPPETEER_CACHE_DIR"] == str(puppeteer_cache)
+    assert env["ASSETS_BASE_URL"] == "/app_data"
     assert puppeteer_temp.is_dir()
     assert puppeteer_cache.is_dir()
 

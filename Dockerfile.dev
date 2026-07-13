@@ -60,7 +60,7 @@ COPY electron/resources/document-extraction/liteparse_runner.mjs /app/document-e
 
 COPY scripts/sync-presentation-export.cjs /app/scripts/sync-presentation-export.cjs
 COPY scripts/presenton-terminal-banner.mjs /app/scripts/presenton-terminal-banner.mjs
-COPY scripts/user-config-env.mjs /app/scripts/user-config-env.mjs
+COPY scripts/user-config-env.cjs /app/scripts/user-config-env.cjs
 RUN rm -rf /app/presentation-export \
     && EXPORT_RUNTIME_ARCH="${TARGETARCH}" node /app/scripts/sync-presentation-export.cjs --force \
     && find /app/presentation-export/py -maxdepth 1 -type f -name "convert-linux-*" -exec chmod +x {} \; \

@@ -219,13 +219,9 @@ async function ensureTelemetryStatus(): Promise<boolean> {
   if (!trackingCheckPromise) {
     trackingCheckPromise = (async () => {
       try {
-        let data;
-        if (typeof window !== "undefined" && window.electron?.telemetryStatus) {
-          data = await window.electron.telemetryStatus();
-        } else {
-          const res = await fetch('/api/telemetry-status');
-          data = await res.json();
-        }
+        const res = await fetch('/api/telemetry-status');
+        if (!res.ok) throw new Error(`telemetry-status returned ${res.status}`);
+        const data = await res.json();
         const enabled = Boolean(data?.telemetryEnabled);
         window.__mixpanel_telemetry_enabled = enabled;
         return enabled;

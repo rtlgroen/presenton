@@ -204,7 +204,7 @@ const buildUserConfigFromEnv = (existingConfig = {}, env = process.env) =>
     })
   );
 
-export {
+module.exports = {
   buildUserConfigFromEnv,
   parseBooleanLike,
   readUserConfigEnv,

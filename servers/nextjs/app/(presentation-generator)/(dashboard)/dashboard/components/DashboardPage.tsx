@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 
-import { DashboardApi } from "@/app/(presentation-generator)/services/api/dashboard";
+import {
+  DashboardApi,
+  type PresentationResponse,
+} from "@/app/(presentation-generator)/services/api/dashboard";
 import { PresentationGrid } from "@/app/(presentation-generator)/(dashboard)/dashboard/components/PresentationGrid";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpDown, Github, Plus } from "lucide-react";
+import { Archive, ArrowUpDown, ChevronDown } from "lucide-react";
 import { trackEvent, MixpanelEvent } from "@/utils/mixpanel";
 import { usePathname } from "next/navigation";
 
@@ -165,7 +168,10 @@ function DashboardHeader({ pathname }: { pathname: string }) {
 
 const DashboardPage: React.FC = () => {
   const pathname = usePathname();
-  const [presentations, setPresentations] = useState<any>(null);
+  const [presentations, setPresentations] = useState<PresentationResponse[]>([]);
+  const [legacyPresentations, setLegacyPresentations] = useState<
+    PresentationResponse[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deckSortDirection, setDeckSortDirection] = useState<"desc" | "asc">(
@@ -173,9 +179,7 @@ const DashboardPage: React.FC = () => {
   );
 
   const sortedPresentations = useMemo(() => {
-    if (!presentations) return presentations;
-
-    return [...presentations].sort((a: any, b: any) => {
+    return [...presentations].sort((a, b) => {
       const first = new Date(a.updated_at ?? a.created_at).getTime();
       const second = new Date(b.updated_at ?? b.created_at).getTime();
 
@@ -183,30 +187,33 @@ const DashboardPage: React.FC = () => {
     });
   }, [presentations, deckSortDirection]);
 
-  useEffect(() => {
-    const loadData = async () => {
-      await fetchPresentations();
-    };
-    loadData();
-  }, []);
+  const sortedLegacyPresentations = useMemo(() => {
+    return [...legacyPresentations].sort((a, b) => {
+      const first = new Date(a.updated_at ?? a.created_at).getTime();
+      const second = new Date(b.updated_at ?? b.created_at).getTime();
 
-  const fetchPresentations = async () => {
+      return deckSortDirection === "desc" ? second - first : first - second;
+    });
+  }, [legacyPresentations, deckSortDirection]);
+
+  const fetchPresentations = useCallback(async () => {
     let fetchedCount = 0;
     let hasError = false;
     try {
       setIsLoading(true);
       setError(null);
-      const data = await DashboardApi.getPresentations();
-      fetchedCount = data.length;
-      data.sort(
-        (a: any, b: any) =>
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
-      setPresentations(data);
-    } catch (err) {
+      const [supported, legacy] = await Promise.all([
+        DashboardApi.getPresentations("v2-standard"),
+        DashboardApi.getPresentations("v1-standard", { includeSlides: false }),
+      ]);
+      fetchedCount = supported.length + legacy.length;
+      setPresentations(supported);
+      setLegacyPresentations(legacy);
+    } catch {
       hasError = true;
       setError(null);
       setPresentations([]);
+      setLegacyPresentations([]);
     } finally {
       trackEvent(MixpanelEvent.Dashboard_Page_Viewed, {
         pathname,
@@ -215,11 +222,16 @@ const DashboardPage: React.FC = () => {
       });
       setIsLoading(false);
     }
-  };
+  }, [pathname]);
+
+  useEffect(() => {
+    void fetchPresentations();
+  }, [fetchPresentations]);
 
   const removePresentation = (presentationId: string) => {
-    setPresentations((prev: any) =>
-      prev ? prev.filter((p: any) => p.id !== presentationId) : []
+    setPresentations((prev) => prev.filter((p) => p.id !== presentationId));
+    setLegacyPresentations((prev) =>
+      prev.filter((p) => p.id !== presentationId)
     );
   };
 
@@ -275,13 +287,40 @@ const DashboardPage: React.FC = () => {
             />
           </button>
         </div>
+        {!isLoading && sortedLegacyPresentations.length > 0 && (
+          <details className="group/archive mb-6 overflow-hidden rounded-xl border border-amber-200 bg-amber-50/70">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 marker:content-none sm:px-5 [&::-webkit-details-marker]:hidden">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <Archive className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-amber-950">
+                  Unsupported presentations
+                  <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-xs text-amber-900">
+                    {sortedLegacyPresentations.length}
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-amber-800">
+                  These decks were created in an older version and cannot be opened here. Downgrade to a compatible Presenton version if you need to access them.
+                </span>
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-amber-700 transition-transform group-open/archive:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="border-t border-amber-200 bg-white/70 p-4 sm:p-5">
+              <PresentationGrid
+                presentations={sortedLegacyPresentations}
+                onPresentationDeleted={removePresentation}
+              />
+            </div>
+          </details>
+        )}
         <PresentationGrid
           presentations={sortedPresentations}
           isLoading={isLoading}
           error={error}
           onPresentationDeleted={removePresentation}
           onPresentationDuplicated={(presentation) =>
-            setPresentations((prev: any) => [presentation, ...(prev || [])])
+            setPresentations((prev) => [presentation, ...prev])
           }
         />
       </section>

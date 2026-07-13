@@ -252,12 +252,9 @@ class ExportTaskService:
         os.makedirs(puppeteer_cache_directory, exist_ok=True)
         env["PUPPETEER_CACHE_DIR"] = puppeteer_cache_directory
 
-        fastapi_base = (os.getenv("NEXT_PUBLIC_FAST_API") or "").strip()
-        if not fastapi_base:
-            raise HTTPException(
-                status_code=500,
-                detail="NEXT_PUBLIC_FAST_API must be set for PPTX-to-HTML export",
-            )
+        # The export runtime consumes app-data paths relative to the page it is
+        # rendering. Docker intentionally leaves NEXT_PUBLIC_FAST_API unset so
+        # nginx remains the public origin; Electron supplies its dynamic origin.
         env["ASSETS_BASE_URL"] = "/app_data"
         env["BUILT_PYTHON_MODULE_PATH"] = self.converter_path
 

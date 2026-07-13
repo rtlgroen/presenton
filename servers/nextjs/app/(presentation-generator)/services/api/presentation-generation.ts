@@ -61,7 +61,7 @@ export class PresentationGenerationApi {
 
   static async createPresentation({
     content,
-    version = "v1-standard",
+    version = "v2-standard",
     n_slides,
     file_paths,
     language,
