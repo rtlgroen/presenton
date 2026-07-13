@@ -291,6 +291,8 @@ export function TemplateV2SelectionTransformers({
     dragNodes.forEach((node) => {
       node.on(`dragstart${SHADOW_EVENT_NAMESPACE}`, disableShadows);
       node.on(`dragend${SHADOW_EVENT_NAMESPACE}`, enableShadows);
+      node.on(`transformstart${SHADOW_EVENT_NAMESPACE}`, disableShadows);
+      node.on(`transformend${SHADOW_EVENT_NAMESPACE}`, enableShadows);
     });
     selectedRotationNode?.on(
       `rotationChange${BOTTOM_CENTER_ROTATION_ANCHOR_EVENT_NAMESPACE}`,
