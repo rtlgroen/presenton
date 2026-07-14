@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushSync } from "react-dom";
 import type Konva from "konva";
 import {
   Arc,
@@ -38,9 +37,19 @@ import {
 } from "@/components/slide-editor/text/template-v2-text";
 import type { TableCellSelection } from "@/components/slide-editor/state/state";
 import { loadKonvaImage } from "@/components/slide-editor/surface/exportAssets";
+import { constrainComponentTransformBounds } from "@/components/slide-editor/surface/componentFrameBounds";
+import {
+  createLatestFrameBatch,
+  type LatestFrameBatch,
+} from "@/components/slide-editor/surface/latestFrameBatch";
 import { TemplateV2ChartJsElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartJsElement";
 import { TemplateV2TableElement as RawTableElement } from "@/components/slide-editor/tables/TemplateV2TableElement";
 import { buildSvgUpdateUrl } from "@/lib/svg-color";
+import {
+  componentSideResizeBox,
+  resizeComponentFromSideTransform,
+  type ComponentSideResizeAnchor,
+} from "@/components/slide-editor/model/component-resize";
 import {
   asRecord,
   borderRadius,
@@ -118,6 +127,18 @@ type ComponentTransformBox = Box & {
   rawHeight: number;
 };
 
+type ComponentSideTransformTarget = {
+  anchor: ComponentSideResizeAnchor;
+  box: Box;
+  rotation: number;
+};
+
+type ComponentSideTransformPreview = {
+  source: RawComponent;
+  sourceBox: Box;
+  target: ComponentSideTransformTarget;
+};
+
 const HORIZONTAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
   "middle-left",
   "middle-right",
@@ -129,18 +150,12 @@ const VERTICAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
 
 function isComponentSideResizeAnchor(
   anchor: ComponentTransformAnchor | null,
-) {
+): anchor is ComponentSideResizeAnchor {
   return Boolean(
     anchor &&
       (HORIZONTAL_RESIZE_ANCHORS.has(anchor) ||
         VERTICAL_RESIZE_ANCHORS.has(anchor)),
   );
-}
-
-function isTopOrLeftSideResizeAnchor(
-  anchor: ComponentTransformAnchor | null,
-) {
-  return anchor === "top-center" || anchor === "middle-left";
 }
 
 function hasTransformScale(node: Konva.Node) {
@@ -205,7 +220,6 @@ function componentResizeModeForTransform(
 }
 
 function componentBoxFromTransform(
-  component: RawComponent,
   box: Box,
   scaleX: number,
   scaleY: number,
@@ -217,55 +231,16 @@ function componentBoxFromTransform(
   const nextScaleY = isHorizontalOnly || anchor === "rotater" ? 1 : scaleY;
   const rawWidth = Math.max(1, box.width * nextScaleX);
   const rawHeight = Math.max(1, box.height * nextScaleY);
-  const minimumSize = minimumComponentSizeForElementBoundsResize(component);
-  const width = isHorizontalOnly ? Math.max(rawWidth, minimumSize.width) : rawWidth;
-  const height = isVerticalOnly ? Math.max(rawHeight, minimumSize.height) : rawHeight;
 
   return {
     ...box,
-    width,
-    height,
-    scaleX: box.width > 0 ? width / box.width : 1,
-    scaleY: box.height > 0 ? height / box.height : 1,
+    width: rawWidth,
+    height: rawHeight,
+    scaleX: box.width > 0 ? rawWidth / box.width : 1,
+    scaleY: box.height > 0 ? rawHeight / box.height : 1,
     rawWidth,
     rawHeight,
   };
-}
-
-function minimumComponentSizeForElementBoundsResize(component: RawComponent) {
-  let width = 1;
-  let height = 1;
-
-  const visitElement = (
-    element: RawElement,
-    box: Box,
-    offsetX: number,
-    offsetY: number,
-  ) => {
-    const x = offsetX + box.x;
-    const y = offsetY + box.y;
-    if (x > 0) width = Math.max(width, x + box.width);
-    if (y > 0) height = Math.max(height, y + box.height);
-
-    const childInfo = childArrayInfo(element);
-    if (!childInfo) return;
-    layoutChildren(element, childInfo.items, box).forEach((childLayout) => {
-      visitElement(
-        childLayout.child,
-        childLayout.box ?? elementBox(childLayout.child),
-        x,
-        y,
-      );
-    });
-  };
-
-  readArray(component.elements)
-    .filter(isRecord)
-    .forEach((element) => {
-      visitElement(element as RawElement, elementBox(element), 0, 0);
-    });
-
-  return { width, height };
 }
 
 function positionFromComponentTransform(
@@ -286,19 +261,17 @@ function positionFromComponentTransform(
     width: nextBox.rawWidth,
     height: nextBox.rawHeight,
   });
-  let x = rawPosition.x;
-  let y = rawPosition.y;
-
-  if (anchor === "middle-left") {
-    x = rawPosition.x + nextBox.rawWidth - nextBox.width;
-  }
-  if (anchor === "top-center") {
-    y = rawPosition.y + nextBox.rawHeight - nextBox.height;
-  }
-
   return {
-    x: clamp(x, 0, Math.max(0, STAGE_BOX.width - nextBox.width)),
-    y: clamp(y, 0, Math.max(0, STAGE_BOX.height - nextBox.height)),
+    x: clamp(
+      rawPosition.x,
+      0,
+      Math.max(0, STAGE_BOX.width - nextBox.width),
+    ),
+    y: clamp(
+      rawPosition.y,
+      0,
+      Math.max(0, STAGE_BOX.height - nextBox.height),
+    ),
   };
 }
 
@@ -310,7 +283,7 @@ function componentFromNodeTransform(
   const box = componentBox(component);
   const scaleX = node.scaleX();
   const scaleY = node.scaleY();
-  const nextBox = componentBoxFromTransform(component, box, scaleX, scaleY, anchor);
+  const nextBox = componentBoxFromTransform(box, scaleX, scaleY, anchor);
   const resizeMode = componentResizeModeForTransform(anchor, scaleX, scaleY);
   node.scaleX(1);
   node.scaleY(1);
@@ -352,54 +325,39 @@ function syncComponentNodeBox(node: Konva.Group, box: Box) {
   });
 }
 
-function componentFromSideNodeTransform(
-  component: RawComponent,
+function componentSideTransformTargetFromNode(
   node: Konva.Group,
-  anchor: ComponentTransformAnchor,
+  anchor: ComponentSideResizeAnchor,
   sourceBox: Box,
 ) {
-  const box = componentBox(component);
-  const minimumSize = minimumComponentSizeForElementBoundsResize(component);
   const transformedWidth = Math.max(1, node.width() * node.scaleX());
   const transformedHeight = Math.max(1, node.height() * node.scaleY());
-  let x = sourceBox.x;
-  let y = sourceBox.y;
-  let width = sourceBox.width;
-  let height = sourceBox.height;
+  const box = componentSideResizeBox(
+    sourceBox,
+    { width: transformedWidth, height: transformedHeight },
+    anchor,
+    STAGE_BOX,
+  );
 
-  if (anchor === "middle-left") {
-    const right = sourceBox.x + sourceBox.width;
-    width = clamp(
-      transformedWidth,
-      minimumSize.width,
-      Math.max(minimumSize.width, right),
-    );
-    x = right - width;
-  } else if (anchor === "top-center") {
-    const bottom = sourceBox.y + sourceBox.height;
-    height = clamp(
-      transformedHeight,
-      minimumSize.height,
-      Math.max(minimumSize.height, bottom),
-    );
-    y = bottom - height;
-  }
+  // Keep the small Konva frame on the pointer synchronously. Rebuilding the
+  // recursive React element preview is intentionally deferred to one rAF.
+  syncComponentNodeBox(node, box);
+  return { anchor, box, rotation: node.rotation() };
+}
 
-  const nextBox = {
-    x,
-    y,
-    width,
-    height,
-    rotation: node.rotation(),
-  };
-
-  syncComponentNodeBox(node, nextBox);
-
-  return resizeComponentElementBounds(component, {
-    ...nextBox,
-    scaleX: box.width > 0 ? width / box.width : 1,
-    scaleY: box.height > 0 ? height / box.height : 1,
-  });
+function componentFromSideTransformPreview({
+  source,
+  sourceBox,
+  target,
+}: ComponentSideTransformPreview) {
+  return resizeComponentFromSideTransform(
+    source,
+    sourceBox,
+    { width: target.box.width, height: target.box.height },
+    target.anchor,
+    STAGE_BOX,
+    target.rotation,
+  ).component;
 }
 
 export function RawComponentNode({
@@ -458,136 +416,220 @@ export function RawComponentNode({
   const transformSourceBoxRef = useRef<Box | null>(null);
   const transformPreviewRef = useRef<RawComponent | null>(null);
   const transformPreviewAnchorRef = useRef<ComponentTransformAnchor | null>(null);
+  const latestSideTransformRef =
+    useRef<ComponentSideTransformPreview | null>(null);
+  const transformPreviewBatchRef =
+    useRef<LatestFrameBatch<ComponentSideTransformPreview> | null>(null);
   const [transformPreview, setTransformPreview] =
     useState<RawComponent | null>(null);
+  const renderTransformPreview = useCallback(
+    (pending: ComponentSideTransformPreview) => {
+      const next = componentFromSideTransformPreview(pending);
+      transformPreviewRef.current = next;
+      setTransformPreview(next);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const batch = createLatestFrameBatch(
+      (callback) => window.requestAnimationFrame(callback),
+      (frame) => window.cancelAnimationFrame(frame),
+      renderTransformPreview,
+    );
+    transformPreviewBatchRef.current = batch;
+
+    return () => {
+      batch.cancel();
+      if (transformPreviewBatchRef.current === batch) {
+        transformPreviewBatchRef.current = null;
+      }
+    };
+  }, [renderTransformPreview]);
+
   const renderedComponent = transformPreview ?? component;
   const box = componentBox(renderedComponent);
-  const selection: ComponentSelection = { kind: "component", componentIndex };
+  // Live content may trail the pointer by one frame; keep React's outer frame
+  // on the committed model so it cannot overwrite the newer imperative box.
+  const frameBox = componentBox(component);
+  const selection = useMemo<ComponentSelection>(
+    () => ({ kind: "component", componentIndex }),
+    [componentIndex],
+  );
   const key = keyForSelection(selection);
+  const setGroupNodeRef = useCallback(
+    (node: Konva.Group | null) => {
+      groupRef.current = node;
+      if (node) constrainComponentTransformBounds(node);
+      setNodeRef(key, node);
+    },
+    [key, setNodeRef],
+  );
   const elements = readArray(renderedComponent.elements).filter(
     isRecord,
   ) as RawElement[];
+  const handleMouseDown = useCallback(
+    (event: Konva.KonvaEventObject<MouseEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      if (isMultiSelectedComponent && !event.evt.shiftKey) return;
+      onSelect(selection, { additive: event.evt.shiftKey });
+    },
+    [isEditMode, isMultiSelectedComponent, onSelect, selection],
+  );
+  const handleTouchStart = useCallback(
+    (event: Konva.KonvaEventObject<TouchEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      if (isMultiSelectedComponent) return;
+      onSelect(selection);
+    },
+    [isEditMode, isMultiSelectedComponent, onSelect, selection],
+  );
+  const handleDragStart = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      if (!isMultiSelectedComponent && !event.evt.shiftKey) {
+        onSelect(selection);
+      }
+      onComponentDragStart(componentIndex, node);
+    },
+    [
+      componentIndex,
+      isEditMode,
+      isMultiSelectedComponent,
+      onComponentDragStart,
+      onSelect,
+      selection,
+    ],
+  );
+  const handleDragMove = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      onComponentDragMove(componentIndex, node);
+    },
+    [componentIndex, onComponentDragMove],
+  );
+  const handleDragEnd = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      onComponentDragEnd(componentIndex, node);
+    },
+    [componentIndex, isEditMode, onComponentDragEnd],
+  );
+  const handleTransformStart = useCallback(() => {
+    transformPreviewBatchRef.current?.cancel();
+    transformSourceRef.current = component;
+    transformSourceBoxRef.current = componentBox(component);
+    transformPreviewRef.current = null;
+    transformPreviewAnchorRef.current = null;
+    latestSideTransformRef.current = null;
+    setTransformPreview(null);
+  }, [component]);
+  const handleTransform = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      const anchor = componentTransformAnchorForNode(node);
+      if (!isComponentSideResizeAnchor(anchor)) return;
+      if (!hasTransformScale(node)) return;
+      const source = transformSourceRef.current ?? component;
+      const sourceBox = transformSourceBoxRef.current ?? componentBox(source);
+      const pending = {
+        source,
+        sourceBox,
+        target: componentSideTransformTargetFromNode(node, anchor, sourceBox),
+      } satisfies ComponentSideTransformPreview;
+      latestSideTransformRef.current = pending;
+      transformPreviewAnchorRef.current = anchor;
+
+      const batch = transformPreviewBatchRef.current;
+      if (batch) {
+        batch.schedule(pending);
+      } else {
+        // Effects normally install the batch before interaction is possible.
+        // Keep a safe synchronous fallback for unusual mounting environments.
+        renderTransformPreview(pending);
+      }
+    },
+    [component, isEditMode, renderTransformPreview],
+  );
+  const handleTransformEnd = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      transformPreviewBatchRef.current?.cancel();
+      const anchor = componentTransformAnchorForNode(node);
+      const previewAnchor = transformPreviewAnchorRef.current;
+      const sideAnchor = isComponentSideResizeAnchor(anchor)
+        ? anchor
+        : previewAnchor;
+      let next: RawComponent;
+      if (isComponentSideResizeAnchor(sideAnchor)) {
+        const source = transformSourceRef.current ?? component;
+        const sourceBox = transformSourceBoxRef.current ?? componentBox(source);
+        let finalPreview = latestSideTransformRef.current;
+        if (hasTransformScale(node)) {
+          finalPreview = {
+            source,
+            sourceBox,
+            target: componentSideTransformTargetFromNode(
+              node,
+              sideAnchor,
+              sourceBox,
+            ),
+          };
+        }
+        next = finalPreview
+          ? componentFromSideTransformPreview(finalPreview)
+          : transformPreviewRef.current ?? source;
+      } else {
+        next = componentFromNodeTransform(component, node, anchor);
+      }
+      transformSourceRef.current = null;
+      transformSourceBoxRef.current = null;
+      transformPreviewRef.current = null;
+      transformPreviewAnchorRef.current = null;
+      latestSideTransformRef.current = null;
+      // Let Konva finish its transform event (including cursor cleanup)
+      // before React performs the single final tree commit.
+      setTransformPreview(null);
+      onComponentChange(componentIndex, () => next);
+    },
+    [component, componentIndex, isEditMode, onComponentChange],
+  );
+
   return (
     <Group
-      ref={(node) => {
-        groupRef.current = node;
-        setNodeRef(key, node);
-      }}
-      x={box.x + box.width / 2}
-      y={box.y + box.height / 2}
-      width={box.width}
-      height={box.height}
-      offsetX={box.width / 2}
-      offsetY={box.height / 2}
-      rotation={readNumber(renderedComponent.rotation) ?? 0}
+      ref={setGroupNodeRef}
+      x={frameBox.x + frameBox.width / 2}
+      y={frameBox.y + frameBox.height / 2}
+      width={frameBox.width}
+      height={frameBox.height}
+      offsetX={frameBox.width / 2}
+      offsetY={frameBox.height / 2}
+      rotation={readNumber(component.rotation) ?? 0}
       draggable={isEditMode}
-      onMouseDown={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        if (isMultiSelectedComponent && !event.evt.shiftKey) return;
-        onSelect(selection, { additive: event.evt.shiftKey });
-      }}
-      onTouchStart={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        if (isMultiSelectedComponent) return;
-        onSelect(selection);
-      }}
-      onDragStart={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        if (!isMultiSelectedComponent && !event.evt.shiftKey) {
-          onSelect(selection);
-        }
-        onComponentDragStart(componentIndex, node);
-      }}
-      onDragMove={(event) => {
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        onComponentDragMove(componentIndex, node);
-      }}
-      onDragEnd={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        onComponentDragEnd(componentIndex, node);
-      }}
-      onTransformStart={() => {
-        transformSourceRef.current = component;
-        transformSourceBoxRef.current = componentBox(component);
-        transformPreviewRef.current = null;
-        transformPreviewAnchorRef.current = null;
-        setTransformPreview(null);
-      }}
-      onTransform={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        const anchor = componentTransformAnchorForNode(node);
-        if (!isComponentSideResizeAnchor(anchor)) return;
-        if (!hasTransformScale(node)) return;
-        const current = transformPreviewRef.current ?? component;
-        const source = transformSourceRef.current ?? component;
-        const next = isTopOrLeftSideResizeAnchor(anchor)
-          ? componentFromSideNodeTransform(
-              source,
-              node,
-              anchor,
-              transformSourceBoxRef.current ??
-                componentBox(source),
-            )
-          : componentFromNodeTransform(current, node, anchor);
-        transformPreviewRef.current = next;
-        transformPreviewAnchorRef.current = anchor;
-        flushSync(() => setTransformPreview(next));
-      }}
-      onTransformEnd={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        const anchor = componentTransformAnchorForNode(node);
-        const previewAnchor = transformPreviewAnchorRef.current;
-        const sideAnchor = isComponentSideResizeAnchor(anchor)
-          ? anchor
-          : previewAnchor;
-        let next: RawComponent;
-        if (isComponentSideResizeAnchor(sideAnchor)) {
-          if (hasTransformScale(node)) {
-            const current = transformPreviewRef.current ?? component;
-            const source = transformSourceRef.current ?? component;
-            next = isTopOrLeftSideResizeAnchor(sideAnchor)
-              ? componentFromSideNodeTransform(
-                  source,
-                  node,
-                  sideAnchor,
-                  transformSourceBoxRef.current ??
-                    componentBox(source),
-                )
-              : componentFromNodeTransform(current, node, sideAnchor);
-          } else {
-            next =
-              transformPreviewRef.current ??
-              transformSourceRef.current ??
-              component;
-          }
-        } else {
-          next = componentFromNodeTransform(component, node, anchor);
-        }
-        transformSourceRef.current = null;
-        transformSourceBoxRef.current = null;
-        transformPreviewRef.current = null;
-        transformPreviewAnchorRef.current = null;
-        flushSync(() => {
-          setTransformPreview(null);
-          onComponentChange(componentIndex, () => next);
-        });
-      }}
+      onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+      onTransformStart={handleTransformStart}
+      onTransform={handleTransform}
+      onTransformEnd={handleTransformEnd}
     >
       {isEditMode ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}
       {elements.map((element, elementIndex) => (

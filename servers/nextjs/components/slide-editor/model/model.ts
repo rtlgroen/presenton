@@ -34,6 +34,10 @@ import {
   layoutFlowChildren,
 } from "@/components/slide-editor/layout/flowLayout";
 import { deleteLayoutChildFromArray } from "@/components/slide-editor/layout/layoutResize";
+export {
+  resizeComponentElementBounds,
+  resizeRawElementBounds,
+} from "@/components/slide-editor/model/component-resize";
 import type { TemplateV2SurfaceSelectedDetail } from "@/components/slide-editor/events/events";
 import { rawChartToEditorChart } from "@/components/slide-editor/model/chart-model";
 import {
@@ -407,56 +411,6 @@ export function resizeComponentFrame(
     size: { width: next.width, height: next.height },
     rotation: next.rotation ?? readNumber(component.rotation) ?? 0,
   };
-}
-
-export function resizeComponentElementBounds(
-  component: RawComponent,
-  next: Box & { scaleX: number; scaleY: number; rotation?: number },
-) {
-  return {
-    ...component,
-    position: { x: next.x, y: next.y },
-    size: { width: next.width, height: next.height },
-    rotation: next.rotation ?? readNumber(component.rotation) ?? 0,
-    elements: resizeRawElementBounds(
-      readArray(component.elements),
-      next.scaleX,
-      next.scaleY,
-    ),
-  };
-}
-
-export function resizeRawElementBounds(
-  elements: unknown[],
-  scaleX: number,
-  scaleY: number,
-): unknown[] {
-  const safeScaleX = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1;
-  const safeScaleY = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1;
-
-  return elements.map((value) => {
-    const element = asRecord(value);
-    if (!element) return value;
-    const explicitSize = readOptionalSize(element.size);
-    const childInfo = childArrayInfo(element);
-    const resizedChildren = childInfo
-      ? resizeRawElementBounds(childInfo.items, safeScaleX, safeScaleY)
-      : null;
-    return {
-      ...element,
-      ...(explicitSize
-        ? {
-            size: {
-              width: Math.max(1, explicitSize.width * safeScaleX),
-              height: Math.max(1, explicitSize.height * safeScaleY),
-            },
-          }
-        : {}),
-      ...(childInfo && resizedChildren
-        ? withUpdatedChildItems({}, childInfo, resizedChildren)
-        : {}),
-    };
-  });
 }
 
 export function scaleRawElements(
