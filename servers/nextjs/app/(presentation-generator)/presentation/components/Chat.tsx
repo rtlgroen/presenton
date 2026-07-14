@@ -1607,18 +1607,32 @@ const Chat = ({
     });
     clearChatUi();
 
-    if (activeResourceId && conversationIdToDelete) {
+    if (activeResourceId) {
+      const conversationIdsToDelete = new Set<string>();
+      if (conversationIdToDelete) {
+        conversationIdsToDelete.add(conversationIdToDelete);
+      }
+
       try {
-        await chatAdapter.deleteConversation(
-          activeResourceId,
-          conversationIdToDelete
+        const savedConversations =
+          await chatAdapter.listConversations(activeResourceId);
+        savedConversations.forEach((savedConversation) => {
+          conversationIdsToDelete.add(savedConversation.conversation_id);
+        });
+        await Promise.all(
+          Array.from(conversationIdsToDelete, (savedConversationId) =>
+            chatAdapter.deleteConversation(
+              activeResourceId,
+              savedConversationId
+            )
+          )
         );
       } catch (error) {
-        console.error("Failed to delete chat conversation:", error);
+        console.error("Failed to delete chat conversations:", error);
         const detail =
           error instanceof Error
             ? error.message
-            : "Could not delete the saved chat conversation";
+            : "Could not delete the saved chat conversations";
         notify.error("Could not delete chat", detail);
       }
     }
@@ -2584,8 +2598,22 @@ const Chat = ({
           height={458}
           loading="eager"
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-0 h-[458px] w-[294px] max-w-none object-cover"
+          className="pointer-events-none absolute left-0 top-0 h-[457.951px] w-[293.611px] max-w-none object-cover opacity-40"
         />
+
+        <div className="sticky top-0 z-20 flex shrink-0 items-center justify-end border-b border-[#F1F1F3] bg-white/90 px-3 py-2 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => void resetChat()}
+            disabled={isSending || isHistoryLoading}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5E8] bg-white px-3 font-manrope text-xs font-medium text-[#55555F] shadow-sm transition-colors hover:border-[#D7D7DC] hover:bg-[#F7F7F8] hover:text-[#252529] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Start a new chat"
+            title="Start a new chat"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New chat
+          </button>
+        </div>
 
         <div className="relative z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-color:#D7D9DF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#D7D9DF] [&::-webkit-scrollbar-track]:bg-transparent">
           {isHistoryLoading && messages.length === 0 ? (
@@ -2732,7 +2760,7 @@ const Chat = ({
                                 : "text-[#808080]",
                             )}
                           >
-                            <span className="flex h-[14px] w-[14px] shrink-0 items-start justify-center pt-0.5">
+                            <span className="mt-1 flex h-[14px] w-[14px] shrink-0 items-start justify-center pt-0.5">
                               <span className="h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
                             </span>
                             <MarkdownRenderer

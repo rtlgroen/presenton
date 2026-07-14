@@ -19,7 +19,7 @@
       <feGaussianBlur stdDeviation="61.1689" />
     </filter>
   </defs>
-  <g opacity="0.2" clip-path="url(#chat-bg-clip)">
+  <g clip-path="url(#chat-bg-clip)">
     <rect width="293.611" height="457.951" fill="#FFFFFF" />
     <g transform="translate(-40.57 32.63)" filter="url(#chat-bg-indigo-blur)">
       <circle cx="187.483" cy="187.483" r="65.1449" fill="#6172F3" />
