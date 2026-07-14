@@ -732,6 +732,10 @@ def test_build_slide_preview_html_adds_fixed_viewport_css(monkeypatch):
 
     assert '<base href="http://backend.test/" />' in html
     assert '<script src="https://cdn.tailwindcss.com"></script>' in html
+    assert (
+        '<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>'
+        in html
+    )
     assert "width: 1024px;" in html
     assert "height: 768px;" in html
     assert ".slide-content" in html
@@ -780,6 +784,63 @@ def test_font_css_family_aliases_match_tailwind_underscore_font_values():
     assert 'font-family: "Hagrid Text Heavy"' in aliases
     assert "hagrid.otf" in aliases
     assert "Aileron" not in aliases
+
+
+def test_font_face_css_for_declared_fonts_uses_actual_font_metadata(
+    monkeypatch,
+    tmp_path,
+):
+    font_path = tmp_path / "Formula-Bold.otf"
+    font_path.write_bytes(b"font")
+    font_url = font_path.resolve().as_uri()
+
+    monkeypatch.setattr(
+        fonts_and_slides_preview,
+        "get_font_details",
+        lambda path: pptx_font_utils.FontDetail(
+            file=path,
+            size_bytes=123,
+            family_name="Formula",
+            full_name="Formula Bold",
+            subfamily_name="Regular",
+            postscript_name="FormulaCondensed-Bold",
+            weight_class=700,
+        ),
+    )
+
+    css = fonts_and_slides_preview._font_face_css_for_declared_fonts(
+        "@font-face { "
+        "font-family: 'Formula_Bold'; "
+        "font-weight: 400; "
+        f"src: url('{font_url}') format('opentype'); "
+        "}"
+    )
+
+    assert 'font-family: "Formula_Bold";' in css
+    assert 'font-family: "Formula Bold";' in css
+    assert 'font-family: "Formula";' in css
+    assert "font-weight: 700;" in css
+    assert f'url("{font_url}")' in css
+
+
+def test_tailwind_fallback_css_handles_converted_slide_utility_classes():
+    css = fonts_and_slides_preview._tailwind_fallback_css_for_slide_html(
+        '<div class="absolute left-[72.0px] top-[109.7px] '
+        'w-[440.5px] h-[57.5px] overflow-visible bg-[#F15560]">'
+        '<span class="text-[42.7px] text-[#FFFFFF] font-bold '
+        "font-['Formula_Bold']\">CAMPAIGN GOALS</span>"
+        "</div>"
+    )
+
+    assert '[class~="absolute"]{position:absolute;}' in css
+    assert '[class~="left-[72.0px]"]{left:72.0px;}' in css
+    assert '[class~="text-[42.7px]"]{font-size:42.7px;}' in css
+    assert '[class~="text-[#FFFFFF]"]{color:#FFFFFF;}' in css
+    assert '[class~="font-bold"]{font-weight:700;}' in css
+    assert (
+        '[class~="font-[\'Formula_Bold\']"]{font-family:"Formula_Bold", Arial, sans-serif;}'
+        in css
+    )
 
 
 def test_font_face_css_for_local_fonts_includes_family_and_full_names(
@@ -940,6 +1001,11 @@ async def test_create_slide_previews_from_html_uses_converter_dimensions_and_fon
     assert height == 768
     assert len(htmls) == 1
     html = htmls[0]
+    assert '<script src="https://cdn.tailwindcss.com"></script>' in html
+    assert (
+        '<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>'
+        in html
+    )
     assert ".deck-font { color: black; }" in html
     assert 'font-family: "Khand Bold";' in html
     assert "fonts.googleapis.com/css2?family=Montserrat" in html

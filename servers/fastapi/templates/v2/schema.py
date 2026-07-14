@@ -10,6 +10,20 @@ from .models.layouts import RawSlideLayout
 
 
 CONTENT_TYPES = {"text", "image", "text-list", "table", "chart"}
+CHART_TYPE_VALUES = [
+    "area",
+    "bar",
+    "bubble",
+    "donut",
+    "horizontal_bar",
+    "horizontal_stacked_bar",
+    "line",
+    "pie",
+    "polar_area",
+    "radar",
+    "scatter",
+    "stacked_bar",
+]
 REPEATED_NAME_SUFFIX_RE = re.compile(r"_\d+$")
 JSON_SCHEMA_URI = "https://json-schema.org/draft/2020-12/schema"
 COMPONENT_REPEATED_NAME_TOKEN_RE = re.compile(r"_\d+(?=_|$)")
@@ -174,7 +188,7 @@ def _content_schema_for_element(element: dict[str, Any]) -> dict[str, Any]:
         )
 
     if element_type == "image":
-        key = "query" if element.get("is_icon") is True else "prompt"
+        key = "icon_query" if element.get("is_icon") is True else "image_prompt"
         return _object_schema({key: {"type": "string"}})
 
     if element_type == "text-list":
@@ -965,8 +979,11 @@ def _chart_content_schema() -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
+            "chart_type": {
+                "type": "string",
+                "enum": CHART_TYPE_VALUES,
+            },
             "title": {"type": ["string", "null"]},
-            "title_color": {"type": ["string", "null"]},
             "categories": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -990,7 +1007,7 @@ def _chart_content_schema() -> dict[str, Any]:
                 "maxItems": 12,
             },
         },
-        "required": ["categories", "series"],
+        "required": ["chart_type", "categories", "series"],
     }
 
 

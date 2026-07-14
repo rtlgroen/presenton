@@ -29,6 +29,7 @@ const STAGE_WIDTH = 1280;
 const STAGE_HEIGHT = 720;
 const COMPACT_SELECTION_TOOLBAR_WIDTH = 420;
 const CONTAINER_SELECTION_TOOLBAR_WIDTH = 760;
+const INFOGRAPHIC_SELECTION_TOOLBAR_WIDTH = 470;
 const TOOLBAR_HEIGHT = 40;
 const TOOLBAR_GAP = 8;
 const TOOLBAR_MARGIN = 8;
@@ -111,9 +112,13 @@ export function getTemplateV2SelectionToolbarBounds(
 function toolbarWidthForTarget(
   layoutTarget: TemplateV2SelectionToolbarTarget | null,
 ) {
-  return layoutTarget?.element.type === "container"
-    ? CONTAINER_SELECTION_TOOLBAR_WIDTH
-    : COMPACT_SELECTION_TOOLBAR_WIDTH;
+  if (layoutTarget?.element.type === "container") {
+    return CONTAINER_SELECTION_TOOLBAR_WIDTH;
+  }
+  if (layoutTarget?.element.type === "infographic") {
+    return INFOGRAPHIC_SELECTION_TOOLBAR_WIDTH;
+  }
+  return COMPACT_SELECTION_TOOLBAR_WIDTH;
 }
 
 function toolbarPosition({

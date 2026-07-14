@@ -23,6 +23,7 @@ import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-he
 import { textRunsContent } from "@/components/slide-editor/text/text-runs";
 import {
   displayText,
+  layoutTextListRenderItems,
   layoutRenderTextRuns,
   lineRenderHeight,
   lineStartX,
@@ -30,15 +31,25 @@ import {
   rawFont,
   rawRenderTextRuns,
   rawTextContent,
-  rawTextListRenderTextRuns,
+  textListVisualLocalBox,
   textVisualLocalBox,
   type RenderTextRun,
 } from "@/components/slide-editor/text/template-v2-text";
 import type { TableCellSelection } from "@/components/slide-editor/state/state";
 import { loadKonvaImage } from "@/components/slide-editor/surface/exportAssets";
+import { constrainComponentTransformBounds } from "@/components/slide-editor/surface/componentFrameBounds";
+import {
+  createLatestFrameBatch,
+  type LatestFrameBatch,
+} from "@/components/slide-editor/surface/latestFrameBatch";
 import { TemplateV2ChartJsElement as RawChartElement } from "@/components/slide-editor/charts/TemplateV2ChartJsElement";
 import { TemplateV2TableElement as RawTableElement } from "@/components/slide-editor/tables/TemplateV2TableElement";
 import { buildSvgUpdateUrl } from "@/lib/svg-color";
+import {
+  componentSideResizeBox,
+  resizeComponentFromSideTransform,
+  type ComponentSideResizeAnchor,
+} from "@/components/slide-editor/model/component-resize";
 import {
   asRecord,
   borderRadius,
@@ -116,6 +127,18 @@ type ComponentTransformBox = Box & {
   rawHeight: number;
 };
 
+type ComponentSideTransformTarget = {
+  anchor: ComponentSideResizeAnchor;
+  box: Box;
+  rotation: number;
+};
+
+type ComponentSideTransformPreview = {
+  source: RawComponent;
+  sourceBox: Box;
+  target: ComponentSideTransformTarget;
+};
+
 const HORIZONTAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
   "middle-left",
   "middle-right",
@@ -125,14 +148,35 @@ const VERTICAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
   "bottom-center",
 ]);
 
+function isComponentSideResizeAnchor(
+  anchor: ComponentTransformAnchor | null,
+): anchor is ComponentSideResizeAnchor {
+  return Boolean(
+    anchor &&
+      (HORIZONTAL_RESIZE_ANCHORS.has(anchor) ||
+        VERTICAL_RESIZE_ANCHORS.has(anchor)),
+  );
+}
+
+function hasTransformScale(node: Konva.Node) {
+  return (
+    Math.abs(node.scaleX() - 1) >= 0.001 ||
+    Math.abs(node.scaleY() - 1) >= 0.001
+  );
+}
+
+function componentTransformerForNode(node: Konva.Node) {
+  const stage = node.getStage();
+  if (!stage) return null;
+  return stage
+    .find<Konva.Transformer>("Transformer")
+    .find((candidate) => candidate.getNodes().includes(node));
+}
+
 function componentTransformAnchorForNode(
   node: Konva.Node,
 ): ComponentTransformAnchor | null {
-  const stage = node.getStage();
-  if (!stage) return null;
-  const transformer = stage
-    .find<Konva.Transformer>("Transformer")
-    .find((candidate) => candidate.getNodes().includes(node));
+  const transformer = componentTransformerForNode(node);
   const activeAnchor = transformer?.getActiveAnchor();
   return isComponentTransformAnchor(activeAnchor) ? activeAnchor : null;
 }
@@ -176,7 +220,6 @@ function componentResizeModeForTransform(
 }
 
 function componentBoxFromTransform(
-  component: RawComponent,
   box: Box,
   scaleX: number,
   scaleY: number,
@@ -188,80 +231,47 @@ function componentBoxFromTransform(
   const nextScaleY = isHorizontalOnly || anchor === "rotater" ? 1 : scaleY;
   const rawWidth = Math.max(1, box.width * nextScaleX);
   const rawHeight = Math.max(1, box.height * nextScaleY);
-  const minimumSize = minimumComponentSizeForElementBoundsResize(component);
-  const width = isHorizontalOnly ? Math.max(rawWidth, minimumSize.width) : rawWidth;
-  const height = isVerticalOnly ? Math.max(rawHeight, minimumSize.height) : rawHeight;
 
   return {
     ...box,
-    width,
-    height,
-    scaleX: box.width > 0 ? width / box.width : 1,
-    scaleY: box.height > 0 ? height / box.height : 1,
+    width: rawWidth,
+    height: rawHeight,
+    scaleX: box.width > 0 ? rawWidth / box.width : 1,
+    scaleY: box.height > 0 ? rawHeight / box.height : 1,
     rawWidth,
     rawHeight,
   };
 }
 
-function minimumComponentSizeForElementBoundsResize(component: RawComponent) {
-  let width = 1;
-  let height = 1;
-
-  const visitElement = (
-    element: RawElement,
-    box: Box,
-    offsetX: number,
-    offsetY: number,
-  ) => {
-    const x = offsetX + box.x;
-    const y = offsetY + box.y;
-    if (x > 0) width = Math.max(width, x + box.width);
-    if (y > 0) height = Math.max(height, y + box.height);
-
-    const childInfo = childArrayInfo(element);
-    if (!childInfo) return;
-    layoutChildren(element, childInfo.items, box).forEach((childLayout) => {
-      visitElement(
-        childLayout.child,
-        childLayout.box ?? elementBox(childLayout.child),
-        x,
-        y,
-      );
-    });
-  };
-
-  readArray(component.elements)
-    .filter(isRecord)
-    .forEach((element) => {
-      visitElement(element as RawElement, elementBox(element), 0, 0);
-    });
-
-  return { width, height };
-}
-
 function positionFromComponentTransform(
+  box: Box,
   node: Konva.Node,
   nextBox: ComponentTransformBox,
   anchor: ComponentTransformAnchor | null,
 ): Point {
+  if (isComponentSideResizeAnchor(anchor)) {
+    return {
+      x: clamp(box.x, 0, Math.max(0, STAGE_BOX.width - nextBox.width)),
+      y: clamp(box.y, 0, Math.max(0, STAGE_BOX.height - nextBox.height)),
+    };
+  }
+
   const rawPosition = positionFromNodeInParent(node, STAGE_BOX, {
     ...nextBox,
     width: nextBox.rawWidth,
     height: nextBox.rawHeight,
   });
-  let x = rawPosition.x;
-  let y = rawPosition.y;
-
-  if (anchor === "middle-left") {
-    x = rawPosition.x + nextBox.rawWidth - nextBox.width;
-  }
-  if (anchor === "top-center") {
-    y = rawPosition.y + nextBox.rawHeight - nextBox.height;
-  }
-
   return {
-    x: clamp(x, 0, Math.max(0, STAGE_BOX.width - nextBox.width)),
-    y: clamp(y, 0, Math.max(0, STAGE_BOX.height - nextBox.height)),
+    x: clamp(
+      rawPosition.x,
+      0,
+      Math.max(0, STAGE_BOX.width - nextBox.width),
+    ),
+    y: clamp(
+      rawPosition.y,
+      0,
+      Math.max(0, STAGE_BOX.height - nextBox.height),
+    ),
   };
 }
 
@@ -273,11 +283,11 @@ function componentFromNodeTransform(
   const box = componentBox(component);
   const scaleX = node.scaleX();
   const scaleY = node.scaleY();
-  const nextBox = componentBoxFromTransform(component, box, scaleX, scaleY, anchor);
+  const nextBox = componentBoxFromTransform(box, scaleX, scaleY, anchor);
   const resizeMode = componentResizeModeForTransform(anchor, scaleX, scaleY);
   node.scaleX(1);
   node.scaleY(1);
-  const position = positionFromComponentTransform(node, nextBox, anchor);
+  const position = positionFromComponentTransform(box, node, nextBox, anchor);
   const nextComponentBox = {
     ...position,
     width: nextBox.width,
@@ -300,6 +310,54 @@ function componentFromNodeTransform(
     scaleX: nextBox.scaleX,
     scaleY: nextBox.scaleY,
   });
+}
+
+function syncComponentNodeBox(node: Konva.Group, box: Box) {
+  node.setAttrs({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+    width: box.width,
+    height: box.height,
+    offsetX: box.width / 2,
+    offsetY: box.height / 2,
+    scaleX: 1,
+    scaleY: 1,
+  });
+}
+
+function componentSideTransformTargetFromNode(
+  node: Konva.Group,
+  anchor: ComponentSideResizeAnchor,
+  sourceBox: Box,
+) {
+  const transformedWidth = Math.max(1, node.width() * node.scaleX());
+  const transformedHeight = Math.max(1, node.height() * node.scaleY());
+  const box = componentSideResizeBox(
+    sourceBox,
+    { width: transformedWidth, height: transformedHeight },
+    anchor,
+    STAGE_BOX,
+  );
+
+  // Keep the small Konva frame on the pointer synchronously. Rebuilding the
+  // recursive React element preview is intentionally deferred to one rAF.
+  syncComponentNodeBox(node, box);
+  return { anchor, box, rotation: node.rotation() };
+}
+
+function componentFromSideTransformPreview({
+  source,
+  sourceBox,
+  target,
+}: ComponentSideTransformPreview) {
+  return resizeComponentFromSideTransform(
+    source,
+    sourceBox,
+    { width: target.box.width, height: target.box.height },
+    target.anchor,
+    STAGE_BOX,
+    target.rotation,
+  ).component;
 }
 
 export function RawComponentNode({
@@ -354,115 +412,224 @@ export function RawComponentNode({
   fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
+  const transformSourceRef = useRef<RawComponent | null>(null);
+  const transformSourceBoxRef = useRef<Box | null>(null);
   const transformPreviewRef = useRef<RawComponent | null>(null);
+  const transformPreviewAnchorRef = useRef<ComponentTransformAnchor | null>(null);
+  const latestSideTransformRef =
+    useRef<ComponentSideTransformPreview | null>(null);
+  const transformPreviewBatchRef =
+    useRef<LatestFrameBatch<ComponentSideTransformPreview> | null>(null);
   const [transformPreview, setTransformPreview] =
     useState<RawComponent | null>(null);
+  const renderTransformPreview = useCallback(
+    (pending: ComponentSideTransformPreview) => {
+      const next = componentFromSideTransformPreview(pending);
+      transformPreviewRef.current = next;
+      setTransformPreview(next);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const batch = createLatestFrameBatch(
+      (callback) => window.requestAnimationFrame(callback),
+      (frame) => window.cancelAnimationFrame(frame),
+      renderTransformPreview,
+    );
+    transformPreviewBatchRef.current = batch;
+
+    return () => {
+      batch.cancel();
+      if (transformPreviewBatchRef.current === batch) {
+        transformPreviewBatchRef.current = null;
+      }
+    };
+  }, [renderTransformPreview]);
+
   const renderedComponent = transformPreview ?? component;
   const box = componentBox(renderedComponent);
-  const selection: ComponentSelection = { kind: "component", componentIndex };
+  // Live content may trail the pointer by one frame; keep React's outer frame
+  // on the committed model so it cannot overwrite the newer imperative box.
+  const frameBox = componentBox(component);
+  const selection = useMemo<ComponentSelection>(
+    () => ({ kind: "component", componentIndex }),
+    [componentIndex],
+  );
   const key = keyForSelection(selection);
+  const setGroupNodeRef = useCallback(
+    (node: Konva.Group | null) => {
+      groupRef.current = node;
+      if (node) constrainComponentTransformBounds(node);
+      setNodeRef(key, node);
+    },
+    [key, setNodeRef],
+  );
   const elements = readArray(renderedComponent.elements).filter(
     isRecord,
   ) as RawElement[];
-  const clipBounds = isEditMode
-    ? null
-    : componentTextClipBounds(elements, box);
+  const handleMouseDown = useCallback(
+    (event: Konva.KonvaEventObject<MouseEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      if (isMultiSelectedComponent && !event.evt.shiftKey) return;
+      onSelect(selection, { additive: event.evt.shiftKey });
+    },
+    [isEditMode, isMultiSelectedComponent, onSelect, selection],
+  );
+  const handleTouchStart = useCallback(
+    (event: Konva.KonvaEventObject<TouchEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      if (isMultiSelectedComponent) return;
+      onSelect(selection);
+    },
+    [isEditMode, isMultiSelectedComponent, onSelect, selection],
+  );
+  const handleDragStart = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      if (!isMultiSelectedComponent && !event.evt.shiftKey) {
+        onSelect(selection);
+      }
+      onComponentDragStart(componentIndex, node);
+    },
+    [
+      componentIndex,
+      isEditMode,
+      isMultiSelectedComponent,
+      onComponentDragStart,
+      onSelect,
+      selection,
+    ],
+  );
+  const handleDragMove = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      onComponentDragMove(componentIndex, node);
+    },
+    [componentIndex, onComponentDragMove],
+  );
+  const handleDragEnd = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      onComponentDragEnd(componentIndex, node);
+    },
+    [componentIndex, isEditMode, onComponentDragEnd],
+  );
+  const handleTransformStart = useCallback(() => {
+    transformPreviewBatchRef.current?.cancel();
+    transformSourceRef.current = component;
+    transformSourceBoxRef.current = componentBox(component);
+    transformPreviewRef.current = null;
+    transformPreviewAnchorRef.current = null;
+    latestSideTransformRef.current = null;
+    setTransformPreview(null);
+  }, [component]);
+  const handleTransform = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      const anchor = componentTransformAnchorForNode(node);
+      if (!isComponentSideResizeAnchor(anchor)) return;
+      if (!hasTransformScale(node)) return;
+      const source = transformSourceRef.current ?? component;
+      const sourceBox = transformSourceBoxRef.current ?? componentBox(source);
+      const pending = {
+        source,
+        sourceBox,
+        target: componentSideTransformTargetFromNode(node, anchor, sourceBox),
+      } satisfies ComponentSideTransformPreview;
+      latestSideTransformRef.current = pending;
+      transformPreviewAnchorRef.current = anchor;
+
+      const batch = transformPreviewBatchRef.current;
+      if (batch) {
+        batch.schedule(pending);
+      } else {
+        // Effects normally install the batch before interaction is possible.
+        // Keep a safe synchronous fallback for unusual mounting environments.
+        renderTransformPreview(pending);
+      }
+    },
+    [component, isEditMode, renderTransformPreview],
+  );
+  const handleTransformEnd = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      transformPreviewBatchRef.current?.cancel();
+      const anchor = componentTransformAnchorForNode(node);
+      const previewAnchor = transformPreviewAnchorRef.current;
+      const sideAnchor = isComponentSideResizeAnchor(anchor)
+        ? anchor
+        : previewAnchor;
+      let next: RawComponent;
+      if (isComponentSideResizeAnchor(sideAnchor)) {
+        const source = transformSourceRef.current ?? component;
+        const sourceBox = transformSourceBoxRef.current ?? componentBox(source);
+        let finalPreview = latestSideTransformRef.current;
+        if (hasTransformScale(node)) {
+          finalPreview = {
+            source,
+            sourceBox,
+            target: componentSideTransformTargetFromNode(
+              node,
+              sideAnchor,
+              sourceBox,
+            ),
+          };
+        }
+        next = finalPreview
+          ? componentFromSideTransformPreview(finalPreview)
+          : transformPreviewRef.current ?? source;
+      } else {
+        next = componentFromNodeTransform(component, node, anchor);
+      }
+      transformSourceRef.current = null;
+      transformSourceBoxRef.current = null;
+      transformPreviewRef.current = null;
+      transformPreviewAnchorRef.current = null;
+      latestSideTransformRef.current = null;
+      // Let Konva finish its transform event (including cursor cleanup)
+      // before React performs the single final tree commit.
+      setTransformPreview(null);
+      onComponentChange(componentIndex, () => next);
+    },
+    [component, componentIndex, isEditMode, onComponentChange],
+  );
 
   return (
     <Group
-      ref={(node) => {
-        groupRef.current = node;
-        setNodeRef(key, node);
-      }}
-      x={box.x + box.width / 2}
-      y={box.y + box.height / 2}
-      width={box.width}
-      height={box.height}
-      offsetX={box.width / 2}
-      offsetY={box.height / 2}
-      rotation={readNumber(renderedComponent.rotation) ?? 0}
-      clipX={clipBounds?.x}
-      clipY={clipBounds?.y}
-      clipWidth={clipBounds?.width}
-      clipHeight={clipBounds?.height}
+      ref={setGroupNodeRef}
+      x={frameBox.x + frameBox.width / 2}
+      y={frameBox.y + frameBox.height / 2}
+      width={frameBox.width}
+      height={frameBox.height}
+      offsetX={frameBox.width / 2}
+      offsetY={frameBox.height / 2}
+      rotation={readNumber(component.rotation) ?? 0}
       draggable={isEditMode}
-      onMouseDown={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        if (isMultiSelectedComponent && !event.evt.shiftKey) return;
-        onSelect(selection, { additive: event.evt.shiftKey });
-      }}
-      onTouchStart={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        if (isMultiSelectedComponent) return;
-        onSelect(selection);
-      }}
-      onDragStart={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        if (!isMultiSelectedComponent && !event.evt.shiftKey) {
-          onSelect(selection);
-        }
-        onComponentDragStart(componentIndex, node);
-      }}
-      onDragMove={(event) => {
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        onComponentDragMove(componentIndex, node);
-      }}
-      onDragEnd={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        onComponentDragEnd(componentIndex, node);
-      }}
-      onTransformStart={() => {
-        transformPreviewRef.current = null;
-        setTransformPreview(null);
-      }}
-      onTransform={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        const anchor = componentTransformAnchorForNode(node);
-        if (anchor === "rotater") return;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        if (
-          Math.abs(scaleX - 1) < 0.001 &&
-          Math.abs(scaleY - 1) < 0.001
-        ) {
-          return;
-        }
-        const next = componentFromNodeTransform(
-          transformPreviewRef.current ?? component,
-          node,
-          anchor,
-        );
-        transformPreviewRef.current = next;
-        setTransformPreview(next);
-      }}
-      onTransformEnd={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        const anchor = componentTransformAnchorForNode(node);
-        const next = componentFromNodeTransform(
-          transformPreviewRef.current ?? component,
-          node,
-          anchor,
-        );
-        transformPreviewRef.current = null;
-        setTransformPreview(null);
-        onComponentChange(componentIndex, () => next);
-      }}
+      onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+      onTransformStart={handleTransformStart}
+      onTransform={handleTransform}
+      onTransformEnd={handleTransformEnd}
     >
       {isEditMode ? <SelectionBoundsRect width={box.width} height={box.height} /> : null}
       {elements.map((element, elementIndex) => (
@@ -495,58 +662,6 @@ export function RawComponentNode({
   );
 }
 
-function componentTextClipBounds(elements: RawElement[], componentBox: Box): Box {
-  let left = 0;
-  let top = 0;
-  let right = componentBox.width;
-  let bottom = componentBox.height;
-
-  const includeBox = (box: Box, offsetX: number, offsetY: number) => {
-    left = Math.min(left, offsetX + box.x);
-    top = Math.min(top, offsetY + box.y);
-    right = Math.max(right, offsetX + box.x + box.width);
-    bottom = Math.max(bottom, offsetY + box.y + box.height);
-  };
-
-  const visitElement = (
-    element: RawElement,
-    box: Box,
-    offsetX: number,
-    offsetY: number,
-  ) => {
-    const visualBox = constrainedWrappedTextVisualBox(element, box, {
-      x: 0,
-      y: 0,
-      width: Math.max(1, componentBox.width - offsetX),
-      height: componentBox.height,
-    });
-    const type = readString(element.type);
-    if (type === "text" || type === "text-list") {
-      includeBox(visualBox, offsetX, offsetY);
-    }
-
-    const childInfo = childArrayInfo(element);
-    if (!childInfo) return;
-    layoutChildren(element, childInfo.items, box).forEach((childLayout) => {
-      visitElement(
-        childLayout.child,
-        childLayout.box ?? elementBox(childLayout.child),
-        offsetX + box.x,
-        offsetY + box.y,
-      );
-    });
-  };
-
-  elements.forEach((element) => visitElement(element, elementBox(element), 0, 0));
-
-  return {
-    x: left,
-    y: top,
-    width: Math.max(1, right - left),
-    height: Math.max(1, bottom - top),
-  };
-}
-
 function constrainedWrappedTextVisualBox(
   element: RawElement,
   box: Box,
@@ -561,9 +676,7 @@ function constrainedWrappedTextVisualBox(
 
   const constrainedBox = { ...box, width };
   return type === "text-list"
-    ? textVisualLocalBox(element, constrainedBox, {
-        runs: rawTextListRenderTextRuns(element),
-      })
+    ? textListVisualLocalBox(element, constrainedBox)
     : textVisualLocalBox(element, constrainedBox);
 }
 
@@ -981,11 +1094,10 @@ function RawElementVisual({
   }
   if (type === "text-list") {
     return (
-      <RawRichTextElement
+      <RawTextListElement
         element={element}
         width={width}
         height={height}
-        runs={rawTextListRenderTextRuns(element)}
         interactive={interactive}
       />
     );
@@ -1135,6 +1247,45 @@ function RawRichTextElement({
 
 function textFill(font: { color: string; opacity?: number | null }) {
   return colorWithOpacity(withHash(font.color), font.opacity ?? 1);
+}
+
+function RawTextListElement({
+  element,
+  width,
+  height,
+  interactive,
+}: {
+  element: RawElement;
+  width: number;
+  height: number;
+  interactive: boolean;
+}) {
+  const { tokens } = layoutTextListRenderItems(element, width, height);
+
+  return (
+    <Group listening={interactive}>
+      {tokens.map((token, tokenIndex) => (
+        <Text
+          key={`${tokenIndex}:${token.x}:${token.y}`}
+          x={token.x}
+          y={token.y}
+          height={token.height}
+          text={token.text}
+          fill={textFill(token.font)}
+          fontFamily={`${token.font.family}, Helvetica, sans-serif`}
+          fontSize={token.font.size}
+          fontStyle={`${token.font.bold ? "bold" : "normal"} ${token.font.italic ? "italic" : ""}`}
+          textDecoration={token.font.underline ? "underline" : ""}
+          verticalAlign="middle"
+          lineHeight={token.font.lineHeight}
+          letterSpacing={token.font.letterSpacing}
+          wrap="none"
+          {...shadowProps(element)}
+          listening={interactive}
+        />
+      ))}
+    </Group>
+  );
 }
 
 function RawImageElement({

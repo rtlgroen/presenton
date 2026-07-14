@@ -21,6 +21,38 @@ function getFastApiBaseUrl(): string {
   return "http://127.0.0.1:8000";
 }
 
+function isFastApiApiPath(pathname: string): boolean {
+  return (
+    pathname === "/api/v1" ||
+    pathname.startsWith("/api/v1/") ||
+    pathname === "/api/v2" ||
+    pathname.startsWith("/api/v2/")
+  );
+}
+
+function isFastApiAssetPath(pathname: string): boolean {
+  return (
+    pathname === "/app_data" ||
+    pathname.startsWith("/app_data/") ||
+    pathname === "/static" ||
+    pathname.startsWith("/static/")
+  );
+}
+
+function rewriteToFastApi(request: NextRequest): NextResponse {
+  const destination = new URL(
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    `${getFastApiBaseUrl()}/`
+  );
+  return NextResponse.rewrite(destination);
+}
+
+function continueRequest(request: NextRequest): NextResponse {
+  return isFastApiApiPath(request.nextUrl.pathname)
+    ? rewriteToFastApi(request)
+    : NextResponse.next();
+}
+
 type AuthStatus = {
   configured: boolean;
   authenticated: boolean;
@@ -69,6 +101,13 @@ function isApiAuthExempt(pathname: string): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Docker handles these paths in nginx. Electron has no nginx and chooses
+  // random loopback ports, so proxy them at request time instead of baking a
+  // build-time destination into Next.js' routes manifest.
+  if (isFastApiAssetPath(pathname)) {
+    return rewriteToFastApi(request);
+  }
+
   if (pathname === "/pdf-maker") {
     const exportSession = request.nextUrl.searchParams.get("exportSession");
     if (exportSession) {
@@ -94,16 +133,16 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isAuthDisabled()) {
-    return NextResponse.next();
+    return continueRequest(request);
   }
 
   if (request.method === "OPTIONS" || isApiAuthExempt(pathname)) {
-    return NextResponse.next();
+    return continueRequest(request);
   }
 
   const authStatus = await getAuthStatus(request);
   if (authStatus.authenticated) {
-    return NextResponse.next();
+    return continueRequest(request);
   }
   if (!authStatus.configured) {
     return NextResponse.json(
@@ -118,5 +157,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*", "/pdf-maker"],
+  matcher: ["/api/:path*", "/app_data/:path*", "/static/:path*", "/pdf-maker"],
 };

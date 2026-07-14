@@ -20,10 +20,9 @@ import {
   writeFileSync,
 } from "fs";
 import { printPresentonStartupBanner } from "./scripts/presenton-terminal-banner.mjs";
-import {
-  buildUserConfigFromEnv,
-  readUserConfigEnv,
-} from "./scripts/user-config-env.mjs";
+import userConfigEnv from "./scripts/user-config-env.cjs";
+
+const { buildUserConfigFromEnv, readUserConfigEnv } = userConfigEnv;
 
 process.umask(0o022);
 

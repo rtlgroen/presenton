@@ -86,6 +86,7 @@ from utils.process_slides import (
     process_slide_and_fetch_assets,
 )
 from utils.get_layout_by_name import get_layout_by_name
+from utils.icon_weights import DEFAULT_ICON_TYPE, extract_icon_type_from_settings
 from utils.llm_utils import message_content_to_text
 from utils.sse import safe_sse_stream
 from utils.simple_auth import (
@@ -210,7 +211,22 @@ def _copy_template_v2_layout_payload(
             detail="Template v2 layout JSON must be an object",
         )
 
+    icon_type = _template_v2_icon_type(template, layout_payload)
+    layout_payload["icon_type"] = icon_type
+    layout_payload["icon_weight"] = icon_type
     return layout_payload
+
+
+def _template_v2_icon_type(
+    template: TemplateV2,
+    layout_payload: dict[str, Any] | None = None,
+) -> str:
+    for settings in (template.assets, layout_payload, template.layouts):
+        if isinstance(settings, dict):
+            icon_type = extract_icon_type_from_settings(settings)
+            if icon_type != DEFAULT_ICON_TYPE:
+                return icon_type
+    return DEFAULT_ICON_TYPE
 
 
 async def _resolve_generation_layout(
@@ -542,6 +558,7 @@ def _build_template_v2_layout_model(
     return PresentationLayoutModel(
         name=layout_name,
         ordered=False,
+        icon_type=extract_icon_type_from_settings(layout_payload),
         slides=slides,
     )
 
@@ -670,10 +687,10 @@ def _apply_template_v2_content_to_ui(
 
         elements = component.get("elements")
         if isinstance(elements, list):
-            component["elements"] = [
-                _apply_template_v2_content_to_element(element, component_content)
-                for element in elements
-            ]
+            component["elements"] = _apply_template_v2_content_to_element_list(
+                elements,
+                component_content,
+            )
 
     return hydrated_ui
 
@@ -683,6 +700,7 @@ def _apply_template_v2_content_to_element(
     content: Any,
     *,
     direct_value: bool = False,
+    preferred_content_keys: list[str] | None = None,
 ) -> Any:
     if not isinstance(element, dict):
         return element
@@ -693,7 +711,11 @@ def _apply_template_v2_content_to_element(
     has_value = False
     value = None
     if name:
-        has_value, value = _template_v2_content_value(content_values, name)
+        has_value, value = _template_v2_content_value(
+            content_values,
+            name,
+            preferred_keys=preferred_content_keys,
+        )
 
     if (
         element.get("decorative") is False
@@ -747,8 +769,18 @@ def _apply_template_v2_content_to_element(
 def _template_v2_content_value(
     content: dict[str, Any],
     name: str,
+    *,
+    preferred_keys: list[str] | None = None,
 ) -> tuple[bool, Any]:
-    for candidate in _template_v2_content_name_candidates(name):
+    candidates: list[str] = []
+    for candidate in [
+        *(preferred_keys or []),
+        *_template_v2_content_name_candidates(name),
+    ]:
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    for candidate in candidates:
         if candidate in content:
             return True, content[candidate]
     return False, None
@@ -786,14 +818,58 @@ def _apply_template_v2_content_to_children(
             for index, item in enumerate(value)
         ]
 
-    return [
-        _apply_template_v2_content_to_element(
-            child,
-            content,
-            direct_value=direct_value,
+    return _apply_template_v2_content_to_element_list(
+        children,
+        content,
+        direct_value=direct_value,
+    )
+
+
+def _apply_template_v2_content_to_element_list(
+    elements: list[Any],
+    content: Any,
+    *,
+    direct_value: bool = False,
+) -> list[Any]:
+    content_values = content if isinstance(content, dict) else {}
+    name_occurrences: dict[str, int] = {}
+    hydrated_elements: list[Any] = []
+    for element in elements:
+        preferred_keys = _template_v2_repeated_sibling_content_keys(
+            element,
+            content_values,
+            name_occurrences,
         )
-        for child in children
-    ]
+        hydrated_elements.append(
+            _apply_template_v2_content_to_element(
+                element,
+                content,
+                direct_value=direct_value,
+                preferred_content_keys=preferred_keys,
+            )
+        )
+    return hydrated_elements
+
+
+def _template_v2_repeated_sibling_content_keys(
+    element: Any,
+    content: dict[str, Any],
+    name_occurrences: dict[str, int],
+) -> list[str] | None:
+    if not isinstance(element, dict):
+        return None
+
+    name = element.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+
+    occurrence_index = name_occurrences.get(name, 0)
+    name_occurrences[name] = occurrence_index + 1
+    if occurrence_index == 0:
+        return None
+
+    suffixed_key = f"{name}_{occurrence_index + 1}"
+    return [suffixed_key] if suffixed_key in content else None
 
 
 def _apply_template_v2_content_value(element: dict[str, Any], value: Any) -> dict[str, Any]:
@@ -1330,12 +1406,7 @@ async def _resolve_prepare_layout(
     if not template:
         raise HTTPException(status_code=404, detail="Template v2 layout not found")
 
-    layout_payload = copy.deepcopy(template.layouts)
-    if not isinstance(layout_payload, dict):
-        raise HTTPException(
-            status_code=400,
-            detail="Template v2 layout JSON must be an object",
-        )
+    layout_payload = _copy_template_v2_layout_payload(template)
 
     structure_layout = _build_template_v2_structure_layout(template, layout_payload)
     return (
@@ -1373,20 +1444,40 @@ async def get_all_presentations(
         Optional[PresentationVersion],
         Query(description="Only include presentations matching this version."),
     ] = None,
+    include_slides: Annotated[
+        bool,
+        Query(
+            description=(
+                "Include the first slide and resolved fonts for dashboard previews. "
+                "Disable this for metadata-only presentation lists."
+            )
+        ),
+    ] = True,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
-    query = (
-        select(PresentationModel, SlideModel)
-        .join(
+    if include_slides:
+        query = select(PresentationModel, SlideModel).join(
             SlideModel,
             (SlideModel.presentation == PresentationModel.id) & (SlideModel.index == 0),
         )
-    )
+    else:
+        query = select(PresentationModel)
+
     if version is not None:
         query = query.where(PresentationModel.version == version)
     query = query.order_by(PresentationModel.created_at.desc())
 
     results = await sql_session.execute(query)
+    if not include_slides:
+        return [
+            PresentationWithSlides(
+                **_presentation_response_data(presentation),
+                slides=[],
+                fonts=None,
+            )
+            for presentation in results.scalars().all()
+        ]
+
     rows = results.all()
     presentations_with_slides = []
     for presentation, first_slide in rows:

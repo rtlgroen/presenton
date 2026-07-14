@@ -59,7 +59,7 @@ const resolveStaticIconsRoot = async (): Promise<string> => {
     staticIconsRootPromise = (async () => {
         for (const candidate of candidates) {
             try {
-                return await fs.realpath(candidate);
+                return await fs.realpath(/* turbopackIgnore: true */ candidate);
             } catch {
                 // Try the next development fallback.
             }
@@ -106,7 +106,9 @@ const readLocalStaticIconSvg = async (
 
     let resolvedPath: string;
     try {
-        resolvedPath = await fs.realpath(unresolvedPath);
+        resolvedPath = await fs.realpath(
+            /* turbopackIgnore: true */ unresolvedPath
+        );
     } catch {
         throw new SvgSourceError("SVG file not found", 404);
     }
@@ -114,7 +116,7 @@ const readLocalStaticIconSvg = async (
         throw new SvgSourceError("Invalid local SVG path", 400);
     }
 
-    const fileStats = await fs.stat(resolvedPath);
+    const fileStats = await fs.stat(/* turbopackIgnore: true */ resolvedPath);
     if (!fileStats.isFile()) {
         throw new SvgSourceError("SVG file not found", 404);
     }
@@ -122,7 +124,7 @@ const readLocalStaticIconSvg = async (
         throw new SvgSourceError("SVG file is too large", 413);
     }
 
-    return fs.readFile(resolvedPath, "utf8");
+    return fs.readFile(/* turbopackIgnore: true */ resolvedPath, "utf8");
 };
 
 export async function GET(req: Request) {

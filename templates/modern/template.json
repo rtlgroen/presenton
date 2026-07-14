@@ -1,8 +1,9 @@
 {
   "id": "0beb3141-1ec1-4648-a531-af1b1ae58185",
   "name": "Modern",
-  "description": "Clean, contemporary layouts with spacious compositions and bold visual accents.",
+  "description": "Clean, contemporary layouts with generous whitespace, confident typography, and bold visual accents for a polished presentation.",
   "thumbnail": "static/thumbnail.png",
+  "icon_type": "bold",
   "merged_components": [
     {
       "id": "plain_background",

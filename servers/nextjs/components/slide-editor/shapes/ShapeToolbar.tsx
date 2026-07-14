@@ -53,8 +53,8 @@ const DEFAULT_SHAPE_SHADOW = {
   color: "#000000",
   blur: 10,
   opacity: 0.18,
-  offset_x: 0.06,
-  offset_y: 0.06,
+  offset_x: 6,
+  offset_y: 6,
 };
 
 type ShadowValue = {
@@ -403,17 +403,19 @@ export function ShadowPanel({
           <NumberField
             label="X"
             value={shadow.offset_x ?? fallback.offset_x}
-            min={-2}
-            max={2}
-            step={0.01}
+            min={-64}
+            max={64}
+            step={1}
+            suffix="px"
             onCommit={(offset_x) => onChange({ offset_x })}
           />
           <NumberField
             label="Y"
             value={shadow.offset_y ?? fallback.offset_y}
-            min={-2}
-            max={2}
-            step={0.01}
+            min={-64}
+            max={64}
+            step={1}
+            suffix="px"
             onCommit={(offset_y) => onChange({ offset_y })}
           />
         </div>
@@ -503,14 +505,16 @@ export function NumberField({
   value: number;
 }) {
   const [draft, setDraft] = useState(() => formatNumber(value));
+  const [focused, setFocused] = useState(false);
   const numericInputOptions = {
     allowDecimal: true,
     min,
   };
 
   useEffect(() => {
+    if (focused) return;
     setDraft(formatNumber(value));
-  }, [value]);
+  }, [focused, value]);
 
   const commit = () => {
     const parsed = Number.parseFloat(draft);
@@ -532,12 +536,16 @@ export function NumberField({
           type="text"
           inputMode={numericInputMode(numericInputOptions)}
           value={draft}
+          onFocus={() => setFocused(true)}
           onChange={(event) =>
             setDraft(
               sanitizeNumericInput(event.target.value, numericInputOptions),
             )
           }
-          onBlur={commit}
+          onBlur={() => {
+            setFocused(false);
+            commit();
+          }}
           onKeyDown={(event) => {
             if (preventInvalidNumberInput(event, numericInputOptions)) return;
             if (event.key === "Enter") {

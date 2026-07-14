@@ -27,7 +27,7 @@ RUN printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snaps
     && apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
     ca-certificates curl unzip \
     nginx fontconfig imagemagick zstd \
-    fonts-liberation xdg-utils \
+    fonts-liberation fonts-noto-core xdg-utils \
     libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
     libcairo2 libcups2t64 libdbus-1-3 libdrm2 libexpat1 libgbm1 \
     libglib2.0-0t64 libgtk-3-0t64 libnspr4 libnss3 libpango-1.0-0 \
@@ -55,12 +55,12 @@ RUN npm --prefix /app install --omit=dev
 
 RUN mkdir -p /app/document-extraction-liteparse \
     && npm --prefix /app/document-extraction-liteparse init -y \
-    && npm --prefix /app/document-extraction-liteparse install @llamaindex/liteparse@1.4.0 --omit=dev
+    && npm --prefix /app/document-extraction-liteparse install @llamaindex/liteparse@1.5.2 --omit=dev
 COPY electron/resources/document-extraction/liteparse_runner.mjs /app/document-extraction-liteparse/liteparse_runner.mjs
 
 COPY scripts/sync-presentation-export.cjs /app/scripts/sync-presentation-export.cjs
 COPY scripts/presenton-terminal-banner.mjs /app/scripts/presenton-terminal-banner.mjs
-COPY scripts/user-config-env.mjs /app/scripts/user-config-env.mjs
+COPY scripts/user-config-env.cjs /app/scripts/user-config-env.cjs
 RUN rm -rf /app/presentation-export \
     && EXPORT_RUNTIME_ARCH="${TARGETARCH}" node /app/scripts/sync-presentation-export.cjs --force \
     && find /app/presentation-export/py -maxdepth 1 -type f -name "convert-linux-*" -exec chmod +x {} \; \

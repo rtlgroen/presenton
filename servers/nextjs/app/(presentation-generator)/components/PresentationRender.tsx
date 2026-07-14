@@ -90,7 +90,7 @@ const SlideScale = ({
         style={{
           width: `${BASE_WIDTH * scale}px`,
           height: `${BASE_HEIGHT * scale}px`,
-          overflow: "hidden",
+          overflow: presentMode ? "visible" : "hidden",
         }}
       >
         <div

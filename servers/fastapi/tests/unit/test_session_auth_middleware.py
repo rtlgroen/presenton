@@ -6,6 +6,14 @@ def test_public_app_data_asset_prefixes_do_not_require_auth():
 
     assert middleware._requires_auth("/app_data/images/photo.png") is False
     assert middleware._requires_auth("/app_data/fonts/embedded/font.ttf") is False
+    assert (
+        middleware._requires_auth("/app_data/pptx-to-html/session/fonts/font.ttf")
+        is False
+    )
+    assert (
+        middleware._requires_auth("/app_data/pptx-to-html/session/images/image.png")
+        is False
+    )
 
 
 def test_other_app_data_prefixes_still_require_auth():

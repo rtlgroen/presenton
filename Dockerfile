@@ -58,7 +58,7 @@ COPY package.json /app/
 
 RUN mkdir -p /app/document-extraction-liteparse \
     && npm --prefix /app/document-extraction-liteparse init -y \
-    && npm --prefix /app/document-extraction-liteparse install @llamaindex/liteparse@1.4.0 --omit=dev
+    && npm --prefix /app/document-extraction-liteparse install @llamaindex/liteparse@1.5.2 --omit=dev
 
 COPY electron/resources/document-extraction/liteparse_runner.mjs /app/document-extraction-liteparse/liteparse_runner.mjs
 COPY scripts/sync-presentation-export.cjs /app/scripts/sync-presentation-export.cjs
@@ -154,7 +154,7 @@ COPY --from=nextjs-builder /app/servers/nextjs/.next-build/static /app/servers/n
 
 COPY start.js LICENSE NOTICE ./
 COPY scripts/presenton-terminal-banner.mjs /app/scripts/presenton-terminal-banner.mjs
-COPY scripts/user-config-env.mjs /app/scripts/user-config-env.mjs
+COPY scripts/user-config-env.cjs /app/scripts/user-config-env.cjs
 COPY nginx.conf /etc/nginx/nginx.conf
 
 EXPOSE 80

@@ -33,22 +33,22 @@ const COMPONENT_LAYER_ACTIONS: Array<{
   {
     action: "bring-to-front",
     label: "Bring to Front",
-    shortcut: "⌥⌘]",
+    shortcut: "⇧⌥⌘↑",
   },
   {
     action: "bring-forward",
     label: "Bring Forward",
-    shortcut: "⌘]",
+    shortcut: "⌥⌘↑",
   },
   {
     action: "send-backward",
     label: "Send Backward",
-    shortcut: "⌘[",
+    shortcut: "⌥⌘↓",
   },
   {
     action: "send-to-back",
     label: "Send Back",
-    shortcut: "⌥⌘[",
+    shortcut: "⇧⌥⌘↓",
   },
 ];
 

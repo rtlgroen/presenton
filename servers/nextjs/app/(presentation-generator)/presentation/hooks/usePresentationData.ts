@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useDispatch } from "react-redux";
+import { useRouter } from "next/navigation";
 import { notify } from "@/components/ui/sonner";
 import { setPresentationData } from "@/store/slices/presentationGeneration";
 import { clearHistory } from "@/store/slices/undoRedoSlice";
@@ -15,10 +16,21 @@ export const usePresentationData = (
   setError: (error: boolean) => void
 ) => {
   const dispatch = useDispatch();
+  const router = useRouter();
 
   const fetchUserSlides = useCallback(async (options?: { clearHistory?: boolean }) => {
     try {
       const data = await DashboardApi.getPresentation(presentationId);
+
+      if (data?.version === "v1-standard") {
+        notify.warning(
+          "Unsupported presentation",
+          "This deck was created in an older Presenton version. Downgrade to a compatible version to open it."
+        );
+        setLoading(false);
+        router.replace("/dashboard");
+        return;
+      }
 
       const normalizedData = normalizeBackendAssetUrls(data);
 
@@ -43,7 +55,7 @@ export const usePresentationData = (
       console.error("Error fetching user slides:", error);
       setLoading(false);
     }
-  }, [presentationId, dispatch, setLoading, setError]);
+  }, [presentationId, dispatch, router, setLoading, setError]);
 
   return {
     fetchUserSlides,

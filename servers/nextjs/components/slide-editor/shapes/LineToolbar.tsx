@@ -44,8 +44,8 @@ const DEFAULT_LINE_SHADOW = {
   color: "#000000",
   blur: 8,
   opacity: 0.2,
-  offset_x: 0.04,
-  offset_y: 0.04,
+  offset_x: 4,
+  offset_y: 4,
 };
 
 export function LineToolbar({

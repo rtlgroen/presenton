@@ -26,6 +26,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
     _PUBLIC_APP_DATA_PREFIXES = (
         "/app_data/images/",
         "/app_data/fonts/",
+        "/app_data/pptx-to-html/",
     )
     _PROTECTED_NON_API_PATHS = {
         "/docs",

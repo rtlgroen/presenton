@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,52 @@ def test_default_template_import_normalizes_shapes_and_copies_static(
     ).read_bytes() == b"image"
 
 
+def test_default_template_import_force_replaces_static_assets(tmp_path, monkeypatch):
+    templates_root = tmp_path / "templates"
+    _write_template_bundle(templates_root)
+    app_data_dir = tmp_path / "app_data"
+    old_static_dir = app_data_dir / "templates/general/static"
+    old_static_dir.mkdir(parents=True)
+    (old_static_dir / "removed-from-bundle.png").write_bytes(b"stale")
+    (old_static_dir / "image.png").write_bytes(b"old")
+    session = _FakeSession()
+    monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data_dir))
+    monkeypatch.setattr(
+        default_templates,
+        "async_session_maker",
+        lambda: _SessionContext(session),
+    )
+
+    asyncio.run(default_templates.import_default_templates_on_startup(templates_root))
+
+    assert (old_static_dir / "image.png").read_bytes() == b"image"
+    assert not (old_static_dir / "removed-from-bundle.png").exists()
+
+
+def test_default_template_import_removes_static_directory_removed_from_bundle(
+    tmp_path,
+    monkeypatch,
+):
+    templates_root = tmp_path / "templates"
+    template_dir = _write_template_bundle(templates_root)
+    shutil.rmtree(template_dir / "static")
+    app_data_dir = tmp_path / "app_data"
+    old_static_dir = app_data_dir / "templates/general/static"
+    old_static_dir.mkdir(parents=True)
+    (old_static_dir / "removed-from-bundle.png").write_bytes(b"stale")
+    session = _FakeSession()
+    monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data_dir))
+    monkeypatch.setattr(
+        default_templates,
+        "async_session_maker",
+        lambda: _SessionContext(session),
+    )
+
+    asyncio.run(default_templates.import_default_templates_on_startup(templates_root))
+
+    assert not old_static_dir.exists()
+
+
 def test_default_template_import_updates_existing_database_row(tmp_path, monkeypatch):
     templates_root = tmp_path / "templates"
     _write_template_bundle(templates_root)
@@ -176,12 +223,13 @@ def test_bundled_general_template_json_matches_template_v2_shapes():
 
     template = default_templates._load_default_template(template_dir)
 
-    assert template.id == "general"
+    template_id = "06e3980c-9dd2-4e44-ad78-518c766a07db"
+    assert template.id == template_id
     assert template.is_default is True
     assert list(template.layouts) == ["layouts"]
     assert len(template.layouts["layouts"]) > 0
     assert list(template.merged_components) == ["components"]
     assert len(template.merged_components["components"]) > 0
     assert template.assets["thumbnail"] == (
-        "/app_data/templates/general/static/thumbnail.png"
+        f"/app_data/templates/{template_id}/static/thumbnail.png"
     )

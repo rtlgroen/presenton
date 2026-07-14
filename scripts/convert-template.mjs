@@ -123,13 +123,16 @@ function replaceEditableImages(value) {
     Object.entries(value).map(([key, child]) => [key, replaceEditableImages(child)]),
   );
   if (value.type !== "image") return converted;
-  if (value.is_icon === true) {
-    return { ...converted, data: ICON_PLACEHOLDER };
-  }
-  if (value.decorative !== true) {
-    return { ...converted, data: REPLACEABLE_IMAGE };
-  }
-  return converted;
+
+  // Decorative images are part of the template design, including any image
+  // that also happens to be marked as an icon. Keep their source so the asset
+  // planner can bundle it and rewrite the path to the template's static folder.
+  if (value.decorative === true) return converted;
+
+  return {
+    ...converted,
+    data: value.is_icon === true ? ICON_PLACEHOLDER : REPLACEABLE_IMAGE,
+  };
 }
 
 function collectStrings(value, result = new Set()) {
@@ -290,8 +293,9 @@ async function cleanStaticDirectory(directory, retainedTargets) {
   await clean(directory);
 }
 
-export async function convertTemplate({ input, output = input, appData } = {}) {
+export async function convertTemplateData({ raw, input, output = input, appData } = {}) {
   if (!input) throw new Error("input is required");
+  if (raw === undefined) throw new Error("raw template data is required");
 
   const inputPath = path.resolve(input);
   const outputPath = path.resolve(output);
@@ -301,7 +305,6 @@ export async function convertTemplate({ input, output = input, appData } = {}) {
   const inputDirectory = path.dirname(inputPath);
   const outputDirectory = path.dirname(outputPath);
   const staticDirectory = path.join(outputDirectory, "static");
-  const raw = JSON.parse(await readFile(inputPath, "utf8"));
   const { template: targetShape, thumbnailSource } = buildTargetShape(raw, outputPath);
   const template = replaceEditableImages(targetShape);
   const plans = await planAssets(template, thumbnailSource, {
@@ -329,6 +332,14 @@ export async function convertTemplate({ input, output = input, appData } = {}) {
     assetCount: new Set([...plans.values()].map((plan) => plan.target)).size,
     topLevelKeys: TOP_LEVEL_KEYS,
   };
+}
+
+export async function convertTemplate({ input, output = input, appData } = {}) {
+  if (!input) throw new Error("input is required");
+
+  const inputPath = path.resolve(input);
+  const raw = JSON.parse(await readFile(inputPath, "utf8"));
+  return convertTemplateData({ raw, input: inputPath, output, appData });
 }
 
 async function main() {
