@@ -502,11 +502,14 @@ function renderText(item: JsonRecord, mode: RenderMode): string {
     })
     .join("");
 
-  return `<div style="${frameStyle(item, mode)}${transformStyle(item)}${fontStyle(font)}display:flex;align-items:${verticalAlign(
+  return `<div style="${frameStyle(item, mode)}${transformStyle(item)}${fontStyle(font, {
+    includeLineHeight: false,
+  })}${textShadowStyle(item)}display:flex;align-items:${verticalAlign(
     vertical
-  )};justify-content:${horizontalAlign(horizontal)};line-height:${cssNumber(
-    readNumber(font.lineHeight ?? font.line_height) ?? 1.1
-  )};${textOverflowStyle()}text-align:${textAlign(horizontal)};"><span style="display:block;width:100%">${runHtml}</span></div>`;
+  )};justify-content:${horizontalAlign(horizontal)};${lineHeightStyle(
+    font,
+    1.1
+  )}${textOverflowStyle()}text-align:${textAlign(horizontal)};"><span style="display:block;width:100%">${runHtml}</span></div>`;
 }
 
 function renderTextList(item: JsonRecord, mode: RenderMode): string {
@@ -690,15 +693,39 @@ function renderLine(item: JsonRecord, mode: RenderMode): string {
     readNumber(stroke.opacity)
   );
   const width = Math.max(0, readNumber(stroke.width) ?? 1);
+  const deltaX = box.width ?? 0;
+  const deltaY = box.height ?? 0;
+  const left = box.x + Math.min(0, deltaX);
+  const top = box.y + Math.min(0, deltaY);
+  const frameWidth = Math.max(Math.abs(deltaX), width, 1);
+  const frameHeight = Math.max(Math.abs(deltaY), width, 1);
+  const x1 = deltaX < 0 ? frameWidth : 0;
+  const y1 = deltaY < 0 ? frameHeight : 0;
+  const x2 = deltaX < 0 ? 0 : Math.abs(deltaX);
+  const y2 = deltaY < 0 ? 0 : Math.abs(deltaY);
+  const frame =
+    mode === "absolute"
+      ? `box-sizing:border-box;min-height:0;min-width:0;position:absolute;left:${cssNumber(
+        left
+      )}px;top:${cssNumber(top)}px;width:${cssNumber(
+        frameWidth
+      )}px;height:${cssNumber(frameHeight)}px;`
+      : `box-sizing:border-box;min-height:0;min-width:0;position:relative;width:${cssNumber(
+        frameWidth
+      )}px;height:${cssNumber(frameHeight)}px;`;
   const dash = readArray(stroke.dash)
     .map(readNumber)
     .filter((value): value is number => value != null)
     .join(" ");
-  return `<div style="${frameStyle(item, mode)}${transformStyle(item)}overflow:visible"><svg width="100%" height="100%" viewBox="0 0 ${cssNumber(
-    box.width ?? 1
-  )} ${cssNumber(box.height ?? 1)}" preserveAspectRatio="none" style="display:block;overflow:visible"><line x1="0" y1="0" x2="${cssNumber(
-    box.width ?? 1
-  )}" y2="${cssNumber(box.height ?? 1)}" stroke="${escapeAttribute(
+  return `<div style="${frame}${transformStyle(
+    item
+  )}overflow:visible"><svg width="100%" height="100%" viewBox="0 0 ${cssNumber(
+    frameWidth
+  )} ${cssNumber(frameHeight)}" preserveAspectRatio="none" style="display:block;overflow:visible"><line x1="${cssNumber(
+    x1
+  )}" y1="${cssNumber(y1)}" x2="${cssNumber(x2)}" y2="${cssNumber(
+    y2
+  )}" stroke="${escapeAttribute(
     color
   )}" stroke-width="${cssNumber(width)}"${dash ? ` stroke-dasharray="${dash}"` : ""}/></svg></div>`;
 }
@@ -1164,7 +1191,7 @@ function normalizeChartKindValue(value: string | null): string {
 }
 
 function chartKindFromValue(value: string | null): ChartKind {
-  const normalized = value?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  const normalized = normalizeChartKindValue(value);
   if (normalized === "bubble") return "bubble";
   if (normalized === "horizontal_bar" || normalized === "bar_horizontal") {
     return "horizontal_bar";
@@ -1726,21 +1753,29 @@ function boxStyle(item: JsonRecord): string {
   }
   const borderRadius = borderRadiusStyle(radius);
   if (borderRadius) style += `border-radius:${borderRadius};`;
-  const shadowOpacity = Object.keys(shadow).length
-    ? (readNumber(shadow.opacity) ?? 1)
-    : 0;
-  if (shadowOpacity > 0) {
-    style += `box-shadow:${cssNumber(
-      readNumber(shadow.offsetX ?? shadow.offset_x) ?? 0
-    )}px ${cssNumber(readNumber(shadow.offsetY ?? shadow.offset_y) ?? 0)}px ${cssNumber(
-      readNumber(shadow.blur) ?? 0
-    )}px ${escapeCssColor(
-      colorWithOpacity(readString(shadow.color) ?? "#000000", shadowOpacity)
-    )};`;
-  }
+  const shadowValue = shadowCssValue(shadow);
+  if (shadowValue) style += `box-shadow:${shadowValue};`;
   const opacity = readNumber(item.opacity);
   if (opacity != null) style += `opacity:${cssNumber(opacity)};`;
   return style;
+}
+
+function textShadowStyle(item: JsonRecord): string {
+  const shadowValue = shadowCssValue(readRecord(item.shadow));
+  return shadowValue ? `text-shadow:${shadowValue};` : "";
+}
+
+function shadowCssValue(shadow: JsonRecord): string {
+  const shadowOpacity = Object.keys(shadow).length
+    ? (readNumber(shadow.opacity) ?? 1)
+    : 0;
+  if (shadowOpacity <= 0) return "";
+
+  return `${cssNumber(readNumber(shadow.offsetX ?? shadow.offset_x) ?? 0)}px ${cssNumber(
+    readNumber(shadow.offsetY ?? shadow.offset_y) ?? 0
+  )}px ${cssNumber(readNumber(shadow.blur) ?? 0)}px ${escapeCssColor(
+    colorWithOpacity(readString(shadow.color) ?? "#000000", shadowOpacity)
+  )}`;
 }
 
 function transformStyle(item: JsonRecord): string {
@@ -1756,7 +1791,10 @@ function transformStyle(item: JsonRecord): string {
   return `transform:${transforms.join(" ")};transform-origin:center;`;
 }
 
-function fontStyle(fontValue: unknown): string {
+function fontStyle(
+  fontValue: unknown,
+  options: { includeLineHeight?: boolean } = {}
+): string {
   const font = readRecord(fontValue);
   let style = `color:${escapeCssColor(
     colorWithOpacity(readString(font.color) ?? "#111827", readNumber(font.opacity))
@@ -1765,13 +1803,23 @@ function fontStyle(fontValue: unknown): string {
   const size = readNumber(font.size);
   if (family) style += `font-family:${escapeCssFont(family)};`;
   if (size != null) style += `font-size:${cssNumber(size)}px;`;
-  if (readBoolean(font.italic)) style += "font-style:italic;";
-  if (readBoolean(font.bold)) style += "font-weight:700;";
-  const lineHeight = readNumber(font.lineHeight ?? font.line_height);
-  if (lineHeight != null) style += `line-height:${cssNumber(lineHeight)};`;
+  if (hasOwn(font, "italic")) {
+    style += readBoolean(font.italic) ? "font-style:italic;" : "font-style:normal;";
+  }
+  if (hasOwn(font, "bold")) {
+    style += readBoolean(font.bold) ? "font-weight:700;" : "font-weight:400;";
+  }
+  if (options.includeLineHeight !== false) style += lineHeightStyle(font);
   const letterSpacing = readNumber(font.letterSpacing ?? font.letter_spacing);
   if (letterSpacing != null) style += `letter-spacing:${cssNumber(letterSpacing)}px;`;
   return style;
+}
+
+function lineHeightStyle(font: JsonRecord, fallback?: number): string {
+  const lineHeight = readNumber(font.lineHeight ?? font.line_height) ?? fallback;
+  if (lineHeight == null) return "";
+
+  return `line-height:${cssNumber(lineHeight)};`;
 }
 
 function tableRows(item: JsonRecord): unknown[][] {
@@ -2087,6 +2135,10 @@ function readRecord(value: unknown): JsonRecord {
 function readRecordOrNull(value: unknown): JsonRecord | null {
   const record = readRecord(value);
   return Object.keys(record).length ? record : null;
+}
+
+function hasOwn(record: JsonRecord, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
 function readArray(value: unknown): unknown[] {
