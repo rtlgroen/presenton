@@ -55,10 +55,10 @@ export function PresentonSplashLoader({
   className,
 }: PresentonSplashLoaderProps) {
   const [isWordmarkReady, setIsWordmarkReady] = useState(false);
-  const [animationDelayMs] = useState(() => getSplashAnimationDelayMs());
+  const [animationDelayMs, setAnimationDelayMs] = useState(0);
 
   useLayoutEffect(() => {
-    markSplashSessionStart();
+    setAnimationDelayMs(getSplashAnimationDelayMs());
 
     let cancelled = false;
     void ensureSplashMaskReady().then(() => {

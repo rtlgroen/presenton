@@ -26,6 +26,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import Image from "next/image";
 import { notify } from "@/components/ui/sonner";
 import { useDispatch, useSelector } from "react-redux";
 import MarkdownRenderer from "@/components/MarkDownRender";
@@ -639,12 +640,12 @@ const ActivityStatusIcon = ({ activity }: { activity: AssistantActivity }) => {
   if (activity.state === "running") {
     return (
       <span
-        className="assistant-river-dots flex h-[14px] w-[24px] shrink-0 items-center gap-[3px]"
+        className="relative h-[7px] w-[22px] shrink-0"
         aria-label="Working"
       >
-        <span className="assistant-river-dot h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
-        <span className="assistant-river-dot h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
-        <span className="assistant-river-dot h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
+        <span className="absolute left-0 top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB] opacity-[0.89]" />
+        <span className="absolute left-[8.5px] top-0 h-[5.25px] w-[5.25px] rounded-full bg-[#C3C3CB] opacity-[0.61]" />
+        <span className="absolute left-[16.6px] top-[4.1px] h-[5px] w-[5px] rounded-full bg-[#C3C3CB] opacity-[0.52]" />
       </span>
     );
   }
@@ -708,14 +709,17 @@ const EditComparisonPreview = ({
   ];
 
   return (
-    <div className="mt-2 flex w-full flex-col gap-2 font-manrope">
+    <div className="flex w-full flex-col gap-2 font-manrope">
       <div className="flex items-center gap-1 text-[13px] leading-[18px]">
-        <span className="relative h-[14px] w-[14px] shrink-0">
-          <span className="absolute bottom-0 left-0 h-[9px] w-[9px] rounded-[2px] bg-[#7A5AF8]" />
-          <span className="absolute right-0 top-0 h-[9px] w-[9px] rounded-[2px] border border-[#7A5AF8] bg-white" />
-        </span>
+        <Image
+          src="/frame.svg"
+          alt=""
+          width={14}
+          height={14}
+          className="h-[14px] w-[14px] shrink-0"
+        />
         <span className="font-semibold text-[#191919]">Select edits</span>
-        <span className="ml-auto text-[11px] font-medium text-[#7A5AF8]">
+        <span className="ml-auto text-[11px] font-medium leading-[normal] text-[#7A5AF8]">
           {preview.changeCount} {preview.changeCount === 1 ? "Change" : "Changes"}
         </span>
       </div>
@@ -735,7 +739,7 @@ const EditComparisonPreview = ({
             aria-pressed={selectedVersion === card.version}
             aria-label={`Restore ${card.label.toLowerCase()} slide state`}
           >
-            <span className="mb-[7px] flex items-center justify-center gap-1 truncate text-center text-[13px] font-medium text-[#191919]">
+            <span className="mb-[7px] flex items-center justify-center gap-1 truncate text-center text-[13px] font-medium leading-[normal] text-[#191919]">
               {isApplying && selectedVersion === card.version && (
                 <Loader2 className="h-3 w-3 animate-spin text-[#7A5AF8]" />
               )}
@@ -2573,38 +2577,17 @@ const Chat = ({
 
     return (
       <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#FEFEFF] font-syne">
-        <div
+        <Image
+          src="/bg_chat.svg"
+          alt=""
+          width={294}
+          height={458}
+          loading="eager"
           aria-hidden="true"
-          className="assistant-water-bg pointer-events-none absolute inset-0 overflow-hidden opacity-[0.32]"
-        >
-          <span className="assistant-water-current" />
-          <span className="assistant-water-blob assistant-water-blob-blue" />
-          <span className="assistant-water-blob assistant-water-blob-purple" />
-          <span className="assistant-water-blob assistant-water-blob-rose" />
-        </div>
+          className="pointer-events-none absolute left-0 top-0 h-[458px] w-[294px] max-w-none object-cover"
+        />
 
-        {messages.length > 0 && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-10 items-center justify-end px-3">
-            <button
-              type="button"
-              onClick={() => void resetChat()}
-              disabled={isSending || isHistoryLoading}
-              className="pointer-events-auto inline-flex h-7 items-center justify-center gap-1 rounded-full border border-white/90 bg-white/85 px-2.5 font-manrope text-[11px] font-semibold leading-none text-[#666666] shadow-[0_2px_8px_rgba(16,24,40,0.08)] backdrop-blur-sm transition-colors hover:border-[#D9D6FE] hover:bg-white hover:text-[#7A5AF8] disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="New chat"
-              title="Delete this conversation and start fresh"
-            >
-              <Plus className="h-3 w-3" />
-              <span>New chat</span>
-            </button>
-          </div>
-        )}
-
-        <div
-          className={cn(
-            "relative z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-color:#D7D9DF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#D7D9DF] [&::-webkit-scrollbar-track]:bg-transparent",
-            messages.length > 0 && "pt-10",
-          )}
-        >
+        <div className="relative z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-color:#D7D9DF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#D7D9DF] [&::-webkit-scrollbar-track]:bg-transparent">
           {isHistoryLoading && messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-xs text-[#999999]">
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
@@ -2615,7 +2598,7 @@ const Chat = ({
               {messages.map((message) => {
                 if (message.role === "user") {
                   return (
-                    <div key={message.id} className="flex justify-end px-3 py-2">
+                    <div key={message.id} className="flex justify-end p-4">
                       <div className="flex max-w-[92%] flex-col items-end gap-2">
                         {message.layoutPreview && (
                           <div className="w-[220px] overflow-hidden rounded-[8px] border border-[#EDEEEF] bg-white p-1.5">
@@ -2628,8 +2611,8 @@ const Chat = ({
                             />
                           </div>
                         )}
-                        <div className="w-fit max-w-full rounded-[10px] bg-[#F3F4F7] px-3 py-2 font-manrope text-sm font-medium leading-5 text-[#333333] [overflow-wrap:anywhere] [word-break:break-word]">
-                          <p className="whitespace-pre-wrap">
+                        <div className="flex min-h-[30px] w-fit max-w-full items-center gap-2.5 rounded-[8px] bg-[#F3F4F7] px-3 py-1.5 font-manrope text-[13px] font-medium leading-[normal] text-[#333333] [overflow-wrap:anywhere] [word-break:break-word]">
+                          <p className="min-w-0 whitespace-pre-wrap">
                             {stripBackendContextFromUserMessage(message.content)}
                           </p>
                         </div>
@@ -2638,7 +2621,25 @@ const Chat = ({
                   );
                 }
 
-                const visibleActivity = (message.activity ?? []).slice(-2);
+                const normalizedMessageContent = message.content
+                  .trim()
+                  .replace(/\s+/g, " ")
+                  .toLowerCase();
+                const visibleActivity = (message.activity ?? [])
+                  .filter((activity) => {
+                    const normalizedLabel = activity.label
+                      .trim()
+                      .replace(/\s+/g, " ")
+                      .toLowerCase();
+                    if (!normalizedMessageContent || normalizedLabel.length < 12) {
+                      return true;
+                    }
+                    return !(
+                      normalizedMessageContent.startsWith(normalizedLabel) ||
+                      normalizedLabel.startsWith(normalizedMessageContent)
+                    );
+                  })
+                  .slice(-2);
                 const showFallbackActivity =
                   isSending &&
                   message.id === activeAssistantMessageId &&
@@ -2650,124 +2651,150 @@ const Chat = ({
                 return (
                   <div
                     key={message.id}
-                    className="px-3 py-2 font-manrope [overflow-wrap:anywhere] [word-break:break-word]"
+                    className="flex flex-col gap-[10px] px-3 py-4 font-manrope [overflow-wrap:anywhere] [word-break:break-word]"
                   >
-                    <div className="mb-1.5 flex min-h-[18px] items-center">
+                    <div className="flex min-h-[17px] items-center">
                       <p
-                        className="min-w-0 max-w-full truncate text-xs font-bold leading-[17px] text-[#333333]"
+                        className="min-w-0 max-w-full truncate text-xs font-bold leading-[normal] text-[#333333]"
                         title={selectedTextModel}
                       >
                         {selectedTextModel}
                       </p>
                     </div>
 
-                    {(visibleActivity.length > 0 || showFallbackActivity) && (
-                      <div className="mb-1 flex flex-col gap-1">
-                        {visibleActivity.map((activity, index) => {
-                          const useSparkle =
-                            Boolean(
-                              activity.tool && MUTATING_TOOLS.has(activity.tool),
-                            ) || /edit|updat|sav|chang|creat|add/i.test(activity.label);
-                          return (
-                            <React.Fragment key={activity.id}>
-                              <div className="flex min-w-0 items-center gap-1 text-[13px] font-medium leading-[18px] text-[#808080]">
-                                <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center">
-                                  {useSparkle ? (
-                                    <AssistantSparkleIcon size={14} />
-                                  ) : (
-                                    <span className="h-2 w-2 rounded-full bg-[#E6E6E6]" />
+                    <div className="flex w-full flex-col gap-1">
+                      {(visibleActivity.length > 0 || showFallbackActivity) && (
+                        <div className="flex flex-col gap-1">
+                          {visibleActivity.map((activity, index) => {
+                            const useSparkle =
+                              Boolean(
+                                activity.tool && MUTATING_TOOLS.has(activity.tool),
+                              ) ||
+                              /edit|updat|sav|chang|creat|add/i.test(
+                                activity.label,
+                              );
+                            return (
+                              <React.Fragment key={activity.id}>
+                                <div className="flex min-w-0 items-start gap-1 text-[13px] font-medium leading-[18px] text-[#808080]">
+                                  <span className="flex h-[14px] w-[14px] shrink-0 items-start justify-center pt-0.5">
+                                    {useSparkle ? (
+                                      <Image
+                                        src="/vector.svg"
+                                        alt=""
+                                        width={12}
+                                        height={12}
+                                        className="h-[12px] w-[12px]"
+                                      />
+                                    ) : (
+                                      <span className="h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
+                                    )}
+                                  </span>
+                                  <span className="min-w-0 truncate">
+                                    {activity.label}
+                                  </span>
+                                  {activity.state === "running" && (
+                                    <ActivityStatusIcon activity={activity} />
                                   )}
-                                </span>
-                                <span className="min-w-0 truncate">{activity.label}</span>
-                                {activity.state === "running" && (
-                                  <ActivityStatusIcon activity={activity} />
+                                </div>
+                                {(index < visibleActivity.length - 1 ||
+                                  Boolean(message.content) ||
+                                  Boolean(message.editPreview)) && (
+                                  <span className="ml-[6.5px] h-[13px] w-px bg-[#E6E6E6]" />
                                 )}
-                              </div>
-                              {index < visibleActivity.length - 1 && (
-                                <span className="ml-[6px] h-[13px] w-px bg-[#E6E6E6]" />
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                        {showFallbackActivity && (
-                          <div className="flex items-center gap-1 text-[13px] font-medium leading-[18px] text-[#808080]">
-                            <span className="flex h-[14px] w-[14px] items-center justify-center">
-                              <span className="h-2 w-2 rounded-full bg-[#E6E6E6]" />
-                            </span>
-                            <span>Understanding</span>
-                            <ActivityStatusIcon
-                              activity={{
-                                id: "fallback",
-                                label: "Understanding",
-                                state: "running",
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
+                              </React.Fragment>
+                            );
+                          })}
+                          {showFallbackActivity && (
+                            <div className="flex items-start gap-1 text-[13px] font-medium leading-[18px] text-[#808080]">
+                              <span className="flex h-[14px] w-[14px] items-start justify-center pt-0.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
+                              </span>
+                              <span>Understanding</span>
+                              <ActivityStatusIcon
+                                activity={{
+                                  id: "fallback",
+                                  label: "Understanding",
+                                  state: "running",
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                    {message.content && (
-                      <div
-                        className={cn(
-                          "flex items-start gap-1 text-[13px] font-medium leading-[19px]",
-                          message.role === "error"
-                            ? "text-[#B42318]"
-                            : "text-[#808080]",
-                        )}
-                      >
-                        <span className="mt-[6px] h-2 w-2 shrink-0 rounded-full bg-[#E6E6E6]" />
-                        <MarkdownRenderer
-                          content={message.content}
-                          className="chat-markdown mb-0 min-w-0 flex-1 text-[13px] font-medium leading-[19px] text-inherit"
-                        />
-                        {message.editPreview?.modifiedSlides?.length ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpandedEditPreviewByMessage((previous) => ({
-                                ...previous,
-                                [message.id]: !isEditPreviewExpanded,
-                              }))
-                            }
-                            className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[#808080] transition-colors hover:bg-white/80 hover:text-[#333333]"
-                            aria-label={
-                              isEditPreviewExpanded
-                                ? "Hide edit comparison"
-                                : "Show edit comparison"
-                            }
-                            aria-expanded={isEditPreviewExpanded}
+                      {message.content && (
+                        <>
+                          <div
+                            className={cn(
+                              "flex min-w-0 items-start gap-1 font-manrope text-[13px] font-medium leading-none",
+                              message.role === "error"
+                                ? "text-[#B42318]"
+                                : "text-[#808080]",
+                            )}
                           >
-                            <ChevronDown
+                            <span className="flex h-[14px] w-[14px] shrink-0 items-start justify-center pt-0.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
+                            </span>
+                            <MarkdownRenderer
+                              content={message.content}
                               className={cn(
-                                "h-3.5 w-3.5 transition-transform duration-200",
-                                !isEditPreviewExpanded && "-rotate-90",
+                                "chat-markdown mb-0 min-w-0 flex-1 font-manrope text-[13px] font-medium leading-none text-inherit [&_*]:text-[13px] [&_*]:font-medium [&_*]:leading-none [&_*]:text-inherit",
+                                message.editPreview &&
+                                  "max-h-[18px] overflow-hidden whitespace-nowrap [&_*]:m-0 [&_*]:overflow-hidden [&_*]:text-ellipsis [&_*]:whitespace-nowrap",
                               )}
                             />
-                          </button>
-                        ) : null}
-                      </div>
-                    )}
+                            {message.editPreview?.modifiedSlides?.length ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedEditPreviewByMessage((previous) => ({
+                                    ...previous,
+                                    [message.id]: !isEditPreviewExpanded,
+                                  }))
+                                }
+                                className="flex h-[14px] w-[14px] shrink-0 items-center justify-center text-[#808080] transition-colors hover:text-[#333333]"
+                                aria-label={
+                                  isEditPreviewExpanded
+                                    ? "Hide edit comparison"
+                                    : "Show edit comparison"
+                                }
+                                aria-expanded={isEditPreviewExpanded}
+                              >
+                                <ChevronDown
+                                  className={cn(
+                                    "h-[14px] w-[14px] transition-transform duration-200",
+                                    !isEditPreviewExpanded && "-rotate-90",
+                                  )}
+                                />
+                              </button>
+                            ) : null}
+                          </div>
+                          {message.editPreview && isEditPreviewExpanded && (
+                            <span className="ml-[6.5px] h-[13px] w-px bg-[#E6E6E6]" />
+                          )}
+                        </>
+                      )}
 
-                    {message.editPreview && isEditPreviewExpanded && (
-                      <EditComparisonPreview
-                        preview={message.editPreview}
-                        fonts={previewFonts}
-                        selectedVersion={
-                          selectedEditVersionByMessage[message.id] ?? "modified"
-                        }
-                        isApplying={
-                          applyingEditPreviewMessageId === message.id
-                        }
-                        onSelectVersion={(version) =>
-                          void applyEditPreviewVersion(
-                            message.id,
-                            message.editPreview!,
-                            version,
-                          )
-                        }
-                      />
-                    )}
+                      {message.editPreview && isEditPreviewExpanded && (
+                        <EditComparisonPreview
+                          preview={message.editPreview}
+                          fonts={previewFonts}
+                          selectedVersion={
+                            selectedEditVersionByMessage[message.id] ?? "modified"
+                          }
+                          isApplying={
+                            applyingEditPreviewMessageId === message.id
+                          }
+                          onSelectVersion={(version) =>
+                            void applyEditPreviewVersion(
+                              message.id,
+                              message.editPreview!,
+                              version,
+                            )
+                          }
+                        />
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -2783,7 +2810,7 @@ const Chat = ({
             </div>
           )}
         </div>
-        <div className="relative z-20 flex shrink-0 flex-col gap-[10px] bg-transparent px-3 py-3">
+        <div className="relative z-20 flex shrink-0 flex-col gap-[10px] bg-[#FFFEFF] px-3 py-[14px]">
           <form
             onSubmit={handleSubmit}
             onDragEnterCapture={handleDragOver}
@@ -2791,7 +2818,7 @@ const Chat = ({
             onDragLeave={handleDragLeave}
             onDropCapture={handleDrop}
             className={cn(
-              "rounded-[8px] border bg-white px-[10px] py-[10px] transition-colors",
+              "rounded-[8px] border bg-white px-[10px] py-3 transition-colors",
               isDraggingAttachment
                 ? "border-[#7A5AF8] bg-[#F7F5FF]"
                 : "border-[#DBDBDB]/60",
@@ -2933,7 +2960,7 @@ const Chat = ({
               ref={inputRef}
               name="chat-input"
               id="chat-input"
-              className="h-16 min-h-16 w-full resize-none overflow-x-hidden bg-transparent font-syne text-sm font-normal leading-[normal] text-[#191919] placeholder:text-[#999999] focus:outline-none focus:ring-0 [overflow-wrap:anywhere] [word-break:break-word]"
+              className="h-[79px] min-h-[79px] w-full resize-none overflow-x-hidden bg-transparent font-syne text-sm font-normal leading-[normal] text-[#191919] placeholder:text-[#999999] focus:outline-none focus:ring-0 [overflow-wrap:anywhere] [word-break:break-word]"
               rows={3}
               wrap="soft"
               value={input}
@@ -3017,7 +3044,13 @@ const Chat = ({
                       className="inline-flex h-[28px] items-center gap-1.5 rounded-full border border-[#EDEEEF] bg-white px-[11px] font-syne text-xs font-medium tracking-[0.16px] text-[#191919] transition-colors hover:bg-[#FAFAFF] disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Open quick prompts"
                     >
-                      <AssistantSparkleIcon size={14} />
+                      <Image
+                        src="/ai-star.svg"
+                        alt=""
+                        width={13}
+                        height={14}
+                        className="h-[14px] w-[13px] shrink-0"
+                      />
                       Prompt
                     </button>
                   </PopoverTrigger>
@@ -3066,13 +3099,13 @@ const Chat = ({
             </div>
           </form>
 
-          <div className="flex h-[29px] w-full gap-2 overflow-hidden">
+          <div className="flex h-[28px] w-full gap-2 overflow-hidden">
             {editorQuickPrompts.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
                 onClick={() => applyPrompt(prompt)}
-                className="h-[29px] shrink-0 rounded-full border border-[#F4F4F4] bg-[#F9FAFB] px-3 font-syne text-xs font-medium leading-5 tracking-[0.16px] text-[#666666] transition-colors hover:border-[#D9D6FE] hover:bg-[#FAFAFF]"
+                className="h-[28px] shrink-0 rounded-full border-[1.345px] border-[#F4F4F4] bg-[#F9FAFB] px-3 font-syne text-xs font-medium leading-5 tracking-[0.16px] text-[#666666] transition-colors hover:border-[#D9D6FE] hover:bg-[#FAFAFF]"
               >
                 {prompt}
               </button>
