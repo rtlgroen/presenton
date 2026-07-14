@@ -2714,7 +2714,7 @@ const Chat = ({
                                         className="h-[12px] w-[12px]"
                                       />
                                     ) : (
-                                      <span className="h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
+                                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
                                     )}
                                   </span>
                                   <span className="min-w-0 truncate">
@@ -2735,7 +2735,7 @@ const Chat = ({
                           {showFallbackActivity && (
                             <div className="flex items-start gap-1 text-[13px] font-medium leading-[18px] text-[#808080]">
                               <span className="flex h-[14px] w-[14px] items-start justify-center pt-0.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
+                                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#E6E6E6]" />
                               </span>
                               <span>Understanding</span>
                               <ActivityStatusIcon
@@ -2765,11 +2765,7 @@ const Chat = ({
                             </span>
                             <MarkdownRenderer
                               content={message.content}
-                              className={cn(
-                                "chat-markdown mb-0 min-w-0 flex-1 font-manrope text-[13px] font-medium leading-none text-inherit [&_*]:text-[13px] [&_*]:font-medium [&_*]:leading-none [&_*]:text-inherit",
-                                message.editPreview &&
-                                  "max-h-[18px] overflow-hidden whitespace-nowrap [&_*]:m-0 [&_*]:overflow-hidden [&_*]:text-ellipsis [&_*]:whitespace-nowrap",
-                              )}
+                              className="chat-markdown mb-0 min-w-0 flex-1 font-manrope text-[13px] font-medium leading-[18px] text-inherit [&_*]:text-[13px] [&_*]:font-medium [&_*]:leading-[18px] [&_*]:text-inherit"
                             />
                             {message.editPreview?.modifiedSlides?.length ? (
                               <button

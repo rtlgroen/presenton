@@ -1,5 +1,6 @@
 import React, { memo, useEffect } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import Image from "next/image";
+import { Loader2 } from "lucide-react";
 import SlideScale from "../../components/PresentationRender";
 import SlideActionBar from "./SlideActionBar";
 
@@ -86,14 +87,19 @@ const SlideContent = ({
               className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center font-syne"
               aria-live="polite"
             >
-              <span className="relative flex items-center overflow-hidden rounded-full border border-white/80 bg-white/95 px-3 py-2 text-sm font-medium text-[#666666] shadow-[0_4px_18px_rgba(40,35,68,0.12)] backdrop-blur-sm">
-                <span
-                  aria-hidden="true"
-                  className="generating-slides-background absolute"
-                />
-                <span className="relative z-10 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-[#9034EA]" />
-                  Updating slide {index + 1}...
+              <span className="inline-flex items-center rounded-[50px] bg-[linear-gradient(179deg,#F2E1FB_0%,#FFFFFF_100%)] p-[10px] shadow-[0_4px_18px_rgba(40,35,68,0.12)]">
+                <span className="flex items-center justify-center gap-[3px] px-1">
+                  <Image
+                    src="/ai-star.svg"
+                    alt=""
+                    width={13}
+                    height={14}
+                    className="h-[14px] w-[13px] shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="text-[13px] font-normal leading-[14px] tracking-[0.39px] text-[#666666]">
+                    Generating slides...
+                  </span>
                 </span>
               </span>
             </div>
