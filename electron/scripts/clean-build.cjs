@@ -3,7 +3,7 @@ const path = require("path");
 
 const electronRoot = path.join(__dirname, "..");
 const resourcesDir = path.join(electronRoot, "resources");
-const preservedResourceEntries = new Set(["ui"]);
+const preservedResourceEntries = new Set(["document-extraction", "ui"]);
 
 if (fs.existsSync(resourcesDir)) {
   for (const entry of fs.readdirSync(resourcesDir)) {
