@@ -7,9 +7,9 @@ import {
   type PresentationResponse,
 } from "@/app/(presentation-generator)/services/api/dashboard";
 import { PresentationGrid } from "@/app/(presentation-generator)/(dashboard)/dashboard/components/PresentationGrid";
-import Image from "next/image";
+import { LegacyPresentationsTable } from "@/app/(presentation-generator)/(dashboard)/dashboard/components/LegacyPresentationsTable";
 import Link from "next/link";
-import { Archive, ArrowUpDown, ChevronDown } from "lucide-react";
+import { ArrowDownUp } from "lucide-react";
 import { trackEvent, MixpanelEvent } from "@/utils/mixpanel";
 import { usePathname } from "next/navigation";
 
@@ -39,10 +39,53 @@ const FloatingActionCards = () => (
   </div>
 );
 
-const dashboardHeaderPill =
-  "inline-flex shrink-0 items-center rounded-full border border-[#EDEEEF] bg-white text-[#191919] transition-colors hover:bg-[#FAFAFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] focus-visible:ring-offset-2";
+const GridViewIcon = () => (
+  <svg
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.33333"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="h-4 w-4"
+    aria-hidden="true"
+  >
+    <path
+      d="M6 2H2.66667C2.29848 2 2 2.29848 2 2.66667V6C2 6.36819 2.29848 6.66667 2.66667 6.66667H6C6.36819 6.66667 6.66667 6.36819 6.66667 6V2.66667C6.66667 2.29848 6.36819 2 6 2Z"
+    />
+    <path
+      d="M13.3333 2H10C9.63181 2 9.33333 2.29848 9.33333 2.66667V6C9.33333 6.36819 9.63181 6.66667 10 6.66667H13.3333C13.7015 6.66667 14 6.36819 14 6V2.66667C14 2.29848 13.7015 2 13.3333 2Z"
+    />
+    <path
+      d="M13.3333 9.33333H10C9.63181 9.33333 9.33333 9.63181 9.33333 10V13.3333C9.33333 13.7015 9.63181 14 10 14H13.3333C13.7015 14 14 13.7015 14 13.3333V10C14 9.63181 13.7015 9.33333 13.3333 9.33333Z"
+    />
+    <path
+      d="M6 9.33333H2.66667C2.29848 9.33333 2 9.63181 2 10V13.3333C2 13.7015 2.29848 14 2.66667 14H6C6.36819 14 6.66667 13.7015 6.66667 13.3333V10C6.66667 9.63181 6.36819 9.33333 6 9.33333Z"
+    />
+  </svg>
+);
 
-function DashboardHeader({ pathname }: { pathname: string }) {
+const ListViewIcon = () => (
+  <svg
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.33333"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="h-4 w-4"
+    aria-hidden="true"
+  >
+    <path d="M2 3.33333H2.00625" />
+    <path d="M2 8H2.00625" />
+    <path d="M2 12.6667H2.00625" />
+    <path d="M5.33333 3.33333H14" />
+    <path d="M5.33333 8H14" />
+    <path d="M5.33333 12.6667H14" />
+  </svg>
+);
+
+function DashboardHeader() {
   return (
     <header className="sticky top-0 z-50 flex min-h-[98px] w-full items-center justify-between gap-6 bg-white px-6 py-7 max-lg:flex-col max-lg:items-start">
       <h1 className="font-unbounded text-[28px] font-normal leading-none tracking-[-0.84px] text-[#101323]">
@@ -175,26 +218,28 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deckSortDirection, setDeckSortDirection] = useState<"desc" | "asc">(
-    "desc"
+    "asc"
   );
+  const [deckViewMode, setDeckViewMode] = useState<"grid" | "list">("grid");
 
   const sortedPresentations = useMemo(() => {
     return [...presentations].sort((a, b) => {
-      const first = new Date(a.updated_at ?? a.created_at).getTime();
-      const second = new Date(b.updated_at ?? b.created_at).getTime();
-
-      return deckSortDirection === "desc" ? second - first : first - second;
+      const comparison = (a.title || "").localeCompare(b.title || "", undefined, {
+        sensitivity: "base",
+      });
+      return deckSortDirection === "asc" ? comparison : -comparison;
     });
   }, [presentations, deckSortDirection]);
 
-  const sortedLegacyPresentations = useMemo(() => {
-    return [...legacyPresentations].sort((a, b) => {
-      const first = new Date(a.updated_at ?? a.created_at).getTime();
-      const second = new Date(b.updated_at ?? b.created_at).getTime();
-
-      return deckSortDirection === "desc" ? second - first : first - second;
-    });
-  }, [legacyPresentations, deckSortDirection]);
+  const sortedLegacyPresentations = useMemo(
+    () =>
+      [...legacyPresentations].sort((a, b) =>
+        (a.title || "").localeCompare(b.title || "", undefined, {
+          sensitivity: "base",
+        })
+      ),
+    [legacyPresentations]
+  );
 
   const fetchPresentations = useCallback(async () => {
     let fetchedCount = 0;
@@ -235,9 +280,16 @@ const DashboardPage: React.FC = () => {
     );
   };
 
+  const removeLegacyPresentations = (presentationIds: string[]) => {
+    const deletedIds = new Set(presentationIds);
+    setLegacyPresentations((prev) =>
+      prev.filter((presentation) => !deletedIds.has(presentation.id))
+    );
+  };
+
   return (
     <div className="relative min-h-screen w-full pb-10">
-      <DashboardHeader pathname={pathname} />
+      <DashboardHeader />
       <section className="relative z-10 overflow-visible px-3 sm:px-6">
         <h2 className="font-syne text-base bg-transparent font-medium pb-3.5  text-[#333333] ">
           Actions
@@ -265,57 +317,52 @@ const DashboardPage: React.FC = () => {
           </span>
         </Link>
       </section>
-      <section className="relative z-10 mt-12 px-3 sm:px-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-syne text-base font-medium  text-[#333333] ">
+      <section className="relative z-10 mt-[46px] px-3 sm:px-6">
+        <div className="mb-[14px] flex items-center justify-between gap-4">
+          <h2 className="font-syne text-base font-medium text-[#191919]">
             Decks
           </h2>
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[#2F3033] transition-colors hover:bg-[#F3F3F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]"
-            title="Toggle deck sort order"
-            aria-label="Toggle deck sort order"
-            onClick={() =>
-              setDeckSortDirection((current) =>
-                current === "desc" ? "asc" : "desc"
-              )
-            }
-          >
-            <ArrowUpDown
-              className={`h-4 w-4 transition-transform duration-300 ${deckSortDirection === "asc" ? "rotate-180" : ""
-                }`}
-            />
-          </button>
-        </div>
-        {!isLoading && sortedLegacyPresentations.length > 0 && (
-          <details className="group/archive mb-6 overflow-hidden rounded-[12px] border border-[#EDEEEF] bg-[#FBFBFD] shadow-[0_12px_28px_rgba(16,19,35,0.04)]">
-            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 marker:content-none transition-colors hover:bg-[#F7F6F9] sm:px-5 [&::-webkit-details-marker]:hidden">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D9D6FE] bg-[#F4F3FF] text-[#7A5AF8]">
-                <Archive className="h-4 w-4" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[#191919]">
-                  Unsupported presentations
-                  <span className="rounded-full border border-[#D9D6FE] bg-white px-2 py-0.5 text-xs font-medium text-[#7A5AF8]">
-                    {sortedLegacyPresentations.length}
-                  </span>
-                </span>
-                <span className="mt-0.5 block text-xs leading-5 text-[#666666]">
-                  These decks were created in an older version and cannot be opened here. Downgrade to a compatible Presenton version if you need to access them.
-                </span>
-              </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-[#666666] transition-transform group-open/archive:rotate-180" aria-hidden="true" />
-            </summary>
-            <div className="border-t border-[#EDEEEF] bg-white p-4 sm:p-5">
-              <PresentationGrid
-                presentations={sortedLegacyPresentations}
-                onPresentationDeleted={removePresentation}
-              />
+          <div className="flex items-center gap-[17px]">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 rounded text-[13px] font-medium tracking-[-0.39px] text-[#191919] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8]"
+              title="Toggle alphabetical deck order"
+              aria-label={`Sort decks ${deckSortDirection === "asc" ? "Z to A" : "A to Z"}`}
+              onClick={() =>
+                setDeckSortDirection((current) =>
+                  current === "asc" ? "desc" : "asc"
+                )
+              }
+            >
+              {deckSortDirection === "asc" ? "A to Z" : "Z to A"}
+              <ArrowDownUp className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+            <span className="h-5 w-px bg-[#EDEEEF]" aria-hidden="true" />
+            <div className="flex items-center rounded border border-[#EDEEEF] p-1">
+              <button
+                type="button"
+                onClick={() => setDeckViewMode("grid")}
+                aria-label="Grid view"
+                aria-pressed={deckViewMode === "grid"}
+                className={`flex items-center rounded px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] ${deckViewMode === "grid" ? "bg-[#F6F6F9]" : "hover:bg-[#FAFAFC]"}`}
+              >
+                <GridViewIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeckViewMode("list")}
+                aria-label="List view"
+                aria-pressed={deckViewMode === "list"}
+                className={`flex items-center rounded px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A5AF8] ${deckViewMode === "list" ? "bg-[#F6F6F9]" : "hover:bg-[#FAFAFC]"}`}
+              >
+                <ListViewIcon />
+              </button>
             </div>
-          </details>
-        )}
+          </div>
+        </div>
         <PresentationGrid
           presentations={sortedPresentations}
+          viewMode={deckViewMode}
           isLoading={isLoading}
           error={error}
           onPresentationDeleted={removePresentation}
@@ -324,6 +371,14 @@ const DashboardPage: React.FC = () => {
           }
         />
       </section>
+      {!isLoading && sortedLegacyPresentations.length > 0 && (
+        <div className="relative z-10 mt-[46px] px-3 sm:px-6">
+          <LegacyPresentationsTable
+            presentations={sortedLegacyPresentations}
+            onPresentationsDeleted={removeLegacyPresentations}
+          />
+        </div>
+      )}
     </div>
   );
 };

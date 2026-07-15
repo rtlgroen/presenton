@@ -25,12 +25,14 @@ export const PresentationCard = ({
   id,
   title,
   presentation,
+  viewMode = "grid",
   onDeleted,
   onDuplicated
 }: {
   id: string;
   title: string;
   presentation: any;
+  viewMode?: "grid" | "list";
   onDeleted?: (presentationId: string) => void;
   onDuplicated?: (presentation: any) => void;
 }) => {
@@ -164,7 +166,9 @@ export const PresentationCard = ({
     >
       <div
         id={`dashboard-presentation-card-${id}`}
-        suppressHydrationWarning={true} className="flex flex-col flex-1 relative z-40">
+        suppressHydrationWarning={true}
+        className={`relative z-40 flex flex-1 ${viewMode === "list" ? "min-h-[122px] flex-row" : "flex-col"}`}
+      >
         {/* <p className=" text-xs font-syne absolute top-2 flex gap-1 capitalize  items-center left-2 rounded-[100px]  px-2.5 py-1 bg-[#3A3A3AF5] text-white font-semibold  z-40 ">
 
           {presentation.type}
@@ -172,8 +176,8 @@ export const PresentationCard = ({
 
         <img src="/card_bg.svg" alt="" className="absolute top-0 left-0 w-full h-full object-cover" />
         <div className={isUnsupported
-          ? "relative mx-5 mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-[#EDEEEF] bg-white/90"
-          : "scale-[0.75] mt-4 border border-gray-300 rounded-lg overflow-hidden"
+          ? `relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-[#EDEEEF] bg-white/90 ${viewMode === "list" ? "m-3 w-[170px] shrink-0" : "mx-5 mt-4"}`
+          : `border border-gray-300 rounded-lg overflow-hidden ${viewMode === "list" ? "m-3 w-[170px] shrink-0" : "scale-[0.75] mt-4"}`
         }>
 
           {isUnsupported ? (
@@ -197,7 +201,7 @@ export const PresentationCard = ({
           )}
         </div>
 
-        <div className="w-full py-3 px-5 mt-auto z-40 relative bg-white  border-t border-[#EDEEEF]">
+        <div className={`z-40 flex bg-white px-5 py-3 ${viewMode === "list" ? "min-w-0 flex-1 items-center border-l border-[#EDEEEF]" : "relative mt-auto w-full border-t border-[#EDEEEF]"}`}>
           <div className="flex items-center justify-between gap-7 w-full">
             <div className="flex flex-col items-start gap-1">
               <div className="text-sm text-[#191919] font-semibold  overflow-hidden line-clamp-1">
