@@ -152,9 +152,72 @@ test("renders signed line deltas from the line start point", async () => {
 
   assert.ok(html);
   assert.match(html, /left:60px;top:80px;width:40px;height:3px;/);
-  assert.match(html, /x1="40" y1="0" x2="0" y2="0"/);
+  assert.match(html, /<polyline points="40,0 0,0" fill="none" stroke="#111111" stroke-width="3"/);
   assert.match(html, /left:120px;top:150px;width:2px;height:50px;/);
-  assert.match(html, /x1="0" y1="50" x2="0" y2="0"/);
+  assert.match(html, /<polyline points="0,50 0,0" fill="none" stroke="#222222" stroke-width="2"/);
+});
+
+test("renders point-based vector shapes without position or size", async () => {
+  const { templateV2UiToHtml } = await rendererPromise;
+  const html = templateV2UiToHtml({
+    elements: [
+      {
+        type: "vector_shape",
+        points: [
+          { x: 20, y: 40 },
+          { x: 140, y: 40 },
+          { x: 180, y: 120 },
+          { x: 20, y: 120 },
+        ],
+        fill: { color: "#F4F3FF" },
+        stroke: { color: "#7A5AF8", width: 2 },
+      },
+    ],
+  });
+
+  assert.ok(html);
+  assert.match(html, /left:20px;top:40px;width:160px;height:80px;/);
+  assert.match(html, /<polygon points="0,0 120,0 160,80 0,80" fill="#F4F3FF" stroke="#7A5AF8" stroke-width="2"/);
+});
+
+test("renders vector shapes with corner radii and bezier curves", async () => {
+  const { templateV2UiToHtml } = await rendererPromise;
+  const html = templateV2UiToHtml({
+    elements: [
+      {
+        type: "vector_shape",
+        points: [
+          { x: 20, y: 40 },
+          { x: 140, y: 40 },
+          { x: 140, y: 120 },
+          { x: 20, y: 120 },
+        ],
+        closed: true,
+        corner_radii: [16, 16, 16, 16],
+        fill: { color: "#F4F3FF" },
+        stroke: { color: "#7A5AF8", width: 2 },
+      },
+      {
+        type: "vector_shape",
+        points: [
+          { x: 220, y: 120 },
+          { x: 420, y: 120 },
+        ],
+        closed: false,
+        curve: {
+          type: "beizer",
+          segments: 8,
+          control_points: [{ x: 320, y: 20 }],
+        },
+        stroke: { color: "#111111", width: 3 },
+      },
+    ],
+  });
+
+  assert.ok(html);
+  assert.match(html, /<polygon points="0,16 0\.25,12\.25/);
+  assert.match(html, /<polyline points="0,50 25,28\.125/);
+  assert.match(html, /stroke="#111111" stroke-width="3"/);
 });
 
 test("normalizes camelCase chart kinds before rendering chart config", async () => {

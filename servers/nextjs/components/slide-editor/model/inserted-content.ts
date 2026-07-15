@@ -68,17 +68,20 @@ export function insertedElementToComponent(
   index: number,
 ) {
   const box = sourceElementBox(element);
+  const rawElement = rawElementFromInsertedElement(element);
   return {
     id: `${normalizeId(label ?? readString(element.type) ?? "inserted")}_${index + 1}`,
     description: label ?? "Inserted element",
     position: { x: box.x, y: box.y },
     size: { width: box.width, height: box.height },
     elements: [
-      {
-        ...rawElementFromInsertedElement(element),
-        position: { x: 0, y: 0 },
-        size: { width: box.width, height: box.height },
-      },
+      isVectorShapeType(readString(rawElement.type))
+        ? localizePolygonElement(rawElement, box)
+        : {
+            ...rawElement,
+            position: { x: 0, y: 0 },
+            size: { width: box.width, height: box.height },
+          },
     ],
   };
 }
@@ -109,6 +112,9 @@ export function rawElementFromInsertedElement(
 }
 
 export function sourceElementBox(element: UnknownRecord): Box {
+  const polygonBox = polygonBoundsForElement(element);
+  if (polygonBox) return polygonBox;
+
   const position = readPoint(element.position);
   const size = sourceElementSize(element);
   return {
@@ -120,6 +126,11 @@ export function sourceElementBox(element: UnknownRecord): Box {
 }
 
 export function sourceElementSize(element: UnknownRecord): Size {
+  const polygonBox = polygonBoundsForElement(element);
+  if (polygonBox) {
+    return { width: polygonBox.width, height: polygonBox.height };
+  }
+
   const size = asRecord(element.size);
   return {
     width: Math.max(1, readNumber(size?.width) ?? 1),
@@ -130,7 +141,7 @@ export function sourceElementSize(element: UnknownRecord): Size {
 export function normalizeInsertedElementGeometry(
   element: UnknownRecord,
 ): RawElement {
-  return convertInsertedChildArrays(element);
+  return convertInsertedChildArrays(legacyGeometryToVectorShape(element));
 }
 
 export function convertInsertedChildArrays(element: UnknownRecord): RawElement {
@@ -168,6 +179,179 @@ export function normalizeInsertedBorderRadius(value: unknown) {
     bottomLeft: radius.bottomLeft,
     bottomRight: radius.bottomRight,
   });
+}
+
+function localizePolygonElement(element: RawElement, box: Box): RawElement {
+  const curve = asRecord(element.curve);
+  const rawControlPoints = curve
+    ? readArray(curve.control_points ?? curve.controlPoints)
+    : [];
+  return {
+    ...element,
+    points: readArray(element.points)
+      .map(asRecord)
+      .filter((point): point is UnknownRecord => Boolean(point))
+      .map((point) => ({
+        x: (readNumber(point.x) ?? 0) - box.x,
+        y: (readNumber(point.y) ?? 0) - box.y,
+      })),
+    ...(curve && rawControlPoints.length > 0
+      ? {
+          curve: {
+            ...curve,
+            control_points: rawControlPoints
+              .map(asRecord)
+              .filter((point): point is UnknownRecord => Boolean(point))
+              .map((point) => ({
+                x: (readNumber(point.x) ?? 0) - box.x,
+                y: (readNumber(point.y) ?? 0) - box.y,
+              })),
+          },
+        }
+      : {}),
+  };
+}
+
+function isVectorShapeType(type: string | null | undefined) {
+  return type === "vector_shape";
+}
+
+function legacyGeometryToVectorShape(element: UnknownRecord): UnknownRecord {
+  const type = readString(element.type);
+  if (type === "vector_shape") return element;
+  if (type !== "line" && type !== "rectangle" && type !== "ellipse") return element;
+  const points = pointsForElement(element);
+  return {
+    ...element,
+    type: "vector_shape",
+    points,
+    closed: type !== "line",
+    ...(type === "rectangle"
+      ? { corner_radii: cornerRadiiFromBorderRadius(element.border_radius ?? element.borderRadius) }
+      : {}),
+    position: undefined,
+    size: undefined,
+    border_radius: undefined,
+  };
+}
+
+function polygonBoundsForElement(element: UnknownRecord): Box | null {
+  const type = readString(element.type);
+  if (
+    type !== "vector_shape" &&
+    type !== "line" &&
+    type !== "rectangle" &&
+    type !== "ellipse"
+  ) return null;
+  const points = [...pointsForElement(element), ...controlPointsForElement(element)];
+  if (points.length === 0) return null;
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const stroke = asRecord(element.stroke);
+  const strokeWidth = Math.max(1, readNumber(stroke?.width) ?? 1);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX, strokeWidth),
+    height: Math.max(1, maxY - minY, strokeWidth),
+  };
+}
+
+function pointsForElement(element: UnknownRecord): Array<{ x: number; y: number }> {
+  const type = readString(element.type);
+  if (type === "line") {
+    const position = readPoint(element.position);
+    const size = asRecord(element.size);
+    const width = readNumber(size?.width) ?? 0;
+    const height = readNumber(size?.height) ?? 0;
+    return [
+      position,
+      { x: position.x + width, y: position.y + height },
+    ];
+  }
+
+  if (type === "rectangle") {
+    const position = readPoint(element.position);
+    const size = sourceRectSize(element);
+    return [
+      position,
+      { x: position.x + size.width, y: position.y },
+      { x: position.x + size.width, y: position.y + size.height },
+      { x: position.x, y: position.y + size.height },
+    ];
+  }
+
+  if (type === "ellipse") {
+    const position = readPoint(element.position);
+    const size = sourceRectSize(element);
+    const radiusX = size.width / 2;
+    const radiusY = size.height / 2;
+    const centerX = position.x + radiusX;
+    const centerY = position.y + radiusY;
+    return Array.from({ length: 48 }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / 48;
+      return {
+        x: centerX + radiusX * Math.cos(angle),
+        y: centerY + radiusY * Math.sin(angle),
+      };
+    });
+  }
+
+  return readArray(element.points)
+    .map(asRecord)
+    .filter((point): point is UnknownRecord => Boolean(point))
+    .map((point) => {
+      const x = readNumber(point.x);
+      const y = readNumber(point.y);
+      return x != null && y != null ? { x, y } : null;
+    })
+    .filter((point): point is { x: number; y: number } => point != null);
+}
+
+function controlPointsForElement(
+  element: UnknownRecord,
+): Array<{ x: number; y: number }> {
+  const curve = asRecord(element.curve);
+  if (!curve) return [];
+  return readArray(curve.control_points ?? curve.controlPoints)
+    .map(asRecord)
+    .filter((point): point is UnknownRecord => Boolean(point))
+    .map((point) => {
+      const x = readNumber(point.x);
+      const y = readNumber(point.y);
+      return x != null && y != null ? { x, y } : null;
+    })
+    .filter((point): point is { x: number; y: number } => point != null);
+}
+
+function cornerRadiiFromBorderRadius(value: unknown) {
+  const radius = asRecord(value);
+  if (!radius) return undefined;
+  const topLeft = Math.max(0, readNumber(radius.tl) ?? readNumber(radius.topLeft) ?? 0);
+  const topRight = Math.max(
+    0,
+    readNumber(radius.tr) ?? readNumber(radius.topRight) ?? topLeft,
+  );
+  const bottomRight = Math.max(
+    0,
+    readNumber(radius.br) ?? readNumber(radius.bottomRight) ?? topRight,
+  );
+  const bottomLeft = Math.max(
+    0,
+    readNumber(radius.bl) ?? readNumber(radius.bottomLeft) ?? bottomRight,
+  );
+  const radii = [topLeft, topRight, bottomRight, bottomLeft];
+  return radii.some((item) => item > 0) ? radii : undefined;
+}
+
+function sourceRectSize(element: UnknownRecord): Size {
+  const size = asRecord(element.size);
+  return {
+    width: Math.max(1, readNumber(size?.width) ?? 1),
+    height: Math.max(1, readNumber(size?.height) ?? 1),
+  };
 }
 
 export function hasTemplateV2Metadata(element: UnknownRecord) {

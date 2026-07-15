@@ -24,6 +24,7 @@ import {
   type TextElement,
   type TextListItem,
   type TextRun,
+  type VectorShapeCurve,
 } from "@/components/slide-editor/types";
 
 const MIN_ELEMENT_SIZE = 1;
@@ -670,6 +671,8 @@ function adaptElement(value: unknown): SlideElement | null {
       return adaptTextList(raw);
     case "table":
       return adaptTable(raw);
+    case "vector_shape":
+      return adaptVectorShape(raw);
     case "rectangle":
       return adaptRectangle(raw);
     case "ellipse":
@@ -807,46 +810,171 @@ function adaptTable(raw: UnknownRecord): SlideElement {
 }
 
 function adaptRectangle(raw: UnknownRecord): SlideElement | null {
+  return adaptVectorShape(raw);
+}
+
+function adaptVectorShape(raw: UnknownRecord): SlideElement | null {
   const base = baseElement(raw);
   const fill = adaptFill(readRecord(raw, "fill"));
   const stroke = adaptStroke(readRecord(raw, "stroke"));
+  const points = adaptVectorShapePoints(raw);
   if (!hasVisiblePaint(fill, stroke, base.opacity)) return null;
+  if (points.length < 2) return null;
+
+  const { position, size, ...pointBase } = base;
+  void position;
+  void size;
 
   return {
-    ...base,
-    type: "rectangle",
+    ...pointBase,
+    type: "vector_shape",
+    points,
+    closed: adaptVectorShapeClosed(raw, points),
+    corner_radii: adaptCornerRadii(raw, points.length),
+    curve: adaptVectorShapeCurve(raw),
     fill,
     stroke,
-    border_radius: adaptBorderRadius(readRecord(raw, "border_radius")),
+    shadow: adaptShadow(readRecord(raw, "shadow")),
   };
 }
 
 function adaptEllipse(raw: UnknownRecord): SlideElement | null {
-  const base = baseElement(raw);
-  const fill = adaptFill(readRecord(raw, "fill"));
-  const stroke = adaptStroke(readRecord(raw, "stroke"));
-  if (!hasVisiblePaint(fill, stroke, base.opacity)) return null;
-
-  return {
-    ...base,
-    type: "ellipse",
-    fill,
-    stroke,
-  };
+  return adaptVectorShape(raw);
 }
 
 function adaptLine(raw: UnknownRecord): SlideElement {
-  const size = adaptLineSize(readRecord(raw, "size"));
-  return {
-    ...baseElement(raw),
-    ...(size ? { size } : {}),
-    type: "line",
-    stroke:
-      adaptStroke(readRecord(raw, "stroke")) ?? {
-        color: "000000",
-        width: 1,
-      },
+  return adaptVectorShape(raw) ?? {
+    type: "vector_shape",
+    points: legacyLinePoints(raw),
+    closed: false,
+    stroke: {
+      color: "000000",
+      width: 1,
+    },
   };
+}
+
+function adaptVectorShapePoints(raw: UnknownRecord): AdaptedPosition[] {
+  const type = readString(raw.type);
+  if (type === "line") return legacyLinePoints(raw);
+  if (type === "rectangle") return legacyRectanglePoints(raw);
+  if (type === "ellipse") return legacyEllipsePoints(raw);
+
+  return readArray(raw, "points")
+    .map((value) => {
+      const point = asRecord(value);
+      if (!point) return null;
+      const x = readRawNumber(point.x);
+      const y = readRawNumber(point.y);
+      return x != null && y != null ? { x: round(x), y: round(y) } : null;
+    })
+    .filter((point): point is AdaptedPosition => point != null);
+}
+
+function adaptVectorShapeClosed(
+  raw: UnknownRecord,
+  points: AdaptedPosition[],
+): boolean {
+  const type = readString(raw.type);
+  if (type === "line") return false;
+  if (type === "rectangle" || type === "ellipse") return true;
+
+  const closed = readValue(raw, "closed");
+  if (typeof closed === "boolean") return closed;
+  if (typeof closed === "string") {
+    const normalized = closed.trim().toLowerCase();
+    if (normalized === "false" || normalized === "0") return false;
+    if (normalized === "true" || normalized === "1") return true;
+  }
+  return points.length > 2;
+}
+
+function adaptVectorShapeCurve(raw: UnknownRecord): VectorShapeCurve | null {
+  const curve = readRecord(raw, "curve");
+  if (!curve) return null;
+  const rawType = readString(curve.type)?.trim().toLowerCase();
+  const type = rawType === "beizer" ? "bezier" : rawType;
+  if (type !== "smooth" && type !== "bezier") return null;
+  const rawControlPoints = curve.control_points ?? curve.controlPoints;
+  const controlPoints = (Array.isArray(rawControlPoints) ? rawControlPoints : [])
+    .map((value) => {
+      const point = asRecord(value);
+      if (!point) return null;
+      const x = readRawNumber(point.x);
+      const y = readRawNumber(point.y);
+      return x != null && y != null ? { x: round(x), y: round(y) } : null;
+    })
+    .filter((point): point is AdaptedPosition => point != null);
+  return {
+    type,
+    tension: clampOptional(readRawNumber(curve.tension), 0, 1),
+    segments: clampOptional(readRawNumber(curve.segments), 1, 96),
+    control_points: controlPoints.length > 0 ? controlPoints : null,
+  };
+}
+
+function adaptCornerRadii(raw: UnknownRecord, pointCount: number): number[] | null {
+  const rawRadii = raw.corner_radii ?? raw.cornerRadii;
+  const explicit = (Array.isArray(rawRadii) ? rawRadii : [])
+    .map(readRawNumber)
+    .filter((value): value is number => value != null)
+    .map((value) => clamp(round(value), 0, MAX_BORDER_RADIUS));
+  if (explicit.length > 0) return explicit.slice(0, pointCount);
+
+  if (readString(raw.type) !== "rectangle") return null;
+  const radius = readRecord(raw, "border_radius") ?? asRecord(raw.borderRadius);
+  if (!radius) return null;
+  const topLeft = clamp(round(readNumber(radius, "tl") ?? 0), 0, MAX_BORDER_RADIUS);
+  const topRight = clamp(round(readNumber(radius, "tr") ?? topLeft), 0, MAX_BORDER_RADIUS);
+  const bottomRight = clamp(round(readNumber(radius, "br") ?? topRight), 0, MAX_BORDER_RADIUS);
+  const bottomLeft = clamp(round(readNumber(radius, "bl") ?? bottomRight), 0, MAX_BORDER_RADIUS);
+  const radii = [topLeft, topRight, bottomRight, bottomLeft];
+  return radii.some((value) => value > 0) ? radii : null;
+}
+
+function legacyLinePoints(raw: UnknownRecord): AdaptedPosition[] {
+  const position = adaptPosition(readRecord(raw, "position")) ?? { x: 0, y: 0 };
+  const size = adaptLineSize(readRecord(raw, "size")) ?? { width: 0, height: 0 };
+  return [
+    position,
+    {
+      x: round(position.x + size.width),
+      y: round(position.y + size.height),
+    },
+  ];
+}
+
+function legacyRectanglePoints(raw: UnknownRecord): AdaptedPosition[] {
+  const position = adaptPosition(readRecord(raw, "position")) ?? { x: 0, y: 0 };
+  const size = adaptSize(readRecord(raw, "size")) ?? {
+    width: MIN_ELEMENT_SIZE,
+    height: MIN_ELEMENT_SIZE,
+  };
+  return [
+    position,
+    { x: round(position.x + size.width), y: position.y },
+    { x: round(position.x + size.width), y: round(position.y + size.height) },
+    { x: position.x, y: round(position.y + size.height) },
+  ];
+}
+
+function legacyEllipsePoints(raw: UnknownRecord): AdaptedPosition[] {
+  const position = adaptPosition(readRecord(raw, "position")) ?? { x: 0, y: 0 };
+  const size = adaptSize(readRecord(raw, "size")) ?? {
+    width: MIN_ELEMENT_SIZE,
+    height: MIN_ELEMENT_SIZE,
+  };
+  const radiusX = size.width / 2;
+  const radiusY = size.height / 2;
+  const centerX = position.x + radiusX;
+  const centerY = position.y + radiusY;
+  return Array.from({ length: 48 }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / 48;
+    return {
+      x: round(centerX + radiusX * Math.cos(angle)),
+      y: round(centerY + radiusY * Math.sin(angle)),
+    };
+  });
 }
 
 function adaptChart(raw: UnknownRecord): SlideElement {
@@ -1030,13 +1158,10 @@ function childrenBounds(children: SlideElement[]): AdaptedSize {
 
   const bounds = children.reduce(
     (acc, child) => {
-      const x = child.position?.x ?? 0;
-      const y = child.position?.y ?? 0;
-      const width = child.size?.width ?? MIN_ELEMENT_SIZE;
-      const height = child.size?.height ?? MIN_ELEMENT_SIZE;
+      const childBounds = adaptedElementBounds(child);
       return {
-        width: Math.max(acc.width, x + width),
-        height: Math.max(acc.height, y + height),
+        width: Math.max(acc.width, childBounds.x + childBounds.width),
+        height: Math.max(acc.height, childBounds.y + childBounds.height),
       };
     },
     { width: MIN_ELEMENT_SIZE, height: MIN_ELEMENT_SIZE },
@@ -1045,6 +1170,43 @@ function childrenBounds(children: SlideElement[]): AdaptedSize {
   return {
     width: clamp(round(bounds.width), MIN_ELEMENT_SIZE, EDITOR_STAGE_WIDTH),
     height: clamp(round(bounds.height), MIN_ELEMENT_SIZE, EDITOR_STAGE_HEIGHT),
+  };
+}
+
+function adaptedElementBounds(child: SlideElement): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  if (
+    child.type === "vector_shape" &&
+    Array.isArray(child.points)
+  ) {
+    const points = child.points.filter(
+      (point): point is AdaptedPosition =>
+        typeof point.x === "number" && typeof point.y === "number",
+    );
+    if (points.length > 0) {
+      const minX = Math.min(...points.map((point) => point.x));
+      const minY = Math.min(...points.map((point) => point.y));
+      const maxX = Math.max(...points.map((point) => point.x));
+      const maxY = Math.max(...points.map((point) => point.y));
+      const strokeWidth = Math.max(1, child.stroke?.width ?? 1);
+      return {
+        x: minX,
+        y: minY,
+        width: Math.max(maxX - minX, strokeWidth, MIN_ELEMENT_SIZE),
+        height: Math.max(maxY - minY, strokeWidth, MIN_ELEMENT_SIZE),
+      };
+    }
+  }
+
+  return {
+    x: child.position?.x ?? 0,
+    y: child.position?.y ?? 0,
+    width: child.size?.width ?? MIN_ELEMENT_SIZE,
+    height: child.size?.height ?? MIN_ELEMENT_SIZE,
   };
 }
 
@@ -1436,38 +1598,37 @@ function adaptChartSeries(value: unknown): ChartSeries | null {
 
 function invisibleFallbackElement(): SlideElement {
   return {
-    type: "rectangle",
-    position: { x: 0, y: 0 },
-    size: { width: MIN_ELEMENT_SIZE, height: MIN_ELEMENT_SIZE },
+    type: "vector_shape",
+    points: [
+      { x: 0, y: 0 },
+      { x: MIN_ELEMENT_SIZE, y: 0 },
+      { x: MIN_ELEMENT_SIZE, y: MIN_ELEMENT_SIZE },
+      { x: 0, y: MIN_ELEMENT_SIZE },
+    ],
+    closed: true,
     fill: { color: "FFFFFF" },
     opacity: 0,
   };
 }
 
 function backgroundFromElements(elements: SlideElement[]) {
-  const background = findBackgroundRectangle(elements, 0, 0);
+  const background = findBackgroundShape(elements, 0, 0);
 
-  return background?.type === "rectangle" && background.fill?.color
+  return background && "fill" in background && background.fill?.color
     ? background.fill.color
     : "FFFFFF";
 }
 
-function findBackgroundRectangle(
+function findBackgroundShape(
   elements: SlideElement[],
   offsetX: number,
   offsetY: number,
 ): SlideElement | null {
   for (const element of elements) {
-    const x = offsetX + (element.position?.x ?? 0);
-    const y = offsetY + (element.position?.y ?? 0);
-    if (
-      element.type === "rectangle" &&
-      x === 0 &&
-      y === 0 &&
-      element.size?.width === EDITOR_STAGE_WIDTH &&
-      element.size?.height === EDITOR_STAGE_HEIGHT &&
-      element.fill?.color
-    ) {
+    const bounds = adaptedElementBounds(element);
+    const x = offsetX + bounds.x;
+    const y = offsetY + bounds.y;
+    if (isFullSlideFilledShape(element, x, y, bounds)) {
       return element;
     }
 
@@ -1476,17 +1637,36 @@ function findBackgroundRectangle(
       element.type === "flex" ||
       element.type === "grid"
     ) {
-      const background = findBackgroundRectangle(element.children, x, y);
+      const background = findBackgroundShape(element.children, x, y);
       if (background) return background;
     }
 
     if (element.type === "container" && element.child) {
-      const background = findBackgroundRectangle([element.child], x, y);
+      const background = findBackgroundShape([element.child], x, y);
       if (background) return background;
     }
   }
 
   return null;
+}
+
+function isFullSlideFilledShape(
+  element: SlideElement,
+  x: number,
+  y: number,
+  bounds: { width: number; height: number },
+) {
+  if (
+    element.type !== "rectangle" &&
+    element.type !== "vector_shape"
+  ) return false;
+  return (
+    x === 0 &&
+    y === 0 &&
+    bounds.width === EDITOR_STAGE_WIDTH &&
+    bounds.height === EDITOR_STAGE_HEIGHT &&
+    Boolean(element.fill?.color)
+  );
 }
 
 function titleFromLayout(layout: TemplateV2Layout, index: number) {

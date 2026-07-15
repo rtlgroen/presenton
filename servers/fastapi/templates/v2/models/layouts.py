@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .elements import Position, Size, SlideElement
+from .elements import Position, Size, SlideElement, normalize_legacy_geometry_tree
 
 
 class RawSlideLayout(BaseModel):
     id: str
     description: str
     elements: list[SlideElement]
+
+    @field_validator("elements", mode="before")
+    @classmethod
+    def _normalize_legacy_geometry(cls, value: object) -> object:
+        return normalize_legacy_geometry_tree(value)
 
 
 class RawSlideLayouts(BaseModel):
@@ -21,6 +26,11 @@ class Component(BaseModel):
     position: Position
     size: Size
     elements: list[SlideElement] = Field(min_length=1)
+
+    @field_validator("elements", mode="before")
+    @classmethod
+    def _normalize_legacy_geometry(cls, value: object) -> object:
+        return normalize_legacy_geometry_tree(value)
 
 
 class SimilarComponents(BaseModel):

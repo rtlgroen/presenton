@@ -134,8 +134,14 @@ function renderElement(
   if (!element || typeof element !== "object") return null;
 
   switch (element.type) {
+    case "vector_shape":
+      return renderPolygon(element, key, mode);
+    case "line":
+      return renderPolygon(element, key, mode);
     case "rectangle":
-      return renderRectangle(element, key, mode);
+      return renderPolygon(element, key, mode);
+    case "ellipse":
+      return renderPolygon(element, key, mode);
     case "image":
       return renderImage(element, key, mode);
     case "text":
@@ -176,6 +182,54 @@ function renderRectangle(
         ...boxStyle(element),
       }}
     />
+  );
+}
+
+function renderPolygon(
+  element: TemplateV2Element,
+  key: string,
+  mode: RenderMode
+) {
+  const points = polygonPoints(element);
+  if (points.length < 2) return null;
+
+  const box = polygonBox(element, points);
+  const closed = polygonClosed(element, points);
+  const fill = readRecord(element.fill);
+  const stroke = readRecord(element.stroke);
+  const fillColor = closed ? readString(fill.color) : null;
+  const strokeColor = readString(stroke.color) ?? (!closed ? "#000000" : null);
+  const strokeWidth = Math.max(0, readNumber(stroke.width) ?? 1);
+  if (!fillColor && !(strokeColor && strokeWidth > 0)) return null;
+
+  const pointString = points
+    .map((point) => `${point.x - box.x},${point.y - box.y}`)
+    .join(" ");
+  const ShapeTag = closed ? "polygon" : "polyline";
+  return (
+    <div
+      key={key}
+      style={{
+        ...frameStyleFromBox(box, mode),
+        overflow: "visible",
+        transform: transformStyle(element),
+      }}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${box.width ?? 1} ${box.height ?? 1}`}
+        preserveAspectRatio="none"
+        style={{ display: "block", overflow: "visible" }}
+      >
+        <ShapeTag
+          points={pointString}
+          fill={closed ? fillColor ?? "none" : "none"}
+          stroke={strokeColor ?? undefined}
+          strokeWidth={strokeColor ? strokeWidth : undefined}
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -549,6 +603,10 @@ function frameStyle(
   fallbackSize?: { width: number; height: number }
 ): React.CSSProperties {
   const box = readBox(element, fallbackSize);
+  return frameStyleFromBox(box, mode);
+}
+
+function frameStyleFromBox(box: Box, mode: RenderMode): React.CSSProperties {
   const style: React.CSSProperties = {
     boxSizing: "border-box",
     minHeight: 0,
@@ -573,6 +631,14 @@ function readBox(
 ): Box {
   const position = readRecord(element.position);
   const size = readRecord(element.size);
+  if (
+    element.type === "vector_shape" ||
+    element.type === "line" ||
+    element.type === "rectangle" ||
+    element.type === "ellipse"
+  ) {
+    return polygonBox(element, polygonPoints(element));
+  }
   return {
     x: readNumber(position.x) ?? 0,
     y: readNumber(position.y) ?? 0,
@@ -594,6 +660,263 @@ function childrenBounds(children: TemplateV2Element[]): { width: number; height:
     },
     { width: 1, height: 1 }
   );
+}
+
+type PreviewPoint = { x: number; y: number };
+
+function polygonSourcePoints(element: TemplateV2Element): PreviewPoint[] {
+  if (element.type === "line") {
+    const position = readRecord(element.position);
+    const size = readRecord(element.size);
+    const x = readNumber(position.x) ?? 0;
+    const y = readNumber(position.y) ?? 0;
+    return [
+      { x, y },
+      {
+        x: x + (readNumber(size.width) ?? 0),
+        y: y + (readNumber(size.height) ?? 0),
+      },
+    ];
+  }
+
+  if (element.type === "rectangle") {
+    const box = readBox({ ...element, type: "__legacy_rectangle_box" });
+    const width = box.width ?? 1;
+    const height = box.height ?? 1;
+    return [
+      { x: box.x, y: box.y },
+      { x: box.x + width, y: box.y },
+      { x: box.x + width, y: box.y + height },
+      { x: box.x, y: box.y + height },
+    ];
+  }
+
+  if (element.type === "ellipse") {
+    const box = readBox({ ...element, type: "__legacy_ellipse_box" });
+    return ellipsePoints(box.x, box.y, box.width ?? 1, box.height ?? 1);
+  }
+
+  return readPointArray(element.points);
+}
+
+function polygonPoints(element: TemplateV2Element): PreviewPoint[] {
+  const points = polygonSourcePoints(element);
+  const closed = polygonClosed(element, points);
+  const rounded = closed
+    ? roundedPolygonPoints(points, cornerRadii(element, points.length))
+    : points;
+  const curve = readRecord(element.curve);
+  const rawType = readString(curve.type)?.trim().toLowerCase();
+  const curveType = rawType === "beizer" ? "bezier" : rawType;
+  const segments = Math.max(1, Math.min(96, Math.round(readNumber(curve.segments) ?? 16)));
+  if (curveType === "smooth") {
+    return sampleSmoothCurve(
+      rounded,
+      closed,
+      Math.max(0, Math.min(1, readNumber(curve.tension) ?? 0.4)),
+      segments,
+    );
+  }
+  if (curveType === "bezier") {
+    return sampleBezierCurve(
+      rounded,
+      readPointArray(curve.control_points ?? curve.controlPoints),
+      segments,
+    );
+  }
+  return rounded;
+}
+
+function readPointArray(value: unknown): PreviewPoint[] {
+  return Array.isArray(value)
+    ? value
+        .map((point) => {
+          const record = readRecord(point);
+          const x = readNumber(record.x);
+          const y = readNumber(record.y);
+          return x != null && y != null ? { x, y } : null;
+        })
+        .filter((point): point is PreviewPoint => point != null)
+    : [];
+}
+
+function ellipsePoints(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  segments = 48,
+): PreviewPoint[] {
+  const radiusX = width / 2;
+  const radiusY = height / 2;
+  const centerX = x + radiusX;
+  const centerY = y + radiusY;
+  return Array.from({ length: segments }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / segments;
+    return {
+      x: centerX + radiusX * Math.cos(angle),
+      y: centerY + radiusY * Math.sin(angle),
+    };
+  });
+}
+
+function cornerRadii(element: TemplateV2Element, pointCount: number): number[] {
+  const value = element.corner_radii ?? element.cornerRadii;
+  return Array.isArray(value)
+    ? value
+        .map(readNumber)
+        .filter((item): item is number => item != null)
+        .slice(0, pointCount)
+        .map((item) => Math.max(0, item))
+    : [];
+}
+
+function pointAt(points: PreviewPoint[], index: number) {
+  return points[((index % points.length) + points.length) % points.length];
+}
+
+function lerpPoint(start: PreviewPoint, end: PreviewPoint, t: number): PreviewPoint {
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
+function roundedPolygonPoints(points: PreviewPoint[], radii: number[], segments = 8) {
+  if (points.length < 3 || radii.length === 0) return points;
+  const rounded: PreviewPoint[] = [];
+  points.forEach((point, index) => {
+    const previous = pointAt(points, index - 1);
+    const next = pointAt(points, index + 1);
+    const prevDistance = Math.hypot(point.x - previous.x, point.y - previous.y);
+    const nextDistance = Math.hypot(point.x - next.x, point.y - next.y);
+    const radius = Math.min(radii[index] ?? 0, prevDistance / 2, nextDistance / 2);
+    if (radius <= 0) {
+      rounded.push(point);
+      return;
+    }
+    const from = lerpPoint(point, previous, radius / prevDistance);
+    const to = lerpPoint(point, next, radius / nextDistance);
+    rounded.push(from);
+    for (let step = 1; step < segments; step += 1) {
+      const t = step / segments;
+      rounded.push({
+        x: (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * point.x + t * t * to.x,
+        y: (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * point.y + t * t * to.y,
+      });
+    }
+    rounded.push(to);
+  });
+  return rounded;
+}
+
+function sampleSmoothCurve(
+  points: PreviewPoint[],
+  closed: boolean,
+  tension: number,
+  segments: number,
+) {
+  if (points.length < 3 || tension <= 0) return points;
+  const sampled: PreviewPoint[] = [];
+  const segmentCount = closed ? points.length : points.length - 1;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const p0 = closed ? pointAt(points, index - 1) : points[Math.max(0, index - 1)];
+    const p1 = pointAt(points, index);
+    const p2 = pointAt(points, index + 1);
+    const p3 = closed ? pointAt(points, index + 2) : points[Math.min(points.length - 1, index + 2)];
+    if (index === 0) sampled.push(p1);
+    for (let step = 1; step <= segments; step += 1) {
+      const t = step / segments;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      sampled.push({
+        x:
+          (2 * p1.x +
+            (-p0.x + p2.x) * tension * t +
+            (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * tension * t2 +
+            (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * tension * t3) /
+          2,
+        y:
+          (2 * p1.y +
+            (-p0.y + p2.y) * tension * t +
+            (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * tension * t2 +
+            (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * tension * t3) /
+          2,
+      });
+    }
+  }
+  return sampled;
+}
+
+function sampleBezierCurve(points: PreviewPoint[], controls: PreviewPoint[], segments: number) {
+  if (points.length < 2 || controls.length === 0) return points;
+  const sampled: PreviewPoint[] = [points[0]];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const c1 = controls[index * 2] ?? controls[0];
+    const c2 = controls[index * 2 + 1];
+    for (let step = 1; step <= segments; step += 1) {
+      const t = step / segments;
+      sampled.push(
+        c2
+          ? {
+              x:
+                (1 - t) ** 3 * start.x +
+                3 * (1 - t) ** 2 * t * c1.x +
+                3 * (1 - t) * t * t * c2.x +
+                t ** 3 * end.x,
+              y:
+                (1 - t) ** 3 * start.y +
+                3 * (1 - t) ** 2 * t * c1.y +
+                3 * (1 - t) * t * t * c2.y +
+                t ** 3 * end.y,
+            }
+          : {
+              x: (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * c1.x + t * t * end.x,
+              y: (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * c1.y + t * t * end.y,
+            },
+      );
+    }
+  }
+  return sampled;
+}
+
+function polygonClosed(
+  element: TemplateV2Element,
+  points: Array<{ x: number; y: number }>
+) {
+  if (element.closed === false || element.closed === "false" || element.closed === "0") {
+    return false;
+  }
+  if (element.closed === true || element.closed === "true" || element.closed === "1") {
+    return true;
+  }
+  return points.length > 2;
+}
+
+function polygonBox(
+  element: TemplateV2Element,
+  points: Array<{ x: number; y: number }>
+): Box {
+  if (!points.length) return { x: 0, y: 0, width: 1, height: 1 };
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const stroke = readRecord(element.stroke);
+  const strokeWidth = Math.max(1, readNumber(stroke.width) ?? 1);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(maxX - minX, strokeWidth, 1),
+    height: Math.max(maxY - minY, strokeWidth, 1),
+  };
+}
+
+function transformStyle(element: TemplateV2Element) {
+  const rotation = readNumber(element.rotation);
+  return rotation ? `rotate(${rotation}deg)` : undefined;
 }
 
 function boxStyle(element: TemplateV2Element): React.CSSProperties {

@@ -265,10 +265,19 @@ export type LineElement = ElementBase & {
   stroke: Stroke;
 };
 
-export type PolygonElement = Omit<ElementBase, "position" | "size"> & {
-  type: "polygon";
+export type VectorShapeCurve = {
+  type: "smooth" | "bezier";
+  tension?: number | null;
+  segments?: number | null;
+  control_points?: Position[] | null;
+};
+
+export type VectorShapeElement = ElementBase & {
+  type: "vector_shape";
   points: Position[];
   closed?: boolean | null;
+  curve?: VectorShapeCurve | null;
+  corner_radii?: number[] | null;
   fill?: Fill | null;
   stroke?: Stroke | null;
 };
@@ -357,7 +366,7 @@ export type SlideElement =
   | RectangleElement
   | EllipseElement
   | LineElement
-  | PolygonElement
+  | VectorShapeElement
   | SvgElement
   | ChartElement
   | InfographicElement
@@ -452,6 +461,7 @@ export type LayoutTableElement = TableElement;
 export type LayoutRectangleElement = RectangleElement;
 export type LayoutEllipseElement = EllipseElement;
 export type LayoutLineElement = LineElement;
+export type LayoutVectorShapeElement = VectorShapeElement;
 export type LayoutSvgElement = SvgElement;
 export type LayoutChartElement = ChartElement;
 export type LayoutInfographicElement = InfographicElement;

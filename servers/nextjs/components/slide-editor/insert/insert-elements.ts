@@ -666,20 +666,24 @@ export function createElementInsertElements(kind?: string): SlideElement[] {
     case "rectangle":
       return [
         {
-          type: "rectangle",
-          position: { x: 134, y: 134 },
-          size: { width: 384, height: 192 },
+          type: "vector_shape",
+          points: [
+            { x: 134, y: 134 },
+            { x: 518, y: 134 },
+            { x: 518, y: 326 },
+            { x: 134, y: 326 },
+          ],
+          closed: true,
           fill: { color: "F4F3FF", opacity: 1 },
           stroke: { color: "7A5AF8", width: 1.5 },
-          border_radius: { tl: 10, tr: 10, bl: 10, br: 10 },
         },
       ];
     case "ellipse":
       return [
         {
-          type: "ellipse",
-          position: { x: 134, y: 134 },
-          size: { width: 346, height: 198 },
+          type: "vector_shape",
+          points: ellipseVectorPoints(134, 134, 346, 198),
+          closed: true,
           fill: { color: "F4F3FF", opacity: 1 },
           stroke: { color: "7A5AF8", width: 1.5 },
         },
@@ -687,13 +691,36 @@ export function createElementInsertElements(kind?: string): SlideElement[] {
     case "line":
       return [
         {
-          type: "line",
-          position: { x: 134, y: 218 },
-          size: { width: 435, height: 1 },
+          type: "vector_shape",
+          points: [
+            { x: 134, y: 218 },
+            { x: 569, y: 219 },
+          ],
+          closed: false,
           stroke: { color: "101323", width: 2 },
         },
       ];
     default:
       return [];
   }
+}
+
+function ellipseVectorPoints(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  segments = 48,
+) {
+  const radiusX = width / 2;
+  const radiusY = height / 2;
+  const centerX = x + radiusX;
+  const centerY = y + radiusY;
+  return Array.from({ length: segments }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / segments;
+    return {
+      x: centerX + radiusX * Math.cos(angle),
+      y: centerY + radiusY * Math.sin(angle),
+    };
+  });
 }

@@ -247,6 +247,7 @@ function isTemplateV2EditorToolbarElement(
     element?.type === "text-list" ||
     element?.type === "rectangle" ||
     element?.type === "ellipse" ||
+    element?.type === "vector_shape" ||
     element?.type === "line"
   );
 }

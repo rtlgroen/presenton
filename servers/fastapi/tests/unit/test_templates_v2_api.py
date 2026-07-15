@@ -29,7 +29,7 @@ from api.v1.ppt.endpoints.templates import (
 from models.sql.async_task import AsyncTaskModel
 from models.sql.template_v2 import TemplateV2
 from services.export_task_service import PptxToJsonDocument
-from templates.v2.models.layouts import MergedComponents, SlideLayouts
+from templates.v2.models.layouts import MergedComponents, RawSlideLayouts, SlideLayouts
 
 
 RAW_LAYOUTS = {
@@ -98,6 +98,12 @@ MERGED_COMPONENTS = MergedComponents.model_validate(
         ]
     }
 )
+
+
+def _normalized_raw_layouts(layouts=RAW_LAYOUTS):
+    return RawSlideLayouts.model_validate(layouts).model_dump(
+        mode="json", exclude_none=True
+    )
 
 
 def _two_raw_layouts():
@@ -294,7 +300,7 @@ def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async
     merged_layouts_arg = merge_mock.call_args.args[0]
     assert merged_layouts_arg.layouts[0].id == "slide_1_4801"
     assert template.name == "quarterly-review"
-    assert template.raw_layouts == RAW_LAYOUTS
+    assert template.raw_layouts == _normalized_raw_layouts()
     assert template.components is None
     assert template.merged_components == MERGED_COMPONENTS.model_dump(
         mode="json", exclude_none=True
@@ -403,7 +409,7 @@ def test_create_template_v2_caps_raw_layouts_to_preview_images(tmp_path, fake_as
 
     raw_layouts_arg = generate_mock.call_args.args[0]
     assert [layout.id for layout in raw_layouts_arg.layouts] == ["slide_1"]
-    assert template.raw_layouts == RAW_LAYOUTS
+    assert template.raw_layouts == _normalized_raw_layouts()
     assert template.assets["slide_image_urls"] == ["/app_data/images/slide-1.png"]
 
 
@@ -606,7 +612,7 @@ def test_init_template_v2_persists_assets_without_layouts(tmp_path, fake_async_s
     template = fake_async_session.added[0]
     assert template.name == "Quarterly Review"
     assert template.description == "Board deck template"
-    assert template.raw_layouts == RAW_LAYOUTS
+    assert template.raw_layouts == _normalized_raw_layouts()
     assert template.layouts is None
     assert template.assets == {
         "pptx_url": "/app_data/uploads/quarterly-review.pptx",

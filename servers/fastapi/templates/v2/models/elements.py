@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional, TypeAlias, Union, List
 
@@ -262,40 +263,26 @@ class Table(BaseModel):
     min_rows: int
 
 
-class Rectangle(BaseModel):
-    type: Literal["rectangle"]
-    position: Optional[Position] = None
-    size: Optional[Size] = None
-    rotation: Optional[float] = None
-    fill: Optional[Fill] = None
-    stroke: Optional[Stroke] = None
-    border_radius: Optional[BorderRadius] = None
-    shadow: Optional[Shadow] = None
+class VectorShapeCurve(BaseModel):
+    type: Literal["smooth", "bezier"]
+    tension: Optional[float] = Field(default=None, ge=0, le=1)
+    segments: Optional[int] = Field(default=16, ge=1, le=96)
+    control_points: Optional[list[Position]] = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_curve_type(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip().lower() == "beizer":
+            return "bezier"
+        return value
 
 
-class Ellipse(BaseModel):
-    type: Literal["ellipse"]
-    position: Optional[Position] = None
-    size: Optional[Size] = None
-    rotation: Optional[float] = None
-    fill: Optional[Fill] = None
-    stroke: Optional[Stroke] = None
-    shadow: Optional[Shadow] = None
-
-
-class Line(BaseModel):
-    type: Literal["line"]
-    position: Optional[Position] = None
-    size: Optional[Size] = None
-    rotation: Optional[float] = None
-    stroke: Stroke
-    shadow: Optional[Shadow] = None
-
-
-class Polygon(BaseModel):
-    type: Literal["polygon"]
+class VectorShape(BaseModel):
+    type: Literal["vector_shape"]
     points: list[Position] = Field(min_length=2)
     closed: Optional[bool] = None
+    curve: Optional[VectorShapeCurve] = None
+    corner_radii: Optional[list[Annotated[float, Field(ge=0)]]] = None
     rotation: Optional[float] = None
     opacity: Optional[float] = None
     fill: Optional[Fill] = None
@@ -449,12 +436,48 @@ def _legacy_number(value: Any, fallback: float = 0.0) -> float:
     return fallback
 
 
-def _legacy_geometry_to_polygon(value: Any) -> Any:
+def _ellipse_points(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    segments: int = 48,
+) -> list[dict[str, float]]:
+    radius_x = width / 2
+    radius_y = height / 2
+    center_x = x + radius_x
+    center_y = y + radius_y
+    return [
+        {
+            "x": center_x + radius_x * math.cos((math.tau * index) / segments),
+            "y": center_y + radius_y * math.sin((math.tau * index) / segments),
+        }
+        for index in range(segments)
+    ]
+
+
+def _legacy_corner_radii(value: Any) -> list[float] | None:
+    if isinstance(value, (int, float, str)):
+        radius = _legacy_number(value)
+        return [radius, radius, radius, radius] if radius > 0 else None
+    if not isinstance(value, dict):
+        return None
+    top_left = _legacy_number(value.get("tl", value.get("topLeft")))
+    top_right = _legacy_number(value.get("tr", value.get("topRight")), top_left)
+    bottom_right = _legacy_number(value.get("br", value.get("bottomRight")), top_right)
+    bottom_left = _legacy_number(value.get("bl", value.get("bottomLeft")), bottom_right)
+    radii = [top_left, top_right, bottom_right, bottom_left]
+    return radii if any(radius > 0 for radius in radii) else None
+
+
+def _legacy_geometry_to_vector_shape(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
 
     element_type = value.get("type")
-    if element_type not in {"line", "rectangle"}:
+    if element_type == "vector_shape":
+        return value
+    if element_type not in {"line", "rectangle", "ellipse"}:
         return value
 
     position = value.get("position") if isinstance(value.get("position"), dict) else {}
@@ -464,28 +487,50 @@ def _legacy_geometry_to_polygon(value: Any) -> Any:
     width = _legacy_number(size.get("width") if isinstance(size, dict) else None)
     height = _legacy_number(size.get("height") if isinstance(size, dict) else None)
 
-    polygon = {
+    vector_shape = {
         key: item
         for key, item in value.items()
         if key not in {"type", "position", "size", "border_radius"}
     }
-    polygon["type"] = "polygon"
+    vector_shape["type"] = "vector_shape"
     if element_type == "line":
-        polygon["points"] = [
+        vector_shape["points"] = [
             {"x": x, "y": y},
             {"x": x + width, "y": y + height},
         ]
-        polygon.setdefault("closed", False)
-    else:
-        polygon["points"] = [
+        vector_shape.setdefault("closed", False)
+    elif element_type == "rectangle":
+        vector_shape["points"] = [
             {"x": x, "y": y},
             {"x": x + width, "y": y},
             {"x": x + width, "y": y + height},
             {"x": x, "y": y + height},
         ]
-        polygon.setdefault("closed", True)
+        vector_shape.setdefault("closed", True)
+        radii = _legacy_corner_radii(value.get("border_radius"))
+        if radii is not None:
+            vector_shape.setdefault("corner_radii", radii)
+    else:
+        vector_shape["points"] = _ellipse_points(x, y, width, height)
+        vector_shape.setdefault("closed", True)
 
-    return polygon
+    return vector_shape
+
+
+def normalize_legacy_geometry_tree(value: Any) -> Any:
+    if isinstance(value, list):
+        return [normalize_legacy_geometry_tree(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    converted = _legacy_geometry_to_vector_shape(value)
+    normalized = dict(converted)
+    for key in ("children", "elements"):
+        if isinstance(normalized.get(key), list):
+            normalized[key] = normalize_legacy_geometry_tree(normalized[key])
+    if "child" in normalized:
+        normalized["child"] = normalize_legacy_geometry_tree(normalized["child"])
+    return normalized
 
 
 SlideElement: TypeAlias = Annotated[
@@ -495,17 +540,14 @@ SlideElement: TypeAlias = Annotated[
         Image,
         TextList,
         Table,
-        Rectangle,
-        Ellipse,
-        Line,
-        Polygon,
+        VectorShape,
         Chart,
         Infographic,
         Flex,
         Grid,
         Group,
     ],
-    BeforeValidator(_legacy_geometry_to_polygon),
+    BeforeValidator(_legacy_geometry_to_vector_shape),
     Field(discriminator="type"),
 ]
 
@@ -521,7 +563,6 @@ __all__ = [
     "ChartSeries",
     "ChartType",
     "Container",
-    "Ellipse",
     "Fill",
     "Flex",
     "FlexDirection",
@@ -534,12 +575,10 @@ __all__ = [
     "Infographic",
     "InfographicType",
     "LayoutAlignment",
-    "Line",
     "Marker",
+    "normalize_legacy_geometry_tree",
     "Padding",
-    "Polygon",
     "Position",
-    "Rectangle",
     "Shadow",
     "Size",
     "SlideElement",
@@ -551,4 +590,6 @@ __all__ = [
     "TextList",
     "TextRun",
     "VerticalAlignment",
+    "VectorShape",
+    "VectorShapeCurve",
 ]

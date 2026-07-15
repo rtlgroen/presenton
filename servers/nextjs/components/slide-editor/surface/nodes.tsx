@@ -65,6 +65,7 @@ import {
   isManualPositioned,
   isRawIconElement,
   isStaticSvgIconSource,
+  isVectorShapeType,
   isRecord,
   keyForSelection,
   layoutChildren,
@@ -893,7 +894,7 @@ function RawElementNode({
           const scaled = scaleRawElementTextMetrics(current, fontScale);
           const type = readString(current.type);
           const geometry =
-            type === "polygon"
+            isVectorShapeType(type)
               ? polygonElementFromFrame(scaled, nextPosition, scaleX, scaleY)
               : {
                   ...scaled,
@@ -1107,7 +1108,7 @@ function RawElementVisual({
       />
     );
   }
-  if (type === "polygon") {
+  if (isVectorShapeType(type)) {
     const points = polygonLocalPointsForElement(element);
     const closed = polygonClosedForElement(element);
     const fill = closed

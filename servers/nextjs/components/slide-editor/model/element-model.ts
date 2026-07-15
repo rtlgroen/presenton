@@ -245,6 +245,12 @@ export function hasImageData(element: ImageElement) {
 
 export function isShapeElement(
   element: SlideElement,
-): element is RectangleElement | Extract<SlideElement, { type: "ellipse" }> {
-  return element.type === "rectangle" || element.type === "ellipse";
+): element is
+  | RectangleElement
+  | Extract<SlideElement, { type: "ellipse" | "vector_shape" }> {
+  return (
+    element.type === "rectangle" ||
+    element.type === "ellipse" ||
+    element.type === "vector_shape"
+  );
 }

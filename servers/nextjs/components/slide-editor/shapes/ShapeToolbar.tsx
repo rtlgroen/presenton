@@ -88,7 +88,15 @@ export function ShapeToolbar({
   onChange: (index: number, element: ShapeSlideElement) => void;
 }) {
   const [openPanel, setOpenPanel] = useState<ShapePanel>(null);
-  const box = elementBox(element);
+  const rawBox = elementBox(element);
+  const box = anchorBox
+    ? {
+        x: anchorBox.x / scale,
+        y: anchorBox.y / scale,
+        w: anchorBox.width / scale,
+        h: anchorBox.height / scale,
+      }
+    : rawBox;
   const fill = element.fill ?? { color: "#FFFFFF", opacity: 1 };
   const stroke = element.stroke ?? {
     color: "#1A1A1A",
@@ -98,13 +106,21 @@ export function ShapeToolbar({
   const shadow = element.shadow ?? DEFAULT_SHAPE_SHADOW;
   const shadowEnabled = element.shadow != null;
   const isRectangle = element.type === "rectangle";
+  const isVectorShape =
+    element.type === "vector_shape";
+  const canChangeType = element.type === "rectangle" || element.type === "ellipse";
+  const canRoundCorners =
+    isRectangle ||
+    (isVectorShape && element.closed !== false && element.points.length === 4);
   const maxRadius = Math.max(
     1,
     Math.min(128, box.w / 2, box.h / 2),
   );
   const radius = isRectangle
     ? Math.min(maxRadius, averageBorderRadius(element.border_radius))
-    : 0;
+    : isVectorShape
+      ? Math.min(maxRadius, averageCornerRadii(element.corner_radii))
+      : 0;
 
   const update = (changes: Partial<ShapeSlideElement>) => {
     onChange(index, { ...element, ...changes } as ShapeSlideElement);
@@ -219,42 +235,44 @@ export function ShapeToolbar({
         ) : null}
       </div>
 
-      <div className="relative">
-        <ToolbarButton
-          title="Shape type"
-          pressed={openPanel === "type"}
-          onClick={() => togglePanel("type")}
-        >
-          {isRectangle ? <Square size={16} aria-hidden="true" /> : <Circle size={16} aria-hidden="true" />}
-        </ToolbarButton>
-        {openPanel === "type" ? (
-          <Panel className="w-[180px] p-3">
-            <div className="space-y-1.5">
-              {SHAPE_TYPES.map((option) => {
-                const Icon = option.icon;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={element.type === option.value}
-                    onClick={() => updateType(option.value)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-[#F4F3FF]",
-                      element.type === option.value &&
-                        "bg-[#F4F1FF] text-[#7A5AF8]",
-                    )}
-                  >
-                    <Icon size={16} aria-hidden="true" />
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Panel>
-        ) : null}
-      </div>
+      {canChangeType ? (
+        <div className="relative">
+          <ToolbarButton
+            title="Shape type"
+            pressed={openPanel === "type"}
+            onClick={() => togglePanel("type")}
+          >
+            {isRectangle ? <Square size={16} aria-hidden="true" /> : <Circle size={16} aria-hidden="true" />}
+          </ToolbarButton>
+          {openPanel === "type" ? (
+            <Panel className="w-[180px] p-3">
+              <div className="space-y-1.5">
+                {SHAPE_TYPES.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={element.type === option.value}
+                      onClick={() => updateType(option.value)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-[#F4F3FF]",
+                        element.type === option.value &&
+                          "bg-[#F4F1FF] text-[#7A5AF8]",
+                      )}
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Panel>
+          ) : null}
+        </div>
+      ) : null}
 
-      {isRectangle ? (
+      {canRoundCorners ? (
         <div className="relative">
           <ToolbarButton
             title="Border radius"
@@ -273,7 +291,11 @@ export function ShapeToolbar({
                 step={Math.max(0.001, maxRadius / 100)}
                 formatValue={(value) => formatNumber(value)}
                 onCommit={(value) =>
-                  update({ border_radius: uniformBorderRadius(value) })
+                  update(
+                    isVectorShape
+                      ? { corner_radii: [value, value, value, value] }
+                      : { border_radius: uniformBorderRadius(value) },
+                  )
                 }
               />
             </Panel>
@@ -624,6 +646,13 @@ export function SliderField({
 export function formatNumber(value: number) {
   if (!Number.isFinite(value)) return "0";
   return Number(value.toFixed(3)).toString();
+}
+
+function averageCornerRadii(value: number[] | null | undefined) {
+  if (!Array.isArray(value) || value.length === 0) return 0;
+  const radii = value.filter((item) => Number.isFinite(item));
+  if (radii.length === 0) return 0;
+  return radii.reduce((sum, item) => sum + item, 0) / radii.length;
 }
 
 function LineWidthIcon() {

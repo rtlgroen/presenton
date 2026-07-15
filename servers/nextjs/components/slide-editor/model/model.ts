@@ -1253,7 +1253,22 @@ export function lineRenderBox(element: RawElement): Box {
   };
 }
 
-export function polygonPointsForElement(element: RawElement): Point[] {
+export function isVectorShapeType(type: string | null | undefined) {
+  return type === "vector_shape";
+}
+
+function readPointArray(value: unknown): Point[] {
+  return readArray(value)
+    .map((item) => {
+      const point = asRecord(item);
+      const x = readNumber(point?.x);
+      const y = readNumber(point?.y);
+      return x != null && y != null ? { x, y } : null;
+    })
+    .filter((point): point is Point => point != null);
+}
+
+function polygonSourcePointsForElement(element: RawElement): Point[] {
   const type = readString(element.type);
   if (type === "line") {
     const position = readPoint(element.position);
@@ -1278,14 +1293,189 @@ export function polygonPointsForElement(element: RawElement): Point[] {
     ];
   }
 
-  return readArray(element.points)
-    .map((value) => {
-      const point = asRecord(value);
-      const x = readNumber(point?.x);
-      const y = readNumber(point?.y);
-      return x != null && y != null ? { x, y } : null;
-    })
-    .filter((point): point is Point => point != null);
+  if (type === "ellipse") {
+    const position = readPoint(element.position);
+    const size = readOptionalSize(element.size) ?? {
+      width: DECORATIVE_LINE_LENGTH,
+      height: DECORATIVE_LINE_LENGTH,
+    };
+    return ellipsePoints(position.x, position.y, size.width, size.height);
+  }
+
+  return readPointArray(element.points);
+}
+
+function ellipsePoints(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  segments = 48,
+): Point[] {
+  const radiusX = width / 2;
+  const radiusY = height / 2;
+  const centerX = x + radiusX;
+  const centerY = y + radiusY;
+  return Array.from({ length: segments }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / segments;
+    return {
+      x: centerX + radiusX * Math.cos(angle),
+      y: centerY + radiusY * Math.sin(angle),
+    };
+  });
+}
+
+function pointAt(points: Point[], index: number) {
+  return points[((index % points.length) + points.length) % points.length];
+}
+
+function lerpPoint(start: Point, end: Point, t: number): Point {
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
+function distance(a: Point, b: Point) {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function normalizedCornerRadii(element: RawElement, points: Point[]): number[] {
+  const raw = readArray(element.corner_radii ?? element.cornerRadii);
+  if (raw.length === 0 || points.length < 3) return [];
+  return points.map((_, index) => Math.max(0, readNumber(raw[index]) ?? 0));
+}
+
+function roundedPolygonPoints(points: Point[], radii: number[], segments = 8): Point[] {
+  if (points.length < 3 || radii.length === 0) return points;
+  const rounded: Point[] = [];
+  points.forEach((point, index) => {
+    const radius = radii[index] ?? 0;
+    const previous = pointAt(points, index - 1);
+    const next = pointAt(points, index + 1);
+    const prevDistance = distance(point, previous);
+    const nextDistance = distance(point, next);
+    const safeRadius = Math.min(radius, prevDistance / 2, nextDistance / 2);
+    if (safeRadius <= 0) {
+      rounded.push(point);
+      return;
+    }
+
+    const from = lerpPoint(point, previous, safeRadius / prevDistance);
+    const to = lerpPoint(point, next, safeRadius / nextDistance);
+    rounded.push(from);
+    for (let step = 1; step < segments; step += 1) {
+      const t = step / segments;
+      rounded.push({
+        x: (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * point.x + t * t * to.x,
+        y: (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * point.y + t * t * to.y,
+      });
+    }
+    rounded.push(to);
+  });
+  return rounded;
+}
+
+function curveSettings(element: RawElement) {
+  const curve = asRecord(element.curve);
+  if (!curve) return null;
+  const rawType = readString(curve.type)?.trim().toLowerCase();
+  const type = rawType === "beizer" ? "bezier" : rawType;
+  if (type !== "smooth" && type !== "bezier") return null;
+  return {
+    type,
+    tension: clamp(readNumber(curve.tension) ?? 0.4, 0, 1),
+    segments: Math.max(1, Math.min(96, Math.round(readNumber(curve.segments) ?? 16))),
+    controlPoints: readPointArray(curve.control_points ?? curve.controlPoints),
+  };
+}
+
+function sampleSmoothCurve(points: Point[], closed: boolean, tension: number, segments: number): Point[] {
+  if (points.length < 3 || tension <= 0) return points;
+  const sampled: Point[] = [];
+  const segmentCount = closed ? points.length : points.length - 1;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const p0 = closed ? pointAt(points, index - 1) : points[Math.max(0, index - 1)];
+    const p1 = pointAt(points, index);
+    const p2 = pointAt(points, index + 1);
+    const p3 = closed
+      ? pointAt(points, index + 2)
+      : points[Math.min(points.length - 1, index + 2)];
+    if (index === 0) sampled.push(p1);
+    for (let step = 1; step <= segments; step += 1) {
+      const t = step / segments;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const scaledTension = tension;
+      sampled.push({
+        x:
+          (2 * p1.x +
+            (-p0.x + p2.x) * scaledTension * t +
+            (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * scaledTension * t2 +
+            (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * scaledTension * t3) /
+          2,
+        y:
+          (2 * p1.y +
+            (-p0.y + p2.y) * scaledTension * t +
+            (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * scaledTension * t2 +
+            (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * scaledTension * t3) /
+          2,
+      });
+    }
+  }
+  return sampled;
+}
+
+function quadraticBezierPoint(start: Point, control: Point, end: Point, t: number): Point {
+  return {
+    x: (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * control.x + t * t * end.x,
+    y: (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * control.y + t * t * end.y,
+  };
+}
+
+function cubicBezierPoint(start: Point, c1: Point, c2: Point, end: Point, t: number): Point {
+  return {
+    x:
+      (1 - t) ** 3 * start.x +
+      3 * (1 - t) ** 2 * t * c1.x +
+      3 * (1 - t) * t * t * c2.x +
+      t ** 3 * end.x,
+    y:
+      (1 - t) ** 3 * start.y +
+      3 * (1 - t) ** 2 * t * c1.y +
+      3 * (1 - t) * t * t * c2.y +
+      t ** 3 * end.y,
+  };
+}
+
+function sampleBezierCurve(points: Point[], controls: Point[], segments: number): Point[] {
+  if (points.length < 2 || controls.length === 0) return points;
+  const sampled: Point[] = [points[0]];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const c1 = controls[index * 2] ?? controls[0];
+    const c2 = controls[index * 2 + 1];
+    for (let step = 1; step <= segments; step += 1) {
+      const t = step / segments;
+      sampled.push(c2 ? cubicBezierPoint(start, c1, c2, end, t) : quadraticBezierPoint(start, c1, end, t));
+    }
+  }
+  return sampled;
+}
+
+export function polygonPointsForElement(element: RawElement): Point[] {
+  const points = polygonSourcePointsForElement(element);
+  const closed = polygonClosedForElement(element, points);
+  const rounded = closed
+    ? roundedPolygonPoints(points, normalizedCornerRadii(element, points))
+    : points;
+  const curve = curveSettings(element);
+  if (!curve) return rounded;
+  if (curve.type === "smooth") {
+    return sampleSmoothCurve(rounded, closed, curve.tension, curve.segments);
+  }
+  return sampleBezierCurve(rounded, curve.controlPoints, curve.segments);
 }
 
 export function polygonClosedForElement(
@@ -1332,7 +1522,7 @@ export function polygonLocalPointsForElement(element: RawElement): number[] {
 export function elementBox(element: RawElement): Box {
   const type = readString(element.type);
   const box =
-    type === "polygon"
+    isVectorShapeType(type)
       ? polygonRenderBox(element)
       : type === "line"
       ? lineRenderBox(element)
@@ -1355,7 +1545,7 @@ export function isManualPositioned(element: RawElement) {
 
 export function elementSize(element: RawElement, fallback?: Size): Size {
   const type = readString(element.type);
-  if (type === "polygon") {
+  if (isVectorShapeType(type)) {
     const box = polygonRenderBox(element);
     return { width: box.width, height: box.height };
   }
@@ -1860,20 +2050,45 @@ export function polygonElementFromFrame(
   scaleX: number,
   scaleY: number,
 ): RawElement {
-  const points = polygonPointsForElement(element);
+  const points = polygonSourcePointsForElement(element);
   const box = polygonRenderBox(element);
   const safeScaleX = Number.isFinite(scaleX) ? Math.abs(scaleX) : 1;
   const safeScaleY = Number.isFinite(scaleY) ? Math.abs(scaleY) : 1;
-  const { position, size, ...rest } = element;
+  const radiusScale = Math.min(safeScaleX, safeScaleY);
+  const transformPoint = (point: Point) => ({
+    x: framePosition.x + (point.x - box.x) * safeScaleX,
+    y: framePosition.y + (point.y - box.y) * safeScaleY,
+  });
+  const curve = asRecord(element.curve);
+  const controlPoints = curve
+    ? readPointArray(curve.control_points ?? curve.controlPoints).map(transformPoint)
+    : [];
+  const cornerRadii = readArray(element.corner_radii ?? element.cornerRadii)
+    .map(readNumber)
+    .filter((value): value is number => value != null)
+    .map((value) => Math.max(0, value * radiusScale));
+  const { position, size, border_radius, borderRadius, ...rest } = element;
   void position;
   void size;
+  void border_radius;
+  void borderRadius;
   return {
     ...rest,
-    type: "polygon",
-    points: points.map((point) => ({
-      x: framePosition.x + (point.x - box.x) * safeScaleX,
-      y: framePosition.y + (point.y - box.y) * safeScaleY,
-    })),
+    type: "vector_shape",
+    points: points.map(transformPoint),
+    ...(cornerRadii.length > 0 ? { corner_radii: cornerRadii } : {}),
+    ...(curve
+      ? {
+          curve: {
+            ...curve,
+            type:
+              readString(curve.type)?.trim().toLowerCase() === "beizer"
+                ? "bezier"
+                : readString(curve.type),
+            ...(controlPoints.length > 0 ? { control_points: controlPoints } : {}),
+          },
+        }
+      : {}),
   };
 }
 

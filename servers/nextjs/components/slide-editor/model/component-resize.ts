@@ -3,6 +3,7 @@ import {
   readArray,
   readNumber,
   readOptionalSize,
+  readString,
   type Box,
   type ChildArrayInfo,
   type RawComponent,
@@ -110,6 +111,15 @@ export function resizeRawElementBounds(
     const element = asRecord(value);
     if (!element) return value;
     const explicitSize = readOptionalSize(element.size);
+    const type = readString(element.type);
+    const polygonPoints =
+      type === "vector_shape" ? readArray(element.points) : [];
+    const curve = asRecord(element.curve);
+    const controlPoints = curve
+      ? readArray(curve.control_points ?? curve.controlPoints)
+      : [];
+    const radiusScale = Math.min(safeScaleX, safeScaleY);
+    const cornerRadii = readArray(element.corner_radii ?? element.cornerRadii);
     const childInfo = childArrayInfo(element);
     const resizedChildren = childInfo
       ? resizeRawElementBounds(childInfo.items, safeScaleX, safeScaleY)
@@ -122,6 +132,42 @@ export function resizeRawElementBounds(
               width: Math.max(1, explicitSize.width * safeScaleX),
               height: Math.max(1, explicitSize.height * safeScaleY),
             },
+          }
+        : {}),
+      ...(polygonPoints.length > 0
+        ? {
+            points: polygonPoints.map((point) => {
+              const record = asRecord(point);
+              if (!record) return point;
+              return {
+                ...record,
+                x: (readNumber(record.x) ?? 0) * safeScaleX,
+                y: (readNumber(record.y) ?? 0) * safeScaleY,
+              };
+            }),
+          }
+        : {}),
+      ...(controlPoints.length > 0 && curve
+        ? {
+            curve: {
+              ...curve,
+              control_points: controlPoints.map((point) => {
+                const record = asRecord(point);
+                if (!record) return point;
+                return {
+                  ...record,
+                  x: (readNumber(record.x) ?? 0) * safeScaleX,
+                  y: (readNumber(record.y) ?? 0) * safeScaleY,
+                };
+              }),
+            },
+          }
+        : {}),
+      ...(cornerRadii.length > 0
+        ? {
+            corner_radii: cornerRadii.map((value) =>
+              Math.max(0, (readNumber(value) ?? 0) * radiusScale),
+            ),
           }
         : {}),
       ...(childInfo && resizedChildren
