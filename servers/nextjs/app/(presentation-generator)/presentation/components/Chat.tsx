@@ -616,6 +616,33 @@ async function readDecomposedFile(filePath: string) {
 const conversationStorageKey = (scope: string, resourceId: string) =>
   `presenton:chat:${scope}:conversationId:${resourceId}`;
 
+const readStoredConversationId = (key: string) => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const storeConversationId = (key: string, conversationId: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, conversationId);
+  } catch {
+    // Chat history still works from the server when browser storage is blocked.
+  }
+};
+
+const removeStoredConversationId = (key: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Nothing else needs to be cleared when browser storage is unavailable.
+  }
+};
+
 const AssistantSparkleIcon = ({ size = 14 }: { size?: number }) => (
   <svg
     width={size}
@@ -646,12 +673,12 @@ const ActivityStatusIcon = ({ activity }: { activity: AssistantActivity }) => {
   if (activity.state === "running") {
     return (
       <span
-        className="relative h-[7px] w-[22px] shrink-0"
+        className="activity-flow-dots mt-1 relative h-[9px] w-[22px] shrink-0"
         aria-label="Working"
       >
-        <span className="absolute left-0 top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB] opacity-[0.89]" />
-        <span className="absolute left-[8.5px] top-0 h-[5.25px] w-[5.25px] rounded-full bg-[#C3C3CB] opacity-[0.61]" />
-        <span className="absolute left-[16.6px] top-[4.1px] h-[5px] w-[5px] rounded-full bg-[#C3C3CB] opacity-[0.52]" />
+        <span className="absolute left-0 top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
+        <span className="absolute left-[8px] top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
+        <span className="absolute left-[16px] top-[1.5px] h-[6px] w-[6px] rounded-full bg-[#C3C3CB]" />
       </span>
     );
   }
@@ -1233,32 +1260,81 @@ const Chat = ({
     setIsHistoryLoading(true);
     const run = async () => {
       try {
-        if (typeof sessionStorage === "undefined") {
-          return;
-        }
         const sKey = conversationStorageKey(
           conversationStorageScope,
           activeResourceId
         );
-        let activeId = sessionStorage.getItem(sKey) ?? null;
-        if (!activeId) {
-          const list = await chatAdapter.listConversations(activeResourceId);
-          if (Array.isArray(list) && list.length > 0) {
-            activeId = list[0]!.conversation_id;
-            sessionStorage.setItem(sKey, activeId);
-          }
+        const storedId = readStoredConversationId(sKey);
+        let conversations: ChatConversationSummary[] | null = null;
+        let conversationListError: unknown = null;
+
+        try {
+          const listedConversations =
+            await chatAdapter.listConversations(activeResourceId);
+          conversations = Array.isArray(listedConversations)
+            ? listedConversations
+            : [];
+        } catch (error) {
+          conversationListError = error;
         }
-        if (!activeId) {
+
+        const listedIds = (conversations ?? [])
+          .map((conversation) => conversation.conversation_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
+        const candidateIds = Array.from(
+          new Set([...(storedId ? [storedId] : []), ...listedIds])
+        );
+
+        if (candidateIds.length === 0) {
+          removeStoredConversationId(sKey);
+          if (conversationListError) {
+            throw conversationListError;
+          }
           return;
         }
-        const data = await chatAdapter.getHistory(activeResourceId, activeId);
+
+        let historyError: unknown = null;
+        let loadedHistory:
+          | { conversationId: string; messages: ChatHistoryMessage[] }
+          | null = null;
+
+        for (const candidateId of candidateIds) {
+          try {
+            const data = await chatAdapter.getHistory(
+              activeResourceId,
+              candidateId
+            );
+            if (cancelled) {
+              return;
+            }
+            const rows = Array.isArray(data?.messages) ? data.messages : [];
+            if (rows.length > 0) {
+              loadedHistory = {
+                conversationId: candidateId,
+                messages: rows,
+              };
+              break;
+            }
+          } catch (error) {
+            historyError = error;
+          }
+        }
+
+        if (!loadedHistory) {
+          removeStoredConversationId(sKey);
+          if (historyError || conversationListError) {
+            throw historyError ?? conversationListError;
+          }
+          return;
+        }
+
         if (cancelled) {
           return;
         }
-        setConversationId(activeId);
-        const rows = Array.isArray(data?.messages) ? data.messages : [];
+        storeConversationId(sKey, loadedHistory.conversationId);
+        setConversationId(loadedHistory.conversationId);
         setMessages(
-          rows.map((m) => ({
+          loadedHistory.messages.map((m) => ({
             id: createMessageId(),
             role:
               m.role === "assistant"
@@ -1597,8 +1673,8 @@ const Chat = ({
     setExpandedEditPreviewByMessage({});
     setSelectedEditVersionByMessage({});
     setApplyingEditPreviewMessageId(null);
-    if (activeResourceId && typeof sessionStorage !== "undefined") {
-      sessionStorage.removeItem(
+    if (activeResourceId) {
+      removeStoredConversationId(
         conversationStorageKey(conversationStorageScope, activeResourceId)
       );
     }
@@ -1691,7 +1767,12 @@ const Chat = ({
     dispatch(setPresentationData(nextPresentation));
 
     try {
-      await PresentationGenerationApi.updatePresentationContent(nextPresentation);
+      for (const slideIndex of preview.slideIndices) {
+        const slide = nextSlides[slideIndex];
+        if (slide) {
+          await PresentationGenerationApi.updatePresentationSlide(slide);
+        }
+      }
       await onPresentationChanged?.();
       notify.success(
         version === "original" ? "Original restored" : "Changes restored",
@@ -2234,8 +2315,8 @@ const Chat = ({
           typeof response.conversation_id === "string"
             ? response.conversation_id
             : previous;
-        if (next && activeResourceId && typeof sessionStorage !== "undefined") {
-          sessionStorage.setItem(
+        if (next && activeResourceId) {
+          storeConversationId(
             conversationStorageKey(conversationStorageScope, activeResourceId),
             next
           );

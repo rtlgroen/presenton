@@ -4,6 +4,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
 import { PresentationGenerationApi } from '../../services/api/presentation-generation';
 import { addToHistory } from '@/store/slices/undoRedoSlice';
+import type { PresentationData } from '@/store/slices/presentationGeneration';
+import type { Slide } from '../../types/slide';
+import type { AutoSaveSnapshot } from '../utils/autoSaveDiff';
+import {
+    createAutoSaveSnapshot,
+    fingerprintValue,
+    getAutoSaveChanges,
+} from '../utils/autoSaveDiff';
 
 interface UseAutoSaveOptions {
     debounceMs?: number;
@@ -21,13 +29,13 @@ export const useAutoSave = ({
     );
 
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const lastSavedDataRef = useRef<any>(null);
+    const acknowledgedDataRef = useRef<AutoSaveSnapshot | null>(null);
     const isSavingRef = useRef(false);
     const [isSaving, setIsSaving] = useState<boolean>(false);
  
 
     // Debounced save function
-    const debouncedSave = useCallback(async (data: any) => {
+    const debouncedSave = useCallback((data: PresentationData) => {
         // Clear existing timeout
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
@@ -41,25 +49,75 @@ export const useAutoSave = ({
                 return;
             }
 
-            // Skip if data hasn't changed since last save
-            if (data === lastSavedDataRef.current) {
+            const acknowledged = acknowledgedDataRef.current;
+            if (!acknowledged || acknowledged.presentationId !== data.id) {
+                acknowledgedDataRef.current = createAutoSaveSnapshot(data);
                 return;
             }
+
+            const changes = getAutoSaveChanges(acknowledged, data);
+            if (
+                !changes.structuralChange &&
+                !changes.metadataChanged &&
+                changes.changedSlides.length === 0
+            ) return;
 
             try {
                 isSavingRef.current = true;
                 setIsSaving(true);
-                dispatch(addToHistory({
-                    slides: data.slides,
-                    actionType: "AUTO_SAVE"
-                }));
+                if (changes.structuralChange || changes.changedSlides.length > 0) {
+                    dispatch(addToHistory({
+                        slides: data.slides,
+                        actionType: "AUTO_SAVE"
+                    }));
+                }
                 console.log('🔄 Auto-saving presentation data...');
 
-                // Call the API to update presentation content
-                await PresentationGenerationApi.updatePresentationContent(data);
+                if (changes.structuralChange) {
+                    // Add/delete/duplicate/reorder operations still require the
+                    // existing full-deck replacement contract.
+                    await PresentationGenerationApi.updatePresentationContent(data);
+                    acknowledgedDataRef.current = createAutoSaveSnapshot(data);
+                } else {
+                    let firstError: unknown = null;
+                    const nextAcknowledged: AutoSaveSnapshot = {
+                        ...acknowledged,
+                        slideFingerprints: { ...acknowledged.slideFingerprints },
+                    };
 
-                // Update last saved data reference
-                lastSavedDataRef.current = data;
+                    if (changes.metadataChanged) {
+                        try {
+                            await PresentationGenerationApi.updatePresentationContent({
+                                id: data.id,
+                                title: data.title,
+                                theme: data.theme,
+                            });
+                            nextAcknowledged.metadataFingerprint = fingerprintValue({
+                                title: data.title,
+                                theme: data.theme,
+                            });
+                            acknowledgedDataRef.current = nextAcknowledged;
+                        } catch (error) {
+                            firstError = error;
+                        }
+                    }
+
+                    for (const slide of changes.changedSlides) {
+                        try {
+                            await PresentationGenerationApi.updatePresentationSlide(
+                                slide as Slide
+                            );
+                            nextAcknowledged.slideFingerprints[slide.id] =
+                                fingerprintValue(slide);
+                            acknowledgedDataRef.current = nextAcknowledged;
+                        } catch (error) {
+                            firstError ??= error;
+                        }
+                    }
+
+                    if (firstError) throw firstError;
+                    acknowledgedDataRef.current = createAutoSaveSnapshot(data);
+                }
 
                 console.log('✅ Auto-save successful');
 
@@ -76,7 +134,25 @@ export const useAutoSave = ({
 
     // Effect to trigger auto-save when presentation data changes
     useEffect(() => {
-        if (!enabled || !presentationData || isStreaming || isLoading || isLayoutLoading ) return;
+        if (!presentationData) return;
+
+        if (!enabled || isStreaming || isLoading || isLayoutLoading) {
+            // Changes arriving while editing is paused are server-originated
+            // hydration/streaming updates and are already persisted.
+            if (!isSavingRef.current) {
+                acknowledgedDataRef.current = createAutoSaveSnapshot(presentationData);
+            }
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+            return;
+        }
+
+        if (
+            !acknowledgedDataRef.current ||
+            acknowledgedDataRef.current.presentationId !== presentationData.id
+        ) {
+            acknowledgedDataRef.current = createAutoSaveSnapshot(presentationData);
+            return;
+        }
         
         // Trigger debounced save
         debouncedSave(presentationData);

@@ -2056,6 +2056,41 @@ async def update_presentation(
     )
 
 
+@PRESENTATION_ROUTER.patch("/slide_update", response_model=SlideModel)
+async def update_presentation_slide(
+    slide: Annotated[SlideModel, Body(embed=True)],
+    sql_session: AsyncSession = Depends(get_async_session),
+):
+    try:
+        slide_id = uuid.UUID(str(slide.id))
+        presentation_id = uuid.UUID(str(slide.presentation))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Slide and presentation IDs must be valid UUIDs",
+        ) from exc
+
+    stored_slide = await sql_session.get(SlideModel, slide_id)
+    if not stored_slide:
+        raise HTTPException(status_code=404, detail="Slide not found")
+
+    if stored_slide.presentation != presentation_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Slide does not belong to the supplied presentation",
+        )
+
+    stored_slide.sqlmodel_update(
+        slide.model_dump(
+            exclude={"id", "presentation", "index"},
+        )
+    )
+    sql_session.add(stored_slide)
+    await sql_session.commit()
+    await sql_session.refresh(stored_slide)
+    return stored_slide
+
+
 async def check_if_api_request_is_valid(
     request: GeneratePresentationRequest,
     sql_session: AsyncSession = Depends(get_async_session),

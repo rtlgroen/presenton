@@ -198,7 +198,11 @@ const PresentationPage: React.FC<PresentationPageProps> = ({
   // pre-edit Redux state would overwrite (revert) the assistant's change.
   const { isSaving } = useAutoSave({
     debounceMs: 2000,
-    enabled: !!presentationData && !isStreaming && !isChatSending,
+    enabled:
+      !!presentationData &&
+      !isStreaming &&
+      !isChatSending &&
+      !isChatMutating,
   });
 
   // Custom hooks
