@@ -39,9 +39,14 @@ RAW_LAYOUTS = {
             "description": "Full slide layout converted from PPTX slide 1.",
             "elements": [
                 {
-                    "type": "rectangle",
-                    "position": {"x": 0, "y": 0},
-                    "size": {"width": 1280, "height": 720},
+                    "type": "vector",
+                    "points": [
+                        {"x": 0, "y": 0},
+                        {"x": 1280, "y": 0},
+                        {"x": 1280, "y": 720},
+                        {"x": 0, "y": 720},
+                    ],
+                    "closed": True,
                     "fill": {"color": "#FFFFFF"},
                 },
                 {

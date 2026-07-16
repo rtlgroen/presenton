@@ -13,7 +13,14 @@ def test_extract_slide_schema_from_layout_extracts_editable_content():
             "description": "Editable content with static decoration.",
             "elements": [
                 {
-                    "type": "rectangle",
+                    "type": "vector",
+                    "points": [
+                        {"x": 0, "y": 0},
+                        {"x": 1, "y": 0},
+                        {"x": 1, "y": 1},
+                        {"x": 0, "y": 1},
+                    ],
+                    "closed": True,
                     "fill": {"color": "#ffffff"},
                 },
                 {

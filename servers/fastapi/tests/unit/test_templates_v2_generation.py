@@ -766,9 +766,14 @@ def test_merge_similar_components_removes_structural_duplicates_after_clustering
     )
     first["components"][0]["elements"] = [
         {
-            "type": "rectangle",
-            "position": {"x": 0, "y": 70},
-            "size": {"width": 600, "height": 4},
+            "type": "vector",
+            "points": [
+                {"x": 0, "y": 70},
+                {"x": 600, "y": 70},
+                {"x": 600, "y": 74},
+                {"x": 0, "y": 74},
+            ],
+            "closed": True,
             "fill": {"color": "#111111"},
         },
         {
@@ -790,9 +795,14 @@ def test_merge_similar_components_removes_structural_duplicates_after_clustering
     second["components"][0]["position"] = {"x": 260, "y": 180}
     second["components"][0]["elements"] = [
         {
-            "type": "rectangle",
-            "position": {"x": 0, "y": 70},
-            "size": {"width": 600, "height": 4},
+            "type": "vector",
+            "points": [
+                {"x": 0, "y": 70},
+                {"x": 600, "y": 70},
+                {"x": 600, "y": 74},
+                {"x": 0, "y": 74},
+            ],
+            "closed": True,
             "fill": {"color": "#111111"},
         },
         {
@@ -813,9 +823,14 @@ def test_merge_similar_components_removes_structural_duplicates_after_clustering
     )
     third["components"][0]["elements"] = [
         {
-            "type": "rectangle",
-            "position": {"x": 0, "y": 70},
-            "size": {"width": 600, "height": 4},
+            "type": "vector",
+            "points": [
+                {"x": 0, "y": 70},
+                {"x": 600, "y": 70},
+                {"x": 600, "y": 74},
+                {"x": 0, "y": 74},
+            ],
+            "closed": True,
             "fill": {"color": "#DDDDDD"},
         },
         {

@@ -81,10 +81,7 @@ const ELEMENT_TYPES = new Set([
   "image",
   "text-list",
   "table",
-  "vector_shape",
-  "rectangle",
-  "ellipse",
-  "line",
+  "vector",
   "svg",
   "chart",
   "infographic",
@@ -424,13 +421,7 @@ function renderItem(item: JsonRecord, mode: RenderMode): string {
   }
 
   switch (readString(item.type)) {
-    case "vector_shape":
-      return renderPolygon(item, mode);
-    case "rectangle":
-      return renderPolygon(item, mode);
-    case "ellipse":
-      return renderPolygon(item, mode);
-    case "line":
+    case "vector":
       return renderPolygon(item, mode);
     case "svg":
       return renderSvg(item, mode);
@@ -698,51 +689,6 @@ function renderGroup(item: JsonRecord, mode: RenderMode): string {
   return `<div style="${frameStyle(item, mode, childrenBounds(children))}${boxStyle(
     item
   )}overflow:visible">${content}</div>`;
-}
-
-function renderLine(item: JsonRecord, mode: RenderMode): string {
-  const box = readBox(item);
-  const stroke = readRecord(item.stroke);
-  const color = colorWithOpacity(
-    readString(stroke.color) ?? "#000000",
-    readNumber(stroke.opacity)
-  );
-  const width = Math.max(0, readNumber(stroke.width) ?? 1);
-  const deltaX = box.width ?? 0;
-  const deltaY = box.height ?? 0;
-  const left = box.x + Math.min(0, deltaX);
-  const top = box.y + Math.min(0, deltaY);
-  const frameWidth = Math.max(Math.abs(deltaX), width, 1);
-  const frameHeight = Math.max(Math.abs(deltaY), width, 1);
-  const x1 = deltaX < 0 ? frameWidth : 0;
-  const y1 = deltaY < 0 ? frameHeight : 0;
-  const x2 = deltaX < 0 ? 0 : Math.abs(deltaX);
-  const y2 = deltaY < 0 ? 0 : Math.abs(deltaY);
-  const frame =
-    mode === "absolute"
-      ? `box-sizing:border-box;min-height:0;min-width:0;position:absolute;left:${cssNumber(
-        left
-      )}px;top:${cssNumber(top)}px;width:${cssNumber(
-        frameWidth
-      )}px;height:${cssNumber(frameHeight)}px;`
-      : `box-sizing:border-box;min-height:0;min-width:0;position:relative;width:${cssNumber(
-        frameWidth
-      )}px;height:${cssNumber(frameHeight)}px;`;
-  const dash = readArray(stroke.dash)
-    .map(readNumber)
-    .filter((value): value is number => value != null)
-    .join(" ");
-  return `<div style="${frame}${transformStyle(
-    item
-  )}overflow:visible"><svg width="100%" height="100%" viewBox="0 0 ${cssNumber(
-    frameWidth
-  )} ${cssNumber(frameHeight)}" preserveAspectRatio="none" style="display:block;overflow:visible"><line x1="${cssNumber(
-    x1
-  )}" y1="${cssNumber(y1)}" x2="${cssNumber(x2)}" y2="${cssNumber(
-    y2
-  )}" stroke="${escapeAttribute(
-    color
-  )}" stroke-width="${cssNumber(width)}"${dash ? ` stroke-dasharray="${dash}"` : ""}/></svg></div>`;
 }
 
 function renderPolygon(item: JsonRecord, mode: RenderMode): string {
@@ -1741,10 +1687,6 @@ if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded"
 `;
 }
 
-function frameAndBoxStyle(item: JsonRecord, mode: RenderMode, extra = ""): string {
-  return `${frameStyle(item, mode)}${boxStyle(item)}${extra}`;
-}
-
 function frameStyle(
   item: JsonRecord,
   mode: RenderMode,
@@ -1772,12 +1714,7 @@ function readBox(
   const position = readRecord(item.position);
   const size = readRecord(item.size);
   const type = readString(item.type);
-  if (
-    type === "vector_shape" ||
-    type === "line" ||
-    type === "rectangle" ||
-    type === "ellipse"
-  ) {
+  if (type === "vector") {
     return polygonBox(item, polygonPoints(item));
   }
   return {
@@ -1804,38 +1741,6 @@ function childrenBounds(
 }
 
 function polygonSourcePoints(item: JsonRecord): Point[] {
-  const type = readString(item.type);
-  if (type === "line") {
-    const position = readRecord(item.position);
-    const size = readRecord(item.size);
-    const x = readNumber(position.x) ?? 0;
-    const y = readNumber(position.y) ?? 0;
-    return [
-      { x, y },
-      {
-        x: x + (readNumber(size.width) ?? 0),
-        y: y + (readNumber(size.height) ?? 0),
-      },
-    ];
-  }
-
-  if (type === "rectangle") {
-    const box = readBox({ ...item, type: "__legacy_rectangle_box" });
-    const width = box.width ?? 1;
-    const height = box.height ?? 1;
-    return [
-      { x: box.x, y: box.y },
-      { x: box.x + width, y: box.y },
-      { x: box.x + width, y: box.y + height },
-      { x: box.x, y: box.y + height },
-    ];
-  }
-
-  if (type === "ellipse") {
-    const box = readBox({ ...item, type: "__legacy_ellipse_box" });
-    return ellipsePoints(box.x, box.y, box.width ?? 1, box.height ?? 1);
-  }
-
   return readArray(item.points)
     .map(readRecord)
     .map((point) => {
@@ -1855,26 +1760,6 @@ function polygonPoints(item: JsonRecord): Point[] {
   const curve = curveSettings(item);
   if (!curve) return rounded;
   return sampleSmoothCurve(rounded, closed, curve.tension, curve.segments);
-}
-
-function ellipsePoints(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  segments = 8
-): Point[] {
-  const radiusX = width / 2;
-  const radiusY = height / 2;
-  const centerX = x + radiusX;
-  const centerY = y + radiusY;
-  return Array.from({ length: segments }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / segments;
-    return {
-      x: centerX + radiusX * Math.cos(angle),
-      y: centerY + radiusY * Math.sin(angle),
-    };
-  });
 }
 
 function cornerRadii(item: JsonRecord, pointCount: number): number[] {
@@ -1927,11 +1812,7 @@ function roundedPolygonPoints(points: Point[], radii: number[], segments = 8): P
 
 function curveSettings(item: JsonRecord) {
   const curve = readRecordOrNull(item.curve);
-  if (!curve) {
-    return readString(item.type) === "ellipse"
-      ? { type: "smooth", tension: 1, segments: 8 }
-      : null;
-  }
+  if (!curve) return null;
   const rawType = readString(curve.type)?.trim().toLowerCase();
   if (rawType !== "smooth") return null;
   return {

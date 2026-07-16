@@ -7,7 +7,7 @@ export type ImageSlideElement = Extract<SlideElement, { type: "image" }>;
 export type LineSlideElement = Extract<SlideElement, { type: "line" }>;
 export type ShapeSlideElement = Extract<
   SlideElement,
-  { type: "rectangle" | "ellipse" | "vector_shape" }
+  { type: "rectangle" | "ellipse" | "vector" }
 >;
 export type TableSlideElement = Extract<SlideElement, { type: "table" }>;
 export type ChartSlideElement = Extract<SlideElement, { type: "chart" }>;

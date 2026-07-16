@@ -117,8 +117,8 @@ const TOOLBAR_RENDERERS: Partial<
         onChange={(index, element) => onChange(index, element, path)}
       />
     ) : null,
-  vector_shape: ({ anchorBox, componentActions, element, index, onChange, path, scale }) =>
-    element.type === "vector_shape" ? (
+  vector: ({ anchorBox, componentActions, element, index, onChange, path, scale }) =>
+    element.type === "vector" ? (
       <ShapeToolbar
         element={element}
         index={index}

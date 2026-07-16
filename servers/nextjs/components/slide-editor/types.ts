@@ -272,7 +272,7 @@ export type VectorShapeCurve = {
 };
 
 export type VectorShapeElement = ElementBase & {
-  type: "vector_shape";
+  type: "vector";
   points: Position[];
   closed?: boolean | null;
   curve?: VectorShapeCurve | null;

@@ -666,7 +666,7 @@ export function createElementInsertElements(kind?: string): SlideElement[] {
     case "vector-rectangle":
       return [
         {
-          type: "vector_shape",
+          type: "vector",
           points: [
             { x: 134, y: 134 },
             { x: 518, y: 134 },
@@ -681,7 +681,7 @@ export function createElementInsertElements(kind?: string): SlideElement[] {
     case "vector-ellipse":
       return [
         {
-          type: "vector_shape",
+          type: "vector",
           points: ellipseVectorPoints(134, 134, 346, 198),
           closed: true,
           curve: { type: "smooth", tension: 1, segments: 8 },
@@ -692,7 +692,7 @@ export function createElementInsertElements(kind?: string): SlideElement[] {
     case "vector-line":
       return [
         {
-          type: "vector_shape",
+          type: "vector",
           points: [
             { x: 134, y: 218 },
             { x: 569, y: 219 },

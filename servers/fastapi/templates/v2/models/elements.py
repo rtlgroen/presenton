@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional, TypeAlias, Union, List
+from typing import Annotated, Literal, Optional, TypeAlias, Union, List
 
-from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _validate_min_max(
@@ -270,7 +269,7 @@ class VectorShapeCurve(BaseModel):
 
 
 class VectorShape(BaseModel):
-    type: Literal["vector_shape"]
+    type: Literal["vector"]
     points: list[Position] = Field(min_length=2)
     closed: Optional[bool] = None
     curve: Optional[VectorShapeCurve] = None
@@ -417,117 +416,6 @@ class Group(BaseModel):
     name: str
 
 
-def _legacy_number(value: Any, fallback: float = 0.0) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return fallback
-    return fallback
-
-
-def _ellipse_points(
-    x: float,
-    y: float,
-    width: float,
-    height: float,
-    segments: int = 8,
-) -> list[dict[str, float]]:
-    radius_x = width / 2
-    radius_y = height / 2
-    center_x = x + radius_x
-    center_y = y + radius_y
-    return [
-        {
-            "x": center_x + radius_x * math.cos((math.tau * index) / segments),
-            "y": center_y + radius_y * math.sin((math.tau * index) / segments),
-        }
-        for index in range(segments)
-    ]
-
-
-def _legacy_corner_radii(value: Any) -> list[float] | None:
-    if isinstance(value, (int, float, str)):
-        radius = _legacy_number(value)
-        return [radius, radius, radius, radius] if radius > 0 else None
-    if not isinstance(value, dict):
-        return None
-    top_left = _legacy_number(value.get("tl", value.get("topLeft")))
-    top_right = _legacy_number(value.get("tr", value.get("topRight")), top_left)
-    bottom_right = _legacy_number(value.get("br", value.get("bottomRight")), top_right)
-    bottom_left = _legacy_number(value.get("bl", value.get("bottomLeft")), bottom_right)
-    radii = [top_left, top_right, bottom_right, bottom_left]
-    return radii if any(radius > 0 for radius in radii) else None
-
-
-def _legacy_geometry_to_vector_shape(value: Any) -> Any:
-    if not isinstance(value, dict):
-        return value
-
-    element_type = value.get("type")
-    if element_type == "vector_shape":
-        return value
-    if element_type not in {"line", "rectangle", "ellipse"}:
-        return value
-
-    position = value.get("position") if isinstance(value.get("position"), dict) else {}
-    size = value.get("size") if isinstance(value.get("size"), dict) else {}
-    x = _legacy_number(position.get("x") if isinstance(position, dict) else None)
-    y = _legacy_number(position.get("y") if isinstance(position, dict) else None)
-    width = _legacy_number(size.get("width") if isinstance(size, dict) else None)
-    height = _legacy_number(size.get("height") if isinstance(size, dict) else None)
-
-    vector_shape = {
-        key: item
-        for key, item in value.items()
-        if key not in {"type", "position", "size", "border_radius"}
-    }
-    vector_shape["type"] = "vector_shape"
-    if element_type == "line":
-        vector_shape["points"] = [
-            {"x": x, "y": y},
-            {"x": x + width, "y": y + height},
-        ]
-        vector_shape.setdefault("closed", False)
-    elif element_type == "rectangle":
-        vector_shape["points"] = [
-            {"x": x, "y": y},
-            {"x": x + width, "y": y},
-            {"x": x + width, "y": y + height},
-            {"x": x, "y": y + height},
-        ]
-        vector_shape.setdefault("closed", True)
-        radii = _legacy_corner_radii(value.get("border_radius"))
-        if radii is not None:
-            vector_shape.setdefault("corner_radii", radii)
-    else:
-        vector_shape["points"] = _ellipse_points(x, y, width, height)
-        vector_shape.setdefault("closed", True)
-        vector_shape.setdefault(
-            "curve", {"type": "smooth", "tension": 1, "segments": 8}
-        )
-
-    return vector_shape
-
-
-def normalize_legacy_geometry_tree(value: Any) -> Any:
-    if isinstance(value, list):
-        return [normalize_legacy_geometry_tree(item) for item in value]
-    if not isinstance(value, dict):
-        return value
-
-    converted = _legacy_geometry_to_vector_shape(value)
-    normalized = dict(converted)
-    for key in ("children", "elements"):
-        if isinstance(normalized.get(key), list):
-            normalized[key] = normalize_legacy_geometry_tree(normalized[key])
-    if "child" in normalized:
-        normalized["child"] = normalize_legacy_geometry_tree(normalized["child"])
-    return normalized
-
-
 SlideElement: TypeAlias = Annotated[
     Union[
         Text,
@@ -542,7 +430,6 @@ SlideElement: TypeAlias = Annotated[
         Grid,
         Group,
     ],
-    BeforeValidator(_legacy_geometry_to_vector_shape),
     Field(discriminator="type"),
 ]
 
@@ -571,7 +458,6 @@ __all__ = [
     "InfographicType",
     "LayoutAlignment",
     "Marker",
-    "normalize_legacy_geometry_tree",
     "Padding",
     "Position",
     "Shadow",

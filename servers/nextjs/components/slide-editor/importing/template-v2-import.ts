@@ -671,14 +671,8 @@ function adaptElement(value: unknown): SlideElement | null {
       return adaptTextList(raw);
     case "table":
       return adaptTable(raw);
-    case "vector_shape":
+    case "vector":
       return adaptVectorShape(raw);
-    case "rectangle":
-      return adaptRectangle(raw);
-    case "ellipse":
-      return adaptEllipse(raw);
-    case "line":
-      return adaptLine(raw);
     case "chart":
       return adaptChart(raw);
     case "infographic":
@@ -809,10 +803,6 @@ function adaptTable(raw: UnknownRecord): SlideElement {
   };
 }
 
-function adaptRectangle(raw: UnknownRecord): SlideElement | null {
-  return adaptVectorShape(raw);
-}
-
 function adaptVectorShape(raw: UnknownRecord): SlideElement | null {
   const base = baseElement(raw);
   const fill = adaptFill(readRecord(raw, "fill"));
@@ -827,7 +817,7 @@ function adaptVectorShape(raw: UnknownRecord): SlideElement | null {
 
   return {
     ...pointBase,
-    type: "vector_shape",
+    type: "vector",
     points,
     closed: adaptVectorShapeClosed(raw, points),
     corner_radii: adaptCornerRadii(raw, points.length),
@@ -838,28 +828,7 @@ function adaptVectorShape(raw: UnknownRecord): SlideElement | null {
   };
 }
 
-function adaptEllipse(raw: UnknownRecord): SlideElement | null {
-  return adaptVectorShape(raw);
-}
-
-function adaptLine(raw: UnknownRecord): SlideElement {
-  return adaptVectorShape(raw) ?? {
-    type: "vector_shape",
-    points: legacyLinePoints(raw),
-    closed: false,
-    stroke: {
-      color: "000000",
-      width: 1,
-    },
-  };
-}
-
 function adaptVectorShapePoints(raw: UnknownRecord): AdaptedPosition[] {
-  const type = readString(raw.type);
-  if (type === "line") return legacyLinePoints(raw);
-  if (type === "rectangle") return legacyRectanglePoints(raw);
-  if (type === "ellipse") return legacyEllipsePoints(raw);
-
   return readArray(raw, "points")
     .map((value) => {
       const point = asRecord(value);
@@ -875,10 +844,6 @@ function adaptVectorShapeClosed(
   raw: UnknownRecord,
   points: AdaptedPosition[],
 ): boolean {
-  const type = readString(raw.type);
-  if (type === "line") return false;
-  if (type === "rectangle" || type === "ellipse") return true;
-
   const closed = readValue(raw, "closed");
   if (typeof closed === "boolean") return closed;
   if (typeof closed === "string") {
@@ -902,9 +867,8 @@ function adaptVectorShapeCurve(raw: UnknownRecord): VectorShapeCurve | null {
 }
 
 function adaptImplicitVectorShapeCurve(raw: UnknownRecord): VectorShapeCurve | null {
-  return readString(raw.type) === "ellipse"
-    ? { type: "smooth", tension: 1, segments: 8 }
-    : null;
+  void raw;
+  return null;
 }
 
 function adaptCornerRadii(raw: UnknownRecord, pointCount: number): number[] | null {
@@ -915,61 +879,7 @@ function adaptCornerRadii(raw: UnknownRecord, pointCount: number): number[] | nu
     .map((value) => clamp(round(value), 0, MAX_BORDER_RADIUS));
   if (explicit.length > 0) return explicit.slice(0, pointCount);
 
-  if (readString(raw.type) !== "rectangle") return null;
-  const radius = readRecord(raw, "border_radius") ?? asRecord(raw.borderRadius);
-  if (!radius) return null;
-  const topLeft = clamp(round(readNumber(radius, "tl") ?? 0), 0, MAX_BORDER_RADIUS);
-  const topRight = clamp(round(readNumber(radius, "tr") ?? topLeft), 0, MAX_BORDER_RADIUS);
-  const bottomRight = clamp(round(readNumber(radius, "br") ?? topRight), 0, MAX_BORDER_RADIUS);
-  const bottomLeft = clamp(round(readNumber(radius, "bl") ?? bottomRight), 0, MAX_BORDER_RADIUS);
-  const radii = [topLeft, topRight, bottomRight, bottomLeft];
-  return radii.some((value) => value > 0) ? radii : null;
-}
-
-function legacyLinePoints(raw: UnknownRecord): AdaptedPosition[] {
-  const position = adaptPosition(readRecord(raw, "position")) ?? { x: 0, y: 0 };
-  const size = adaptLineSize(readRecord(raw, "size")) ?? { width: 0, height: 0 };
-  return [
-    position,
-    {
-      x: round(position.x + size.width),
-      y: round(position.y + size.height),
-    },
-  ];
-}
-
-function legacyRectanglePoints(raw: UnknownRecord): AdaptedPosition[] {
-  const position = adaptPosition(readRecord(raw, "position")) ?? { x: 0, y: 0 };
-  const size = adaptSize(readRecord(raw, "size")) ?? {
-    width: MIN_ELEMENT_SIZE,
-    height: MIN_ELEMENT_SIZE,
-  };
-  return [
-    position,
-    { x: round(position.x + size.width), y: position.y },
-    { x: round(position.x + size.width), y: round(position.y + size.height) },
-    { x: position.x, y: round(position.y + size.height) },
-  ];
-}
-
-function legacyEllipsePoints(raw: UnknownRecord): AdaptedPosition[] {
-  const position = adaptPosition(readRecord(raw, "position")) ?? { x: 0, y: 0 };
-  const size = adaptSize(readRecord(raw, "size")) ?? {
-    width: MIN_ELEMENT_SIZE,
-    height: MIN_ELEMENT_SIZE,
-  };
-  const radiusX = size.width / 2;
-  const radiusY = size.height / 2;
-  const centerX = position.x + radiusX;
-  const centerY = position.y + radiusY;
-  const segments = 8;
-  return Array.from({ length: segments }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / segments;
-    return {
-      x: round(centerX + radiusX * Math.cos(angle)),
-      y: round(centerY + radiusY * Math.sin(angle)),
-    };
-  });
+  return null;
 }
 
 function adaptChart(raw: UnknownRecord): SlideElement {
@@ -1175,7 +1085,7 @@ function adaptedElementBounds(child: SlideElement): {
   height: number;
 } {
   if (
-    child.type === "vector_shape" &&
+    child.type === "vector" &&
     Array.isArray(child.points)
   ) {
     const points = child.points.filter(
@@ -1346,14 +1256,6 @@ function adaptSize(value: UnknownRecord | null): { width: number; height: number
   return {
     width: clamp(round(readNumber(value, "width") ?? MIN_ELEMENT_SIZE), MIN_ELEMENT_SIZE, EDITOR_STAGE_WIDTH),
     height: clamp(round(readNumber(value, "height") ?? MIN_ELEMENT_SIZE), MIN_ELEMENT_SIZE, EDITOR_STAGE_HEIGHT),
-  };
-}
-
-function adaptLineSize(value: UnknownRecord | null): { width: number; height: number } | null {
-  if (!value) return null;
-  return {
-    width: round(readNumber(value, "width") ?? 0),
-    height: round(readNumber(value, "height") ?? 0),
   };
 }
 
@@ -1593,7 +1495,7 @@ function adaptChartSeries(value: unknown): ChartSeries | null {
 
 function invisibleFallbackElement(): SlideElement {
   return {
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 0, y: 0 },
       { x: MIN_ELEMENT_SIZE, y: 0 },
@@ -1653,7 +1555,7 @@ function isFullSlideFilledShape(
 ) {
   if (
     element.type !== "rectangle" &&
-    element.type !== "vector_shape"
+    element.type !== "vector"
   ) return false;
   return (
     x === 0 &&

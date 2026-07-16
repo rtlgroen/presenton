@@ -135,72 +135,34 @@ def test_image_element_accepts_flip_flags():
         )
 
 
-def test_legacy_geometry_validates_as_vector_shapes():
-    layout = RawSlideLayout.model_validate(
-        {
-            "id": "legacy_geometry",
-            "description": "Layout with legacy straight-edged geometry.",
-            "elements": [
-                {
-                    "type": "line",
-                    "position": {"x": 100, "y": 80},
-                    "size": {"width": -40, "height": 0},
-                    "stroke": {"color": "#111111", "width": 3},
-                },
-                {
-                    "type": "rectangle",
-                    "position": {"x": 20, "y": 40},
-                    "size": {"width": 160, "height": 80},
-                    "fill": {"color": "#F4F3FF"},
-                    "stroke": {"color": "#7A5AF8", "width": 2},
-                    "border_radius": {"tl": 8, "tr": 12, "br": 16, "bl": 20},
-                },
-                {
-                    "type": "ellipse",
-                    "position": {"x": 10, "y": 20},
-                    "size": {"width": 100, "height": 50},
-                    "fill": {"color": "#FFFFFF"},
-                },
-            ],
-        }
-    )
-
-    line, rectangle, ellipse = layout.elements
-    assert isinstance(line, VectorShape)
-    assert line.closed is False
-    assert [point.model_dump() for point in line.points] == [
-        {"x": 100.0, "y": 80.0},
-        {"x": 60.0, "y": 80.0},
-    ]
-    assert isinstance(rectangle, VectorShape)
-    assert rectangle.closed is True
-    assert rectangle.corner_radii == [8.0, 12.0, 16.0, 20.0]
-    assert [point.model_dump() for point in rectangle.points] == [
-        {"x": 20.0, "y": 40.0},
-        {"x": 180.0, "y": 40.0},
-        {"x": 180.0, "y": 120.0},
-        {"x": 20.0, "y": 120.0},
-    ]
-    assert isinstance(ellipse, VectorShape)
-    assert ellipse.closed is True
-    assert len(ellipse.points) == 8
-    assert ellipse.curve is not None
-    assert ellipse.curve.type == "smooth"
-    assert ellipse.curve.tension == 1
-    assert ellipse.curve.segments == 8
-    assert layout.model_dump(mode="json")["elements"][0]["type"] == "vector_shape"
-    assert "position" not in layout.model_dump(mode="json")["elements"][1]
-    assert "size" not in layout.model_dump(mode="json")["elements"][1]
+@pytest.mark.parametrize("element_type", ["line", "rectangle", "ellipse"])
+def test_legacy_geometry_is_not_adapted_to_vectors(element_type: str):
+    with pytest.raises(ValidationError):
+        RawSlideLayout.model_validate(
+            {
+                "id": "legacy_geometry",
+                "description": "Layout with legacy straight-edged geometry.",
+                "elements": [
+                    {
+                        "type": element_type,
+                        "position": {"x": 20, "y": 40},
+                        "size": {"width": 160, "height": 80},
+                        "fill": {"color": "#F4F3FF"},
+                        "stroke": {"color": "#7A5AF8", "width": 2},
+                    },
+                ],
+            }
+        )
 
 
-def test_vector_shape_accepts_smooth_curves_only():
+def test_vector_accepts_smooth_curves_only():
     layout = RawSlideLayout.model_validate(
         {
             "id": "curved_geometry",
             "description": "Layout with editable curved vector shapes.",
             "elements": [
                 {
-                    "type": "vector_shape",
+                    "type": "vector",
                     "points": [
                         {"x": 0, "y": 0},
                         {"x": 50, "y": 100},
@@ -228,7 +190,7 @@ def test_vector_shape_accepts_smooth_curves_only():
                 "description": "Bezier curves are no longer supported.",
                 "elements": [
                     {
-                        "type": "vector_shape",
+                        "type": "vector",
                         "points": [{"x": 0, "y": 0}, {"x": 100, "y": 0}],
                         "closed": False,
                         "curve": {

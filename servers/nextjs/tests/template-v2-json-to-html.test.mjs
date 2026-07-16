@@ -106,7 +106,7 @@ test("uses the default text line-height when none is provided", async () => {
   assert.match(html, /line-height:1\.1;/);
 });
 
-test("renders zero-height horizontal lines with a stroke-sized frame", async () => {
+test("renders zero-height horizontal vector lines with a stroke-sized frame", async () => {
   const { templateV2UiToHtml } = await rendererPromise;
   const html = templateV2UiToHtml({
     components: [
@@ -115,9 +115,12 @@ test("renders zero-height horizontal lines with a stroke-sized frame", async () 
         size: { width: 689, height: 24 },
         elements: [
           {
-            type: "line",
-            position: { x: 0, y: 19.63 },
-            size: { width: 689, height: 0 },
+            type: "vector",
+            points: [
+              { x: 0, y: 19.63 },
+              { x: 689, y: 19.63 },
+            ],
+            closed: false,
             stroke: { color: "#FFFFFF", width: 2.67 },
           },
         ],
@@ -131,20 +134,26 @@ test("renders zero-height horizontal lines with a stroke-sized frame", async () 
   assert.match(html, /stroke-width="2\.67"/);
 });
 
-test("renders signed line deltas from the line start point", async () => {
+test("renders signed vector line deltas from the line start point", async () => {
   const { templateV2UiToHtml } = await rendererPromise;
   const html = templateV2UiToHtml({
     elements: [
       {
-        type: "line",
-        position: { x: 100, y: 80 },
-        size: { width: -40, height: 0 },
+        type: "vector",
+        points: [
+          { x: 100, y: 80 },
+          { x: 60, y: 80 },
+        ],
+        closed: false,
         stroke: { color: "#111111", width: 3 },
       },
       {
-        type: "line",
-        position: { x: 120, y: 200 },
-        size: { width: 0, height: -50 },
+        type: "vector",
+        points: [
+          { x: 120, y: 200 },
+          { x: 120, y: 150 },
+        ],
+        closed: false,
         stroke: { color: "#222222", width: 2 },
       },
     ],
@@ -162,7 +171,7 @@ test("renders point-based vector shapes without position or size", async () => {
   const html = templateV2UiToHtml({
     elements: [
       {
-        type: "vector_shape",
+        type: "vector",
         points: [
           { x: 20, y: 40 },
           { x: 140, y: 40 },
@@ -185,7 +194,7 @@ test("renders vector shapes with corner radii", async () => {
   const html = templateV2UiToHtml({
     elements: [
       {
-        type: "vector_shape",
+        type: "vector",
         points: [
           { x: 20, y: 40 },
           { x: 140, y: 40 },
@@ -209,7 +218,7 @@ test("renders smooth vector curves through original points", async () => {
   const html = templateV2UiToHtml({
     elements: [
       {
-        type: "vector_shape",
+        type: "vector",
         points: [
           { x: 0, y: 0 },
           { x: 50, y: 100 },

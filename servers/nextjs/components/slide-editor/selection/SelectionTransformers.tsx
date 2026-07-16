@@ -450,13 +450,17 @@ export function TemplateV2SelectionTransformers({
         ref={contextTransformerRef}
         anchorCornerRadius={7}
         anchorFill="#FFFFFF"
-        anchorSize={CORNER_HANDLE_SIZE}
+        anchorSize={0}
         anchorStroke="#D0D5DD"
         anchorStrokeWidth={1}
         anchorStyleFunc={styleAnchor}
         borderStroke="#D9D9DE"
         borderStrokeWidth={1}
+        enabledAnchors={[]}
+        listening={false}
+        resizeEnabled={false}
         rotateEnabled={false}
+        rotateLineVisible={false}
       />
       <Transformer
         ref={selectedTransformerRef}

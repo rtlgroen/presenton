@@ -97,7 +97,7 @@ test("adds and removes vector shape points", async () => {
     removeVectorPointFromElement,
   } = await modelPromise;
   const element = {
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 0, y: 0 },
       { x: 30, y: 0 },
@@ -133,7 +133,7 @@ test("adds and removes vector shape points", async () => {
 test("keeps open vector shapes at a minimum of two points", async () => {
   const { removeVectorPointFromElement } = await modelPromise;
   const line = {
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 0, y: 0 },
       { x: 80, y: 0 },
@@ -149,7 +149,7 @@ test("translates vector shape points without changing smooth curve settings", as
   const curve = { type: "smooth", tension: 0.6, segments: 9 };
   const translated = translateVectorShapeElement(
     {
-      type: "vector_shape",
+      type: "vector",
       points: [
         { x: 10, y: 20 },
         { x: 30, y: 40 },
@@ -170,7 +170,7 @@ test("translates vector shape points without changing smooth curve settings", as
 test("merges vector frame edits into point geometry", async () => {
   const { mergeEditorToolbarElement } = await modelPromise;
   const current = {
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 10, y: 20 },
       { x: 60, y: 20 },
@@ -212,7 +212,7 @@ test("merges vector frame edits into point geometry", async () => {
 test("merges vector rotation without shifting points", async () => {
   const { mergeEditorToolbarElement } = await modelPromise;
   const current = {
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 10, y: 20 },
       { x: 60, y: 20 },
@@ -242,7 +242,7 @@ test("merges vector rotation without shifting points", async () => {
 test("samples smooth curves through the original vector points", async () => {
   const { polygonPointsForElement } = await modelPromise;
   const points = polygonPointsForElement({
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 0, y: 0 },
       { x: 50, y: 100 },
@@ -267,7 +267,7 @@ test("updates a single-vector component boundary after vector shape edits", asyn
           size: { width: 40, height: 40 },
           elements: [
             {
-              type: "vector_shape",
+              type: "vector",
               points: [
                 { x: 0, y: 0 },
                 { x: 40, y: 0 },
@@ -299,24 +299,58 @@ test("updates a single-vector component boundary after vector shape edits", asyn
   ]);
 });
 
-test("normalizes inserted ellipses as compact smooth vector shapes", async () => {
+test("preserves inserted vector elements", async () => {
   const { rawElementFromInsertedElement } = await modelPromise;
   const element = rawElementFromInsertedElement({
-    type: "ellipse",
-    position: { x: 10, y: 20 },
-    size: { width: 100, height: 50 },
+    type: "vector",
+    points: [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 0, y: 50 },
+    ],
+    closed: true,
     fill: { color: "#FFFFFF" },
   });
 
-  assert.equal(element.type, "vector_shape");
-  assert.equal(element.points.length, 8);
-  assert.deepEqual(element.curve, { type: "smooth", tension: 1, segments: 8 });
+  assert.equal(element.type, "vector");
+  assert.equal(element.points.length, 4);
+  assert.equal(element.closed, true);
+});
+
+test("wraps inserted elements in a padded component frame", async () => {
+  const { insertedElementToComponent } = await modelPromise;
+  const component = insertedElementToComponent(
+    {
+      type: "vector",
+      points: [
+        { x: 134, y: 134 },
+        { x: 518, y: 134 },
+        { x: 518, y: 326 },
+        { x: 134, y: 326 },
+      ],
+      closed: true,
+      fill: { color: "F4F3FF", opacity: 1 },
+      stroke: { color: "7A5AF8", width: 1.5 },
+    },
+    "Rectangle",
+    0,
+  );
+
+  assert.deepEqual(component.position, { x: 114, y: 114 });
+  assert.deepEqual(component.size, { width: 424, height: 232 });
+  assert.deepEqual(component.elements[0].points, [
+    { x: 20, y: 20 },
+    { x: 404, y: 20 },
+    { x: 404, y: 212 },
+    { x: 20, y: 212 },
+  ]);
 });
 
 test("normalizes vector shape toolbar curve options", async () => {
   const { curveForMode, normalizedSegments } = await shapeToolbarPromise;
   const element = {
-    type: "vector_shape",
+    type: "vector",
     points: [
       { x: 0, y: 0 },
       { x: 90, y: 0 },

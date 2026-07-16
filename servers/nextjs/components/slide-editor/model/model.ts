@@ -1296,7 +1296,7 @@ export function lineRenderBox(element: RawElement): Box {
 }
 
 export function isVectorShapeType(type: string | null | undefined) {
-  return type === "vector_shape";
+  return type === "vector";
 }
 
 function readPointArray(value: unknown): Point[] {
@@ -2259,7 +2259,7 @@ export function polygonElementFromFrame(
   void borderRadius;
   return {
     ...rest,
-    type: "vector_shape",
+    type: "vector",
     points: points.map(transformPoint),
     ...(cornerRadii.length > 0 ? { corner_radii: cornerRadii } : {}),
     ...(curve && curveType === "smooth"

@@ -247,10 +247,10 @@ export function isShapeElement(
   element: SlideElement,
 ): element is
   | RectangleElement
-  | Extract<SlideElement, { type: "ellipse" | "vector_shape" }> {
+  | Extract<SlideElement, { type: "ellipse" | "vector" }> {
   return (
     element.type === "rectangle" ||
     element.type === "ellipse" ||
-    element.type === "vector_shape"
+    element.type === "vector"
   );
 }

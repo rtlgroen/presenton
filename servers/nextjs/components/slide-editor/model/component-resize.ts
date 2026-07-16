@@ -113,7 +113,7 @@ export function resizeRawElementBounds(
     const explicitSize = readOptionalSize(element.size);
     const type = readString(element.type);
     const polygonPoints =
-      type === "vector_shape" ? readArray(element.points) : [];
+      type === "vector" ? readArray(element.points) : [];
     const radiusScale = Math.min(safeScaleX, safeScaleY);
     const cornerRadii = readArray(element.corner_radii ?? element.cornerRadii);
     const childInfo = childArrayInfo(element);

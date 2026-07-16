@@ -17,6 +17,8 @@ import {
 } from "@/components/slide-editor/model/core";
 import { rawFontToSource } from "@/components/slide-editor/text/template-v2-text";
 
+const INSERTED_ELEMENT_COMPONENT_PADDING = 20;
+
 export function appendInsertedContent(
   sourceUi: RawUi,
   elements: UnknownRecord[],
@@ -68,28 +70,41 @@ export function insertedElementToComponent(
   index: number,
 ) {
   const box = sourceElementBox(element);
+  const frame = paddedBox(box, INSERTED_ELEMENT_COMPONENT_PADDING);
   const rawElement = rawElementFromInsertedElement(element);
   return {
     id: `${normalizeId(label ?? readString(element.type) ?? "inserted")}_${index + 1}`,
     description: label ?? "Inserted element",
-    position: { x: box.x, y: box.y },
-    size: { width: box.width, height: box.height },
+    position: { x: frame.x, y: frame.y },
+    size: { width: frame.width, height: frame.height },
     elements: [
       isVectorShapeType(readString(rawElement.type))
-        ? localizePolygonElement(rawElement, box)
+        ? localizePolygonElement(rawElement, frame)
         : {
             ...rawElement,
-            position: { x: 0, y: 0 },
+            position: {
+              x: INSERTED_ELEMENT_COMPONENT_PADDING,
+              y: INSERTED_ELEMENT_COMPONENT_PADDING,
+            },
             size: { width: box.width, height: box.height },
           },
     ],
   };
 }
 
+function paddedBox(box: Box, padding: number): Box {
+  return {
+    x: box.x - padding,
+    y: box.y - padding,
+    width: box.width + padding * 2,
+    height: box.height + padding * 2,
+  };
+}
+
 export function rawElementFromInsertedElement(
   element: UnknownRecord,
 ): RawElement {
-  const type = readString(element.type) ?? "rectangle";
+  const type = readString(element.type);
   const rawElement = normalizeInsertedElementGeometry(element);
   const normalizedElement = {
     ...rawElement,
@@ -141,7 +156,7 @@ export function sourceElementSize(element: UnknownRecord): Size {
 export function normalizeInsertedElementGeometry(
   element: UnknownRecord,
 ): RawElement {
-  return convertInsertedChildArrays(legacyGeometryToVectorShape(element));
+  return convertInsertedChildArrays(element);
 }
 
 export function convertInsertedChildArrays(element: UnknownRecord): RawElement {
@@ -195,39 +210,12 @@ function localizePolygonElement(element: RawElement, box: Box): RawElement {
 }
 
 function isVectorShapeType(type: string | null | undefined) {
-  return type === "vector_shape";
-}
-
-function legacyGeometryToVectorShape(element: UnknownRecord): UnknownRecord {
-  const type = readString(element.type);
-  if (type === "vector_shape") return element;
-  if (type !== "line" && type !== "rectangle" && type !== "ellipse") return element;
-  const points = pointsForElement(element);
-  return {
-    ...element,
-    type: "vector_shape",
-    points,
-    closed: type !== "line",
-    ...(type === "rectangle"
-      ? { corner_radii: cornerRadiiFromBorderRadius(element.border_radius ?? element.borderRadius) }
-      : {}),
-    ...(type === "ellipse"
-      ? { curve: { type: "smooth", tension: 1, segments: 8 } }
-      : {}),
-    position: undefined,
-    size: undefined,
-    border_radius: undefined,
-  };
+  return type === "vector";
 }
 
 function polygonBoundsForElement(element: UnknownRecord): Box | null {
   const type = readString(element.type);
-  if (
-    type !== "vector_shape" &&
-    type !== "line" &&
-    type !== "rectangle" &&
-    type !== "ellipse"
-  ) return null;
+  if (type !== "vector") return null;
   const points = pointsForElement(element);
   if (points.length === 0) return null;
   const minX = Math.min(...points.map((point) => point.x));
@@ -245,46 +233,6 @@ function polygonBoundsForElement(element: UnknownRecord): Box | null {
 }
 
 function pointsForElement(element: UnknownRecord): Array<{ x: number; y: number }> {
-  const type = readString(element.type);
-  if (type === "line") {
-    const position = readPoint(element.position);
-    const size = asRecord(element.size);
-    const width = readNumber(size?.width) ?? 0;
-    const height = readNumber(size?.height) ?? 0;
-    return [
-      position,
-      { x: position.x + width, y: position.y + height },
-    ];
-  }
-
-  if (type === "rectangle") {
-    const position = readPoint(element.position);
-    const size = sourceRectSize(element);
-    return [
-      position,
-      { x: position.x + size.width, y: position.y },
-      { x: position.x + size.width, y: position.y + size.height },
-      { x: position.x, y: position.y + size.height },
-    ];
-  }
-
-  if (type === "ellipse") {
-    const position = readPoint(element.position);
-    const size = sourceRectSize(element);
-    const radiusX = size.width / 2;
-    const radiusY = size.height / 2;
-    const centerX = position.x + radiusX;
-    const centerY = position.y + radiusY;
-    const segments = 8;
-    return Array.from({ length: segments }, (_, index) => {
-      const angle = (Math.PI * 2 * index) / segments;
-      return {
-        x: centerX + radiusX * Math.cos(angle),
-        y: centerY + radiusY * Math.sin(angle),
-      };
-    });
-  }
-
   return readArray(element.points)
     .map(asRecord)
     .filter((point): point is UnknownRecord => Boolean(point))
@@ -294,34 +242,6 @@ function pointsForElement(element: UnknownRecord): Array<{ x: number; y: number 
       return x != null && y != null ? { x, y } : null;
     })
     .filter((point): point is { x: number; y: number } => point != null);
-}
-
-function cornerRadiiFromBorderRadius(value: unknown) {
-  const radius = asRecord(value);
-  if (!radius) return undefined;
-  const topLeft = Math.max(0, readNumber(radius.tl) ?? readNumber(radius.topLeft) ?? 0);
-  const topRight = Math.max(
-    0,
-    readNumber(radius.tr) ?? readNumber(radius.topRight) ?? topLeft,
-  );
-  const bottomRight = Math.max(
-    0,
-    readNumber(radius.br) ?? readNumber(radius.bottomRight) ?? topRight,
-  );
-  const bottomLeft = Math.max(
-    0,
-    readNumber(radius.bl) ?? readNumber(radius.bottomLeft) ?? bottomRight,
-  );
-  const radii = [topLeft, topRight, bottomRight, bottomLeft];
-  return radii.some((item) => item > 0) ? radii : undefined;
-}
-
-function sourceRectSize(element: UnknownRecord): Size {
-  const size = asRecord(element.size);
-  return {
-    width: Math.max(1, readNumber(size?.width) ?? 1),
-    height: Math.max(1, readNumber(size?.height) ?? 1),
-  };
 }
 
 export function hasTemplateV2Metadata(element: UnknownRecord) {

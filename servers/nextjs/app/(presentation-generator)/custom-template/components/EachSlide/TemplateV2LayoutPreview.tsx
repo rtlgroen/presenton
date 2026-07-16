@@ -134,13 +134,7 @@ function renderElement(
   if (!element || typeof element !== "object") return null;
 
   switch (element.type) {
-    case "vector_shape":
-      return renderPolygon(element, key, mode);
-    case "line":
-      return renderPolygon(element, key, mode);
-    case "rectangle":
-      return renderPolygon(element, key, mode);
-    case "ellipse":
+    case "vector":
       return renderPolygon(element, key, mode);
     case "image":
       return renderImage(element, key, mode);
@@ -167,22 +161,6 @@ function renderElement(
       }
       return null;
   }
-}
-
-function renderRectangle(
-  element: TemplateV2Element,
-  key: string,
-  mode: RenderMode
-) {
-  return (
-    <div
-      key={key}
-      style={{
-        ...frameStyle(element, mode),
-        ...boxStyle(element),
-      }}
-    />
-  );
 }
 
 function renderPolygon(
@@ -631,12 +609,7 @@ function readBox(
 ): Box {
   const position = readRecord(element.position);
   const size = readRecord(element.size);
-  if (
-    element.type === "vector_shape" ||
-    element.type === "line" ||
-    element.type === "rectangle" ||
-    element.type === "ellipse"
-  ) {
+  if (element.type === "vector") {
     return polygonBox(element, polygonPoints(element));
   }
   return {
@@ -665,37 +638,6 @@ function childrenBounds(children: TemplateV2Element[]): { width: number; height:
 type PreviewPoint = { x: number; y: number };
 
 function polygonSourcePoints(element: TemplateV2Element): PreviewPoint[] {
-  if (element.type === "line") {
-    const position = readRecord(element.position);
-    const size = readRecord(element.size);
-    const x = readNumber(position.x) ?? 0;
-    const y = readNumber(position.y) ?? 0;
-    return [
-      { x, y },
-      {
-        x: x + (readNumber(size.width) ?? 0),
-        y: y + (readNumber(size.height) ?? 0),
-      },
-    ];
-  }
-
-  if (element.type === "rectangle") {
-    const box = readBox({ ...element, type: "__legacy_rectangle_box" });
-    const width = box.width ?? 1;
-    const height = box.height ?? 1;
-    return [
-      { x: box.x, y: box.y },
-      { x: box.x + width, y: box.y },
-      { x: box.x + width, y: box.y + height },
-      { x: box.x, y: box.y + height },
-    ];
-  }
-
-  if (element.type === "ellipse") {
-    const box = readBox({ ...element, type: "__legacy_ellipse_box" });
-    return ellipsePoints(box.x, box.y, box.width ?? 1, box.height ?? 1);
-  }
-
   return readPointArray(element.points);
 }
 
@@ -708,8 +650,7 @@ function polygonPoints(element: TemplateV2Element): PreviewPoint[] {
   const curve = readRecord(element.curve);
   const rawType = readString(curve.type)?.trim().toLowerCase();
   const segments = Math.max(1, Math.min(96, Math.round(readNumber(curve.segments) ?? 16)));
-  const implicitEllipseCurve = element.type === "ellipse" && rawType == null;
-  if (rawType === "smooth" || implicitEllipseCurve) {
+  if (rawType === "smooth") {
     return sampleSmoothCurve(
       rounded,
       closed,
@@ -717,10 +658,10 @@ function polygonPoints(element: TemplateV2Element): PreviewPoint[] {
         0,
         Math.min(
           1,
-          readNumber(curve.tension) ?? (implicitEllipseCurve ? 1 : 0.4),
+          readNumber(curve.tension) ?? 0.4,
         ),
       ),
-      implicitEllipseCurve ? 8 : segments,
+      segments,
     );
   }
   return rounded;
@@ -737,26 +678,6 @@ function readPointArray(value: unknown): PreviewPoint[] {
         })
         .filter((point): point is PreviewPoint => point != null)
     : [];
-}
-
-function ellipsePoints(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  segments = 8,
-): PreviewPoint[] {
-  const radiusX = width / 2;
-  const radiusY = height / 2;
-  const centerX = x + radiusX;
-  const centerY = y + radiusY;
-  return Array.from({ length: segments }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / segments;
-    return {
-      x: centerX + radiusX * Math.cos(angle),
-      y: centerY + radiusY * Math.sin(angle),
-    };
-  });
 }
 
 function cornerRadii(element: TemplateV2Element, pointCount: number): number[] {

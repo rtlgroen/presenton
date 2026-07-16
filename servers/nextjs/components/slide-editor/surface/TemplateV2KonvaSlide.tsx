@@ -432,8 +432,32 @@ function TemplateV2KonvaSlideComponent({
     editorToolbarTarget?.element.type === "line" ||
     readString(selectedElement?.type) === "line";
   const selectedIsVectorShape =
-    editorToolbarTarget?.element.type === "vector_shape" ||
+    editorToolbarTarget?.element.type === "vector" ||
     isVectorShapeType(readString(selectedElement?.type));
+  const selectedIsSingleVectorComponentElement = useMemo(() => {
+    if (
+      selection?.kind !== "element" ||
+      selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX ||
+      selection.elementPath.length !== 1
+    ) {
+      return false;
+    }
+
+    const component = asRecord(
+      readArray(uiDraft.components)[selection.componentIndex],
+    );
+    const elements = readArray(component?.elements).filter(isRecord);
+    return (
+      elements.length === 1 &&
+      isVectorShapeType(readString(asRecord(elements[0])?.type))
+    );
+  }, [selection, uiDraft.components]);
+  const shouldHideParentComponentBoundary =
+    inlineEdit ||
+    (selectedIsVectorShape && !selectedIsSingleVectorComponentElement);
+  const transformerParentComponentKey = shouldHideParentComponentBoundary
+    ? null
+    : selectedParentComponentKey;
   const toolbarElement = useMemo(
     () => {
       if (!selectedElement || !selectedBox) return null;
@@ -1970,11 +1994,7 @@ function TemplateV2KonvaSlideComponent({
           {isEditMode ? (
             <TemplateV2SelectionTransformers
               nodeRefs={nodeRefs}
-              parentComponentKey={
-                inlineEdit || selectedIsVectorShape
-                  ? null
-                  : selectedParentComponentKey
-              }
+              parentComponentKey={transformerParentComponentKey}
               selectedKey={selectedKey}
               selectedKeys={selectedKeys}
               selectionKind={selection?.kind ?? null}

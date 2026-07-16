@@ -116,7 +116,7 @@ export function ShapeToolbar({
   const shadow = element.shadow ?? DEFAULT_SHAPE_SHADOW;
   const shadowEnabled = element.shadow != null;
   const isRectangle = element.type === "rectangle";
-  const isVectorShape = element.type === "vector_shape";
+  const isVectorShape = element.type === "vector";
   const vectorElement = isVectorShape ? element : null;
   const canChangeType = element.type === "rectangle" || element.type === "ellipse";
   const canRoundCorners =
