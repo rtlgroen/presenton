@@ -11,6 +11,7 @@ CONTENT_EDITABLE_ELEMENT_TYPES = {"text", "text-list", "table", "image", "chart"
 VISIBLE_ELEMENT_TYPES = CONTENT_EDITABLE_ELEMENT_TYPES | {
     "container",
     "rectangle",
+    "polygon",
     "ellipse",
     "line",
     "infographic",
@@ -309,6 +310,36 @@ def _normalize_image_element(element: dict[str, Any]) -> None:
         element.setdefault("prompt", prompt)
 
 
+def _normalize_generated_image_fit(
+    element: dict[str, Any],
+    asset_url: str | None,
+) -> None:
+    if element.get("is_icon") is True or element.get("fit") != "fill":
+        return
+    if _has_image_clip_path(element):
+        return
+    if _looks_like_svg_asset_reference(asset_url):
+        return
+    element["fit"] = "cover"
+
+
+def _has_image_clip_path(element: dict[str, Any]) -> bool:
+    for key in ("clip_path", "clipPath", "clippath"):
+        value = element.get(key)
+        if isinstance(value, str) and value.strip() and value.strip().lower() != "none":
+            return True
+    return False
+
+
+def _looks_like_svg_asset_reference(value: str | None) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = value.strip().lower()
+    if normalized.startswith("data:image/svg+xml"):
+        return True
+    return normalized.split("?", 1)[0].split("#", 1)[0].endswith(".svg")
+
+
 def _normalize_chart_type(value: Any, *, fallback: str = "bar") -> str:
     raw = value if isinstance(value, str) else fallback
     normalized = raw.strip().lower()
@@ -601,7 +632,7 @@ def _ungrouped_components_from_component(
     *,
     used_ids: set[str],
 ) -> list[dict[str, Any]]:
-    component_box = _required_box(component, label="component")
+    component_box = _required_component_box(component)
     id_base = _normalize_component_id(
         str(
             component.get("id")
@@ -665,15 +696,13 @@ def _ungrouped_components_from_component(
     for index, entry in enumerate(entries):
         box = entry["box"]
         element = copy.deepcopy(entry["element"])
-        element["position"] = {"x": 0, "y": 0}
-        element["size"] = {"width": box["width"], "height": box["height"]}
+        _normalize_ungrouped_element_frame(element, box)
         component_id = _unique_component_id(f"{id_base}_part_{index + 1}", used_ids)
         parts.append(
             {
                 "id": component_id,
                 "description": "Ungrouped component element",
                 "position": {"x": box["x"], "y": box["y"]},
-                "size": {"width": box["width"], "height": box["height"]},
                 "elements": [element],
             }
         )
@@ -874,10 +903,10 @@ def _element_size_or_default(
     }
 
 
-def _required_box(value: dict[str, Any], *, label: str) -> dict[str, float]:
-    box = _optional_box(value)
+def _required_component_box(value: dict[str, Any]) -> dict[str, float]:
+    box = _component_box(value)
     if box is None:
-        raise ValueError(f"Cannot safely ungroup {label} without position and size.")
+        raise ValueError("Cannot safely ungroup component without position and elements.")
     return box
 
 
@@ -885,6 +914,9 @@ def _box_or_default(
     value: dict[str, Any],
     default: dict[str, float],
 ) -> dict[str, float]:
+    vector_box = _vector_box(value)
+    if vector_box is not None:
+        return vector_box
     position = value.get("position")
     size = value.get("size")
     x = _finite_number(position.get("x")) if isinstance(position, dict) else None
@@ -899,7 +931,48 @@ def _box_or_default(
     }
 
 
+def _component_box(value: dict[str, Any]) -> dict[str, float] | None:
+    position = value.get("position")
+    if not isinstance(position, dict):
+        return None
+    x = _finite_number(position.get("x"))
+    y = _finite_number(position.get("y"))
+    content_size = _component_content_size(value)
+    if x is None or y is None or content_size is None:
+        return None
+    return {
+        "x": x,
+        "y": y,
+        "width": content_size["width"],
+        "height": content_size["height"],
+    }
+
+
+def _component_content_size(value: dict[str, Any]) -> dict[str, float] | None:
+    elements = value.get("elements")
+    if not isinstance(elements, list):
+        return None
+    width = 1.0
+    height = 1.0
+    has_element = False
+    for element in elements:
+        if not isinstance(element, dict):
+            continue
+        box = _optional_box(element)
+        if box is None:
+            continue
+        has_element = True
+        width = max(width, box["x"] + box["width"])
+        height = max(height, box["y"] + box["height"])
+    if not has_element:
+        return None
+    return {"width": width, "height": height}
+
+
 def _optional_box(value: dict[str, Any]) -> dict[str, float] | None:
+    vector_box = _vector_box(value)
+    if vector_box is not None:
+        return vector_box
     position = value.get("position")
     size = value.get("size")
     if not isinstance(position, dict) or not isinstance(size, dict):
@@ -913,6 +986,74 @@ def _optional_box(value: dict[str, Any]) -> dict[str, float] | None:
     if width <= 0 or height <= 0:
         return None
     return {"x": x, "y": y, "width": width, "height": height}
+
+
+def _normalize_ungrouped_element_frame(
+    element: dict[str, Any],
+    box: dict[str, float],
+) -> None:
+    if str(element.get("type") or "").lower() == "vector":
+        vector_box = _vector_box(element)
+        if vector_box is not None:
+            _translate_vector_points(element, -vector_box["x"], -vector_box["y"])
+        element.pop("size", None)
+        element["position"] = {"x": 0, "y": 0}
+        return
+
+    element["position"] = {"x": 0, "y": 0}
+    element["size"] = {"width": box["width"], "height": box["height"]}
+
+
+def _vector_box(value: dict[str, Any]) -> dict[str, float] | None:
+    if str(value.get("type") or "").lower() != "vector":
+        return None
+    points = value.get("points")
+    if not isinstance(points, list):
+        return None
+    parsed: list[tuple[float, float]] = []
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        x = _finite_number(point.get("x"))
+        y = _finite_number(point.get("y"))
+        if x is not None and y is not None:
+            parsed.append((x, y))
+    if not parsed:
+        return None
+    min_x = min(point[0] for point in parsed)
+    min_y = min(point[1] for point in parsed)
+    max_x = max(point[0] for point in parsed)
+    max_y = max(point[1] for point in parsed)
+    stroke = value.get("stroke")
+    stroke_width = 1.0
+    if isinstance(stroke, dict):
+        stroke_value = _finite_number(stroke.get("width"))
+        if stroke_value is not None:
+            stroke_width = max(0.0, stroke_value)
+    return {
+        "x": min_x,
+        "y": min_y,
+        "width": max(max_x - min_x, stroke_width, 1.0),
+        "height": max(max_y - min_y, stroke_width, 1.0),
+    }
+
+
+def _translate_vector_points(element: dict[str, Any], dx: float, dy: float) -> None:
+    points = element.get("points")
+    if not isinstance(points, list):
+        return
+    next_points = []
+    for point in points:
+        if not isinstance(point, dict):
+            next_points.append(point)
+            continue
+        x = _finite_number(point.get("x"))
+        y = _finite_number(point.get("y"))
+        if x is None or y is None:
+            next_points.append(point)
+            continue
+        next_points.append({**point, "x": x + dx, "y": y + dy})
+    element["points"] = next_points
 
 
 def _finite_number(value: Any) -> float | None:
@@ -1492,6 +1633,7 @@ def _apply_image_element_value(element: dict[str, Any], value: Any) -> None:
             "Image/icon updates require `text` with an image or icon URL."
         )
     element["data"] = asset_url
+    _normalize_generated_image_fit(element, asset_url)
     prompt = _template_v2_asset_prompt(
         value,
         is_icon=element.get("is_icon") is True,

@@ -19,6 +19,7 @@ import {
   ShadowPanel,
   SliderField,
   ToolbarButton,
+  ToggleRow,
 } from "@/components/slide-editor/shapes/ShapeToolbar";
 
 type LinePanel =
@@ -47,6 +48,7 @@ const DEFAULT_LINE_SHADOW = {
   offset_x: 4,
   offset_y: 4,
 };
+const DEFAULT_LINE_STROKE_WIDTH = 2;
 
 export function LineToolbar({
   anchorBox,
@@ -67,6 +69,7 @@ export function LineToolbar({
   const position = element.position ?? { x: 0, y: 0 };
   const size = element.size ?? { width: 1, height: 1 };
   const stroke = element.stroke;
+  const strokeEnabled = stroke.width > 0;
   const shadow = element.shadow ?? DEFAULT_LINE_SHADOW;
   const shadowEnabled = element.shadow != null;
   const currentStyle = lineStyleFromDash(stroke.dash);
@@ -78,12 +81,22 @@ export function LineToolbar({
     update({ stroke: { ...stroke, ...changes } });
   };
 
+  const setStrokeEnabled = (enabled: boolean) => {
+    setStroke({
+      width: enabled ? Math.max(stroke.width, DEFAULT_LINE_STROKE_WIDTH) : 0,
+    });
+  };
+
+  const setShadowEnabled = (enabled: boolean) => {
+    if (enabled) {
+      update({ shadow });
+      return;
+    }
+    update({ shadow: null });
+  };
+
   const togglePanel = (panel: Exclude<LinePanel, null>) => {
     setOpenPanel((current) => (current === panel ? null : panel));
-  };
-  const toggleShadowPanel = () => {
-    if (!shadowEnabled) update({ shadow });
-    togglePanel("shadow");
   };
 
   return (
@@ -103,41 +116,50 @@ export function LineToolbar({
       <div className="relative">
         <ToolbarButton
           title="Line style"
-          pressed={openPanel === "style"}
+          pressed={openPanel === "style" || strokeEnabled}
           onClick={() => togglePanel("style")}
         >
           <LineWidthIcon />
         </ToolbarButton>
         {openPanel === "style" ? (
           <Panel className="w-[222px] space-y-4 p-3">
-            <div className="grid grid-cols-3 gap-2">
-              {LINE_STYLE_OPTIONS.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  aria-label={option.label}
-                  aria-pressed={currentStyle.key === option.key}
-                  title={option.label}
-                  onClick={() => setStroke({ dash: option.dash })}
-                  className={cn(
-                    "grid h-10 place-items-center rounded-md border border-[#EDEEEF] bg-white text-[#191919] hover:bg-[#F8F8FA]",
-                    currentStyle.key === option.key &&
-                      "border-[#E4D7FF] bg-[#F4F1FF] text-[#7C3AED]",
-                  )}
-                >
-                  <LinePreview dash={option.dash} />
-                </button>
-              ))}
-            </div>
-            <SliderField
-              label="Line width"
-              value={stroke.width}
-              min={0}
-              max={8}
-              step={0.25}
-              formatValue={(value) => `${Math.round(value)} pt`}
-              onCommit={(width) => setStroke({ width })}
+            <ToggleRow
+              label="Stroke"
+              enabled={strokeEnabled}
+              onToggle={() => setStrokeEnabled(!strokeEnabled)}
             />
+            {strokeEnabled ? (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  {LINE_STYLE_OPTIONS.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      aria-label={option.label}
+                      aria-pressed={currentStyle.key === option.key}
+                      title={option.label}
+                      onClick={() => setStroke({ dash: option.dash })}
+                      className={cn(
+                        "grid h-10 place-items-center rounded-md border border-[#EDEEEF] bg-white text-[#191919] hover:bg-[#F8F8FA]",
+                        currentStyle.key === option.key &&
+                          "border-[#E4D7FF] bg-[#F4F1FF] text-[#7C3AED]",
+                      )}
+                    >
+                      <LinePreview dash={option.dash} />
+                    </button>
+                  ))}
+                </div>
+                <SliderField
+                  label="Line width"
+                  value={stroke.width}
+                  min={0}
+                  max={8}
+                  step={0.25}
+                  formatValue={(value) => `${Math.round(value)} pt`}
+                  onCommit={(width) => setStroke({ width })}
+                />
+              </>
+            ) : null}
           </Panel>
         ) : null}
       </div>
@@ -173,7 +195,7 @@ export function LineToolbar({
           title="Shadow"
           aria-label="Shadow"
           aria-pressed={openPanel === "shadow" || shadowEnabled}
-          onClick={toggleShadowPanel}
+          onClick={() => togglePanel("shadow")}
           className={cn(
             "h-7 rounded-[2px] border-0 bg-transparent px-2 font-syne text-[18px] leading-7 text-[#191919] hover:bg-[#F8F8FA]",
             (openPanel === "shadow" || shadowEnabled) &&
@@ -184,8 +206,10 @@ export function LineToolbar({
         </button>
         {openPanel === "shadow" ? (
           <ShadowPanel
+            enabled={shadowEnabled}
             fallback={DEFAULT_LINE_SHADOW}
             shadow={shadow}
+            onToggle={() => setShadowEnabled(!shadowEnabled)}
             onChange={(changes) => update({ shadow: { ...shadow, ...changes } })}
           />
         ) : null}

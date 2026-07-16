@@ -9,6 +9,7 @@ from templates.v2.models.elements import (
     Table,
     Text,
     TextList,
+    Vector,
 )
 from templates.v2.models.layouts import RawSlideLayout
 
@@ -72,6 +73,7 @@ def test_image_element_accepts_flip_flags():
             "focus_y": 75.0,
             "crop_scale": 1.8,
             "clip_path": "path('M 0 0 L 100 0 L 100 100 Z')",
+            "icon_type": "duotone",
         }
     )
     assert image.flip_h is True
@@ -80,6 +82,8 @@ def test_image_element_accepts_flip_flags():
     assert image.focus_y == 75.0
     assert image.crop_scale == 1.8
     assert image.clip_path == "path('M 0 0 L 100 0 L 100 100 Z')"
+    assert image.icon_type is not None
+    assert image.icon_type.value == "duotone"
 
     layout = RawSlideLayout.model_validate(
         {
@@ -98,6 +102,7 @@ def test_image_element_accepts_flip_flags():
                     "focus_y": 75.0,
                     "crop_scale": 1.8,
                     "clip_path": "path('M 0 0 L 100 0 L 100 100 Z')",
+                    "icon_type": "duotone",
                 }
             ],
         }
@@ -109,10 +114,95 @@ def test_image_element_accepts_flip_flags():
     assert layout_image.focus_y == 75.0
     assert layout_image.crop_scale == 1.8
     assert layout_image.clip_path == "path('M 0 0 L 100 0 L 100 100 Z')"
+    assert layout_image.icon_type is not None
+    assert layout_image.icon_type.value == "duotone"
     assert (
         layout.model_dump(mode="json")["elements"][0]["clip_path"]
         == "path('M 0 0 L 100 0 L 100 100 Z')"
     )
+    assert layout.model_dump(mode="json")["elements"][0]["icon_type"] == "duotone"
+
+    with pytest.raises(ValidationError, match="icon_type"):
+        Image.model_validate(
+            {
+                "type": "image",
+                "decorative": False,
+                "name": "hero",
+                "is_icon": True,
+                "data": "/app_data/images/hero.png",
+                "icon_type": "heavy",
+            }
+        )
+
+
+@pytest.mark.parametrize("element_type", ["line", "rectangle", "ellipse"])
+def test_legacy_geometry_is_not_adapted_to_vectors(element_type: str):
+    with pytest.raises(ValidationError):
+        RawSlideLayout.model_validate(
+            {
+                "id": "legacy_geometry",
+                "description": "Layout with legacy straight-edged geometry.",
+                "elements": [
+                    {
+                        "type": element_type,
+                        "position": {"x": 20, "y": 40},
+                        "size": {"width": 160, "height": 80},
+                        "fill": {"color": "#F4F3FF"},
+                        "stroke": {"color": "#7A5AF8", "width": 2},
+                    },
+                ],
+            }
+        )
+
+
+def test_vector_accepts_smooth_curves_only():
+    layout = RawSlideLayout.model_validate(
+        {
+            "id": "curved_geometry",
+            "description": "Layout with editable curved vector shapes.",
+            "elements": [
+                {
+                    "type": "vector",
+                    "points": [
+                        {"x": 0, "y": 0},
+                        {"x": 50, "y": 100},
+                        {"x": 100, "y": 0},
+                    ],
+                    "closed": False,
+                    "curve": {"type": "smooth", "tension": 0.5, "segments": 12},
+                    "stroke": {"color": "#111111", "width": 2},
+                },
+            ],
+        }
+    )
+
+    (smooth,) = layout.elements
+    assert isinstance(smooth, Vector)
+    assert smooth.curve is not None
+    assert smooth.curve.type == "smooth"
+    assert smooth.curve.tension == 0.5
+    assert smooth.curve.segments == 12
+
+    with pytest.raises(ValidationError):
+        RawSlideLayout.model_validate(
+            {
+                "id": "unsupported_curve",
+                "description": "Bezier curves are no longer supported.",
+                "elements": [
+                    {
+                        "type": "vector",
+                        "points": [{"x": 0, "y": 0}, {"x": 100, "y": 0}],
+                        "closed": False,
+                        "curve": {
+                            "type": "beizer",
+                            "segments": 8,
+                            "control_points": [{"x": 50, "y": -60}],
+                        },
+                        "stroke": {"color": "#222222", "width": 2},
+                    },
+                ],
+            }
+        )
 
 
 def test_element_models_match_export_schema_changes():

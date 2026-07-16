@@ -291,9 +291,10 @@ class ChatTools:
                 name="addComponent",
                 description=(
                     "Add an existing/new rendered UI component block to a slide. Component "
-                    "JSON must include id, description, position, size, and elements. Chart "
-                    "elements must include numeric data as categories plus series.values, or "
-                    "legacy data rows with label/value. Image elements must include data "
+                    "JSON must include id, description, position, and elements; do not include "
+                    "component size because bounds are inferred from child element bounds. "
+                    "Chart elements must include numeric data as categories plus series.values, "
+                    "or legacy data rows with label/value. Image elements must include data "
                     "set to a URL returned by generateAssets. For styled title/header, "
                     "table/chart, card, metric, or callout additions, adapt a component "
                     "returned by getAvailableBlocks and pass sourceBlockId."

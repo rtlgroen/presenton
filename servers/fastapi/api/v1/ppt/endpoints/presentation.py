@@ -41,6 +41,7 @@ from models.presentation_with_slides import (
     PresentationWithSlides,
 )
 from services.documents_loader import DocumentsLoader
+from services.chat.slide_ui_helpers import _normalize_generated_image_fit
 from services.temp_file_service import TEMP_FILE_SERVICE
 from services.webhook_service import WebhookService
 from services.image_generation_service import ImageGenerationService
@@ -939,6 +940,7 @@ def _apply_template_v2_image_content(
 
     updated = copy.deepcopy(element)
     updated["data"] = url
+    _normalize_generated_image_fit(updated, url)
     prompt = _template_v2_asset_prompt(value, element.get("is_icon") is True)
     if prompt:
         updated["prompt"] = prompt

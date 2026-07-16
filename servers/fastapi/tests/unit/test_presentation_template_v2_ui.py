@@ -737,6 +737,7 @@ def test_chat_template_v2_image_content_stores_prompt():
         "decorative": False,
         "name": "hero_image",
         "data": "/old-image.png",
+        "fit": "fill",
         "is_icon": False,
     }
     PresentationChatMemoryLayer._set_template_v2_element_value(
@@ -748,6 +749,7 @@ def test_chat_template_v2_image_content_stores_prompt():
     )
 
     assert image["data"] == "/app_data/images/dashboard.png"
+    assert image["fit"] == "cover"
     assert image["prompt"] == "Analytics dashboard"
 
     icon = {
@@ -755,6 +757,7 @@ def test_chat_template_v2_image_content_stores_prompt():
         "decorative": False,
         "name": "status_icon",
         "data": "/old-icon.svg",
+        "fit": "fill",
         "is_icon": True,
     }
     PresentationChatMemoryLayer._set_template_v2_element_value(
@@ -766,7 +769,71 @@ def test_chat_template_v2_image_content_stores_prompt():
     )
 
     assert icon["data"] == "/icons/check.svg"
+    assert icon["fit"] == "fill"
     assert icon["prompt"] == "success check"
+
+
+def test_apply_template_v2_image_content_avoids_stretching_generated_photos():
+    ui = {
+        "id": "layout-1",
+        "components": [
+            {
+                "id": "hero",
+                "elements": [
+                    {
+                        "type": "image",
+                        "decorative": False,
+                        "name": "hero_image",
+                        "data": "/static/images/replaceable_template_image.png",
+                        "fit": "fill",
+                        "is_icon": False,
+                    },
+                    {
+                        "type": "image",
+                        "decorative": False,
+                        "name": "vector_image",
+                        "data": "/static/images/replaceable_template_image.svg",
+                        "fit": "fill",
+                        "is_icon": False,
+                    },
+                    {
+                        "type": "image",
+                        "decorative": False,
+                        "name": "clipped_image",
+                        "data": "/static/images/replaceable_template_image.png",
+                        "fit": "fill",
+                        "clip_path": "path('M 10 0 L 100 0 L 100 100 L 10 100 Z')",
+                        "is_icon": False,
+                    },
+                ],
+            }
+        ],
+    }
+
+    hydrated = presentation_endpoint._apply_template_v2_content_to_ui(
+        ui,
+        {
+            "hero": {
+                "hero_image": {
+                    "image_url": "/app_data/images/dashboard.png",
+                },
+                "vector_image": {
+                    "image_url": "/app_data/images/diagram.svg",
+                },
+                "clipped_image": {
+                    "image_url": "/app_data/images/freeform.png",
+                },
+            }
+        },
+    )
+
+    hero_image, vector_image, clipped_image = hydrated["components"][0]["elements"]
+    assert hero_image["data"] == "/app_data/images/dashboard.png"
+    assert hero_image["fit"] == "cover"
+    assert vector_image["data"] == "/app_data/images/diagram.svg"
+    assert vector_image["fit"] == "fill"
+    assert clipped_image["data"] == "/app_data/images/freeform.png"
+    assert clipped_image["fit"] == "fill"
 
 
 def test_apply_template_v2_content_to_ui_uses_raw_schema_icon_query_url():

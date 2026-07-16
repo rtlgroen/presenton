@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -61,21 +62,30 @@ import {
   fillColor,
   fillOpacity,
   boxEqual,
+  insertVectorPointInElement,
   isBoxVisualType,
   isManualPositioned,
   isRawIconElement,
   isStaticSvgIconSource,
+  isVectorLineElement,
+  isVectorType,
   isRecord,
   keyForSelection,
   layoutChildren,
-  linePoints,
+  lineElementGeometryFromFrame,
+  linePointsForElement,
+  lineStrokeWidth,
   nullableBoxEqual,
   numberPathEqual,
   positionFromNodeInParent,
+  polygonClosedForElement,
+  polygonElementFromFrame,
+  polygonLocalPointsForElement,
   rawElementKey,
   readArray,
   readBoolean,
   readNumber,
+  readPoint,
   readString,
   ROOT_ELEMENTS_COMPONENT_INDEX,
   STAGE_BOX,
@@ -91,7 +101,11 @@ import {
   strokeColor,
   strokeOpacity,
   strokeWidth,
+  removeVectorPointFromElement,
+  translateVectorElement,
+  updateVectorVertexPoint,
   valueProgress,
+  vectorVertexEntriesForElement,
   pointOnCircle,
   withHash,
   type Box,
@@ -147,6 +161,14 @@ const VERTICAL_RESIZE_ANCHORS = new Set<ComponentTransformAnchor>([
   "top-center",
   "bottom-center",
 ]);
+const VECTOR_VERTEX_HANDLE_RADIUS = 5;
+const VECTOR_VERTEX_HANDLE_STROKE_WIDTH = 2;
+const VECTOR_VERTEX_HANDLE_COLOR = "#7A5AF8";
+const VECTOR_VERTEX_HANDLE_HIT_RADIUS = 14;
+const VECTOR_ADD_HANDLE_RADIUS = 6;
+const VECTOR_DELETE_HANDLE_RADIUS = 5;
+const VECTOR_DELETE_HANDLE_OFFSET = 11;
+const VECTOR_DELETE_HANDLE_COLOR = "#EF4444";
 
 function isComponentSideResizeAnchor(
   anchor: ComponentTransformAnchor | null,
@@ -360,13 +382,23 @@ function componentFromSideTransformPreview({
   ).component;
 }
 
+function setStageCursor(
+  event: Konva.KonvaEventObject<MouseEvent>,
+  cursor: string,
+) {
+  const container = event.target.getStage()?.container();
+  if (container) container.style.cursor = cursor;
+}
+
 export function RawComponentNode({
   component,
   componentIndex,
   isEditMode,
   isMultiSelectedComponent,
   editingKey,
+  vectorEditingKey,
   selectedTableCell,
+  selectedKey,
   setNodeRef,
   onSelect,
   onTableCellSelect,
@@ -384,7 +416,9 @@ export function RawComponentNode({
   isEditMode: boolean;
   isMultiSelectedComponent: boolean;
   editingKey: string | null;
+  vectorEditingKey: string | null;
   selectedTableCell: TableCellSelection | null;
+  selectedKey: string | null;
   setNodeRef: (key: string, node: Konva.Node | null) => void;
   onSelect: (selection: Selection, options?: SelectOptions) => void;
   onTableCellSelect: (
@@ -468,6 +502,32 @@ export function RawComponentNode({
   const elements = readArray(renderedComponent.elements).filter(
     isRecord,
   ) as RawElement[];
+  const handleSingleElementComponentDragEnd = useCallback(
+    (elementSelection: ElementSelection, delta: Point) => {
+      if (
+        elementSelection.componentIndex !== componentIndex ||
+        elementSelection.elementPath.length !== 1 ||
+        elementSelection.elementPath[0] !== 0 ||
+        elements.length !== 1 ||
+        (readNumber(component.rotation) ?? 0) !== 0
+      ) {
+        return false;
+      }
+
+      onComponentChange(componentIndex, (current) => {
+        const position = readPoint(current.position);
+        return {
+          ...current,
+          position: {
+            x: position.x + delta.x,
+            y: position.y + delta.y,
+          },
+        };
+      });
+      return true;
+    },
+    [component.rotation, componentIndex, elements, onComponentChange],
+  );
   const handleMouseDown = useCallback(
     (event: Konva.KonvaEventObject<MouseEvent>) => {
       if (!isEditMode) return;
@@ -475,7 +535,12 @@ export function RawComponentNode({
       if (isMultiSelectedComponent && !event.evt.shiftKey) return;
       onSelect(selection, { additive: event.evt.shiftKey });
     },
-    [isEditMode, isMultiSelectedComponent, onSelect, selection],
+    [
+      isEditMode,
+      isMultiSelectedComponent,
+      onSelect,
+      selection,
+    ],
   );
   const handleTouchStart = useCallback(
     (event: Konva.KonvaEventObject<TouchEvent>) => {
@@ -484,7 +549,12 @@ export function RawComponentNode({
       if (isMultiSelectedComponent) return;
       onSelect(selection);
     },
-    [isEditMode, isMultiSelectedComponent, onSelect, selection],
+    [
+      isEditMode,
+      isMultiSelectedComponent,
+      onSelect,
+      selection,
+    ],
   );
   const handleDragStart = useCallback(
     (event: Konva.KonvaEventObject<DragEvent>) => {
@@ -640,13 +710,16 @@ export function RawComponentNode({
           elementPath={[elementIndex]}
           isEditMode={isEditMode}
           editingKey={editingKey}
+          vectorEditingKey={vectorEditingKey}
           selectedTableCell={selectedTableCell}
+          selectedKey={selectedKey}
           setNodeRef={setNodeRef}
           onSelect={onSelect}
           onTableCellSelect={onTableCellSelect}
           onTableCellEdit={onTableCellEdit}
           onOpenEditor={onOpenElementEditor}
           onElementChange={onElementChange}
+          onElementDragEnd={handleSingleElementComponentDragEnd}
           parentBox={box}
           textConstraintBox={{
             x: 0,
@@ -688,6 +761,7 @@ export const MemoizedRawComponentNode = memo(
       previous.componentIndex !== next.componentIndex ||
       previous.isEditMode !== next.isEditMode ||
       previous.isMultiSelectedComponent !== next.isMultiSelectedComponent ||
+      previous.vectorEditingKey !== next.vectorEditingKey ||
       previous.setNodeRef !== next.setNodeRef ||
       previous.onSelect !== next.onSelect ||
       previous.onTableCellSelect !== next.onTableCellSelect ||
@@ -699,6 +773,7 @@ export const MemoizedRawComponentNode = memo(
       previous.onComponentDragEnd !== next.onComponentDragEnd ||
       previous.onElementChange !== next.onElementChange ||
       previous.selectedTableCell !== next.selectedTableCell ||
+      previous.selectedKey !== next.selectedKey ||
       previous.fontRevision !== next.fontRevision
     ) {
       return false;
@@ -720,13 +795,16 @@ function RawElementNode({
   elementPath,
   isEditMode,
   editingKey,
+  vectorEditingKey,
   selectedTableCell,
+  selectedKey,
   setNodeRef,
   onSelect,
   onTableCellSelect,
   onTableCellEdit,
   onOpenEditor,
   onElementChange,
+  onElementDragEnd,
   parentBox,
   textConstraintBox,
   renderBox,
@@ -738,7 +816,9 @@ function RawElementNode({
   elementPath: number[];
   isEditMode: boolean;
   editingKey: string | null;
+  vectorEditingKey: string | null;
   selectedTableCell: TableCellSelection | null;
+  selectedKey: string | null;
   setNodeRef: (key: string, node: Konva.Node | null) => void;
   onSelect: (selection: Selection, options?: SelectOptions) => void;
   onTableCellSelect: (
@@ -756,6 +836,7 @@ function RawElementNode({
     selection: ElementSelection,
     updater: (element: RawElement) => RawElement,
   ) => void;
+  onElementDragEnd?: (selection: ElementSelection, delta: Point) => boolean;
   parentBox: Box;
   textConstraintBox?: Box | null;
   renderBox?: Box | null;
@@ -773,9 +854,17 @@ function RawElementNode({
     [componentIndex, elementPath],
   );
   const key = keyForSelection(selection);
+  const isSelected = selectedKey === key;
   const selectedCell =
     selectedTableCell?.elementPath === key ? selectedTableCell : null;
   const editing = editingKey === key;
+  const type = readString(element.type);
+  const isVector = isVectorType(type);
+  const isVectorLine = isVectorLineElement(element);
+  const vectorPointEditing = vectorEditingKey === key;
+  const [vectorDragPreview, setVectorDragPreview] =
+    useState<RawElement | null>(null);
+  const renderedElement = vectorDragPreview ?? element;
   const childInfo = childArrayInfo(element);
   const children = childInfo?.items ?? [];
   const laidOutChildren = layoutChildren(element, children, box);
@@ -800,6 +889,17 @@ function RawElementNode({
         }
     : null;
   const centerOrigin = shouldUseCenterOrigin(element);
+  const showVectorPointHandles =
+    isEditMode &&
+    isSelected &&
+    isVector &&
+    !editing &&
+    (vectorPointEditing || isVectorLine);
+  const vectorDraggable =
+    isEditMode && isSelected && isVector && !editing && !showVectorPointHandles;
+  useEffect(() => {
+    if (!isSelected || !isVector) setVectorDragPreview(null);
+  }, [isSelected, isVector]);
   const handleTableCellSelect = useCallback(
     (rowIndex: number, colIndex: number) => {
       onTableCellSelect(selection, rowIndex, colIndex);
@@ -811,6 +911,108 @@ function RawElementNode({
       onTableCellEdit(selection, rowIndex, colIndex);
     },
     [onTableCellEdit, selection],
+  );
+  const handleVectorDragStart = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!vectorDraggable) return;
+      event.cancelBubble = true;
+      onSelect(selection);
+    },
+    [onSelect, selection, vectorDraggable],
+  );
+  const handleVectorDragMove = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!vectorDraggable) return;
+      event.cancelBubble = true;
+    },
+    [vectorDraggable],
+  );
+  const handleVectorDragEnd = useCallback(
+    (event: Konva.KonvaEventObject<DragEvent>) => {
+      if (!vectorDraggable) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      const nextPosition = {
+        x: node.x() - (centerOrigin ? box.width / 2 : 0),
+        y: node.y() - (centerOrigin ? box.height / 2 : 0),
+      };
+      const delta = {
+        x: nextPosition.x - box.x,
+        y: nextPosition.y - box.y,
+      };
+      if (Math.abs(delta.x) < 0.01 && Math.abs(delta.y) < 0.01) return;
+      if (onElementDragEnd?.(selection, delta)) {
+        node.position({
+          x: centerOrigin ? box.x + box.width / 2 : box.x,
+          y: centerOrigin ? box.y + box.height / 2 : box.y,
+        });
+        return;
+      }
+      node.position({
+        x: centerOrigin ? nextPosition.x + box.width / 2 : nextPosition.x,
+        y: centerOrigin ? nextPosition.y + box.height / 2 : nextPosition.y,
+      });
+      onElementChange(selection, (current) => ({
+        ...translateVectorElement(current, delta),
+        ...(layoutManaged || isManualPositioned(current)
+          ? { __presenton_manual_position: true }
+          : {}),
+      }));
+    },
+    [
+      box,
+      centerOrigin,
+      layoutManaged,
+      onElementChange,
+      onElementDragEnd,
+      selection,
+      vectorDraggable,
+    ],
+  );
+  const previewVectorVertex = useCallback(
+    (index: number, point: Point) => {
+      setVectorDragPreview((current) =>
+        updateVectorVertexPoint(current ?? element, index, point),
+      );
+    },
+    [element],
+  );
+  const commitVectorVertex = useCallback(
+    (index: number, point: Point) => {
+      setVectorDragPreview(null);
+      onElementChange(selection, (current) => ({
+        ...updateVectorVertexPoint(current, index, point),
+        ...(layoutManaged || isManualPositioned(current)
+          ? { __presenton_manual_position: true }
+          : {}),
+      }));
+    },
+    [layoutManaged, onElementChange, selection],
+  );
+  const commitVectorPointInsert = useCallback(
+    (afterIndex: number, point: Point) => {
+      setVectorDragPreview(null);
+      onElementChange(selection, (current) => ({
+        ...insertVectorPointInElement(current, afterIndex, point),
+        ...(layoutManaged || isManualPositioned(current)
+          ? { __presenton_manual_position: true }
+          : {}),
+      }));
+    },
+    [layoutManaged, onElementChange, selection],
+  );
+  const commitVectorPointRemove = useCallback(
+    (index: number) => {
+      setVectorDragPreview(null);
+      onElementChange(selection, (current) => ({
+        ...removeVectorPointFromElement(current, index),
+        ...(layoutManaged || isManualPositioned(current)
+          ? { __presenton_manual_position: true }
+          : {}),
+      }));
+    },
+    [layoutManaged, onElementChange, selection],
   );
 
   return (
@@ -831,12 +1033,35 @@ function RawElementNode({
       clipHeight={clipChildren ? box.height : undefined}
       rotation={readNumber(element.rotation) ?? 0}
       opacity={readNumber(element.opacity) ?? 1}
+      draggable={vectorDraggable}
       onMouseDown={(event) => {
         if (!isEditMode) return;
+        if (isVector) {
+          event.cancelBubble = true;
+          onSelect(selection);
+          if (isVectorLine) onOpenEditor(selection);
+          return;
+        }
+        if (vectorDraggable) {
+          event.cancelBubble = true;
+          onSelect(selection);
+          return;
+        }
         event.cancelBubble = false;
       }}
       onTouchStart={(event) => {
         if (!isEditMode) return;
+        if (isVector) {
+          event.cancelBubble = true;
+          onSelect(selection);
+          if (isVectorLine) onOpenEditor(selection);
+          return;
+        }
+        if (vectorDraggable) {
+          event.cancelBubble = true;
+          onSelect(selection);
+          return;
+        }
         event.cancelBubble = false;
       }}
       onClick={(event) => {
@@ -865,6 +1090,9 @@ function RawElementNode({
         onSelect(selection);
         onOpenEditor(selection);
       }}
+      onDragStart={handleVectorDragStart}
+      onDragMove={handleVectorDragMove}
+      onDragEnd={handleVectorDragEnd}
       onTransformEnd={(event) => {
         if (!isEditMode) return;
         event.cancelBubble = true;
@@ -879,19 +1107,43 @@ function RawElementNode({
         node.scaleX(1);
         node.scaleY(1);
         const fontScale = fontScaleFromResize(scaleX, scaleY);
-        onElementChange(selection, (current) => ({
-          ...scaleRawElementTextMetrics(current, fontScale),
-          position: positionFromNodeInParent(
-            node,
-            parentBox,
-            { ...box, ...nextSize },
-          ),
-          size: nextSize,
-          rotation: node.rotation(),
-          ...(layoutManaged || isManualPositioned(current)
-            ? { __presenton_manual_position: true }
-            : {}),
-        }));
+        const nextPosition = positionFromNodeInParent(
+          node,
+          parentBox,
+          { ...box, ...nextSize },
+        );
+        node.position({
+          x: centerOrigin ? nextPosition.x + nextSize.width / 2 : nextPosition.x,
+          y: centerOrigin ? nextPosition.y + nextSize.height / 2 : nextPosition.y,
+        });
+        onElementChange(selection, (current) => {
+          const scaled = scaleRawElementTextMetrics(current, fontScale);
+          const type = readString(current.type);
+          const geometry =
+            isVectorType(type)
+              ? polygonElementFromFrame(scaled, nextPosition, scaleX, scaleY)
+              : {
+                  ...scaled,
+                  ...(type === "line"
+                    ? lineElementGeometryFromFrame(
+                        current,
+                        nextPosition,
+                        scaleX,
+                        scaleY,
+                      )
+                    : {
+                        position: nextPosition,
+                        size: nextSize,
+                      }),
+                };
+          return {
+            ...geometry,
+            rotation: node.rotation(),
+            ...(layoutManaged || isManualPositioned(current)
+              ? { __presenton_manual_position: true }
+              : {}),
+          };
+        });
       }}
     >
       {isEditMode ? (
@@ -899,16 +1151,28 @@ function RawElementNode({
       ) : null}
       {editing ? null : (
         <MemoizedRawElementVisual
-          element={element}
+          element={renderedElement}
           width={visualBox.width}
           height={visualBox.height}
           interactive={isEditMode}
+          vectorOriginBox={isVector ? box : null}
           selectedTableCell={selectedCell}
           onTableCellSelect={handleTableCellSelect}
           onTableCellEdit={handleTableCellEdit}
           fontRevision={fontRevision}
         />
       )}
+      {showVectorPointHandles ? (
+        <VectorVertexHandles
+          element={renderedElement}
+          originBox={box}
+          onCommit={commitVectorVertex}
+          onInsert={commitVectorPointInsert}
+          onPreview={previewVectorVertex}
+          onRemove={commitVectorPointRemove}
+          onSelect={() => onSelect(selection)}
+        />
+      ) : null}
       {laidOutChildren.map(({ child, index, box: childBox, layoutManaged }) => (
         <MemoizedRawElementNode
           key={rawElementKey(child, index)}
@@ -917,13 +1181,16 @@ function RawElementNode({
           elementPath={[...elementPath, index]}
           isEditMode={isEditMode}
           editingKey={editingKey}
+          vectorEditingKey={vectorEditingKey}
           selectedTableCell={selectedTableCell}
+          selectedKey={selectedKey}
           setNodeRef={setNodeRef}
           onSelect={onSelect}
           onTableCellSelect={onTableCellSelect}
           onTableCellEdit={onTableCellEdit}
           onOpenEditor={onOpenEditor}
           onElementChange={onElementChange}
+          onElementDragEnd={onElementDragEnd}
           parentBox={{
             x: parentBox.x + box.x,
             y: parentBox.y + box.y,
@@ -947,13 +1214,16 @@ export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
     previous.isEditMode !== next.isEditMode ||
     previous.layoutManaged !== next.layoutManaged ||
     previous.fontRevision !== next.fontRevision ||
+    previous.vectorEditingKey !== next.vectorEditingKey ||
     previous.selectedTableCell !== next.selectedTableCell ||
+    previous.selectedKey !== next.selectedKey ||
     previous.setNodeRef !== next.setNodeRef ||
     previous.onSelect !== next.onSelect ||
     previous.onTableCellSelect !== next.onTableCellSelect ||
     previous.onTableCellEdit !== next.onTableCellEdit ||
     previous.onOpenEditor !== next.onOpenEditor ||
     previous.onElementChange !== next.onElementChange ||
+    previous.onElementDragEnd !== next.onElementDragEnd ||
     !numberPathEqual(previous.elementPath, next.elementPath) ||
     !boxEqual(previous.parentBox, next.parentBox) ||
     !nullableBoxEqual(previous.textConstraintBox, next.textConstraintBox) ||
@@ -975,6 +1245,209 @@ export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
       ))
   );
 });
+
+function VectorVertexHandles({
+  element,
+  originBox,
+  onSelect,
+  onPreview,
+  onCommit,
+  onInsert,
+  onRemove,
+}: {
+  element: RawElement;
+  originBox: Box;
+  onSelect: () => void;
+  onPreview: (index: number, point: Point) => void;
+  onCommit: (index: number, point: Point) => void;
+  onInsert: (afterIndex: number, point: Point) => void;
+  onRemove: (index: number) => void;
+}) {
+  const vertices = vectorVertexEntriesForElement(element);
+  if (vertices.length === 0) return null;
+  const closed = readBoolean(element.closed) ?? vertices.length > 2;
+  const canRemove = vertices.length > (closed ? 3 : 2);
+  const edges = vertices.flatMap((vertex, orderIndex) => {
+    const next = vertices[orderIndex + 1] ?? (closed ? vertices[0] : null);
+    return next ? [{ current: vertex, next }] : [];
+  });
+
+  return (
+    <>
+      {edges.map(({ current, next }) => {
+        const x = (current.point.x + next.point.x) / 2 - originBox.x;
+        const y = (current.point.y + next.point.y) / 2 - originBox.y;
+        const point = {
+          x: originBox.x + x,
+          y: originBox.y + y,
+        };
+        return (
+          <Group
+            key={`${current.index}:${next.index}`}
+            x={x}
+            y={y}
+            listening
+            onMouseDown={(event) => {
+              event.cancelBubble = true;
+              onSelect();
+            }}
+            onTouchStart={(event) => {
+              event.cancelBubble = true;
+              onSelect();
+            }}
+            onMouseEnter={(event) => setStageCursor(event, "copy")}
+            onMouseLeave={(event) => setStageCursor(event, "")}
+            onClick={(event) => {
+              event.cancelBubble = true;
+              onInsert(current.index, point);
+            }}
+            onTap={(event) => {
+              event.cancelBubble = true;
+              onInsert(current.index, point);
+            }}
+          >
+            <Circle
+              radius={VECTOR_ADD_HANDLE_RADIUS}
+              fill={VECTOR_VERTEX_HANDLE_COLOR}
+              stroke="#FFFFFF"
+              strokeWidth={1}
+              hitStrokeWidth={VECTOR_VERTEX_HANDLE_HIT_RADIUS}
+              perfectDrawEnabled={false}
+            />
+            <Text
+              x={-VECTOR_ADD_HANDLE_RADIUS}
+              y={-VECTOR_ADD_HANDLE_RADIUS - 0.5}
+              width={VECTOR_ADD_HANDLE_RADIUS * 2}
+              height={VECTOR_ADD_HANDLE_RADIUS * 2}
+              align="center"
+              verticalAlign="middle"
+              fill="#FFFFFF"
+              fontSize={11}
+              fontStyle="bold"
+              listening={false}
+              text="+"
+            />
+          </Group>
+        );
+      })}
+      {vertices.map(({ index, point }) => {
+        const x = point.x - originBox.x;
+        const y = point.y - originBox.y;
+        return (
+          <Fragment key={index}>
+            <Circle
+              x={x}
+              y={y}
+              radius={VECTOR_VERTEX_HANDLE_RADIUS}
+              fill="#FFFFFF"
+              stroke={VECTOR_VERTEX_HANDLE_COLOR}
+              strokeWidth={VECTOR_VERTEX_HANDLE_STROKE_WIDTH}
+              hitStrokeWidth={VECTOR_VERTEX_HANDLE_HIT_RADIUS}
+              draggable
+              listening
+              perfectDrawEnabled={false}
+              shadowColor="#101828"
+              shadowBlur={4}
+              shadowOffsetX={0}
+              shadowOffsetY={1}
+              shadowOpacity={0.18}
+              onMouseDown={(event) => {
+                event.cancelBubble = true;
+                onSelect();
+              }}
+              onTouchStart={(event) => {
+                event.cancelBubble = true;
+                onSelect();
+              }}
+              onClick={(event) => {
+                event.cancelBubble = true;
+                if (event.evt.altKey && canRemove) onRemove(index);
+              }}
+              onTap={(event) => {
+                event.cancelBubble = true;
+              }}
+              onDblClick={(event) => {
+                event.cancelBubble = true;
+                if (canRemove) onRemove(index);
+              }}
+              onDblTap={(event) => {
+                event.cancelBubble = true;
+                if (canRemove) onRemove(index);
+              }}
+              onMouseEnter={(event) => setStageCursor(event, "move")}
+              onMouseLeave={(event) => setStageCursor(event, "")}
+              onDragStart={(event) => {
+                event.cancelBubble = true;
+                onSelect();
+              }}
+              onDragMove={(event) => {
+                event.cancelBubble = true;
+                onPreview(index, {
+                  x: originBox.x + event.target.x(),
+                  y: originBox.y + event.target.y(),
+                });
+              }}
+              onDragEnd={(event) => {
+                event.cancelBubble = true;
+                onCommit(index, {
+                  x: originBox.x + event.target.x(),
+                  y: originBox.y + event.target.y(),
+                });
+              }}
+            />
+            {canRemove ? (
+              <Group
+                x={x + VECTOR_DELETE_HANDLE_OFFSET}
+                y={y - VECTOR_DELETE_HANDLE_OFFSET}
+                listening
+                onMouseDown={(event) => {
+                  event.cancelBubble = true;
+                  onSelect();
+                }}
+                onTouchStart={(event) => {
+                  event.cancelBubble = true;
+                  onSelect();
+                }}
+                onMouseEnter={(event) => setStageCursor(event, "pointer")}
+                onMouseLeave={(event) => setStageCursor(event, "")}
+                onClick={(event) => {
+                  event.cancelBubble = true;
+                  onRemove(index);
+                }}
+                onTap={(event) => {
+                  event.cancelBubble = true;
+                  onRemove(index);
+                }}
+              >
+                <Circle
+                  radius={VECTOR_DELETE_HANDLE_RADIUS}
+                  fill={VECTOR_DELETE_HANDLE_COLOR}
+                  stroke="#FFFFFF"
+                  strokeWidth={1}
+                  hitStrokeWidth={VECTOR_VERTEX_HANDLE_HIT_RADIUS}
+                  perfectDrawEnabled={false}
+                />
+                <Text
+                  x={-VECTOR_DELETE_HANDLE_RADIUS}
+                  y={-VECTOR_DELETE_HANDLE_RADIUS - 0.5}
+                  width={VECTOR_DELETE_HANDLE_RADIUS * 2}
+                  height={VECTOR_DELETE_HANDLE_RADIUS * 2}
+                  align="center"
+                  verticalAlign="middle"
+                  fill="#FFFFFF"
+                  fontSize={9}
+                  fontStyle="bold"
+                  listening={false}
+                  text="x"
+                />
+              </Group>
+            ) : null}
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
 
 function SelectionBoundsRect({
   width,
@@ -1000,6 +1473,7 @@ function RawElementVisual({
   width,
   height,
   interactive,
+  vectorOriginBox,
   selectedTableCell,
   onTableCellSelect,
   onTableCellEdit,
@@ -1009,6 +1483,7 @@ function RawElementVisual({
   width: number;
   height: number;
   interactive: boolean;
+  vectorOriginBox?: Box | null;
   selectedTableCell: TableCellSelection | null;
   onTableCellSelect: (rowIndex: number, colIndex: number) => void;
   onTableCellEdit: (rowIndex: number, colIndex: number) => void;
@@ -1062,19 +1537,52 @@ function RawElementVisual({
   }
   if (type === "line") {
     const stroke = colorWithOpacity(
-      strokeColor(element.stroke),
+      strokeColor(element.stroke) ?? "#000000",
       strokeOpacity(element.stroke),
     );
-    const lineWidth = strokeWidth(element.stroke);
+    const lineWidth = lineStrokeWidth(element);
     const lineDash = readArray(asRecord(element.stroke)?.dash)
       .map(readNumber)
-      .filter((value): value is number => value != null && value >= 0);
+      .filter((value): value is number => value != null);
     if (!stroke || lineWidth <= 0) return null;
     return (
       <Line
-        points={linePoints(width, height, lineWidth)}
+        points={linePointsForElement(element, width, height)}
         stroke={stroke}
         strokeWidth={lineWidth}
+        dash={lineDash.length ? lineDash : undefined}
+        hitStrokeWidth={Math.max(20, lineWidth)}
+        {...shadowProps(element)}
+        listening={interactive}
+      />
+    );
+  }
+  if (isVectorType(type)) {
+    const points = polygonLocalPointsForElement(
+      element,
+      vectorOriginBox ?? undefined,
+    );
+    const closed = polygonClosedForElement(element);
+    const fill = closed
+      ? colorWithOpacity(fillColor(element.fill), fillOpacity(element.fill))
+      : undefined;
+    const stroke = colorWithOpacity(
+      strokeColor(element.stroke) ?? (!closed ? "#000000" : undefined),
+      strokeOpacity(element.stroke),
+    );
+    const lineWidth = lineStrokeWidth(element);
+    const lineDash = readArray(asRecord(element.stroke)?.dash)
+      .map(readNumber)
+      .filter((value): value is number => value != null);
+    if (points.length < 4) return null;
+    if (!fill && !(stroke && lineWidth > 0)) return null;
+    return (
+      <Line
+        points={points}
+        closed={closed}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={stroke ? lineWidth : 0}
         dash={lineDash.length ? lineDash : undefined}
         hitStrokeWidth={Math.max(20, lineWidth)}
         {...shadowProps(element)}
@@ -1145,6 +1653,7 @@ const MemoizedRawElementVisual = memo(
     previous.width === next.width &&
     previous.height === next.height &&
     previous.interactive === next.interactive &&
+    nullableBoxEqual(previous.vectorOriginBox, next.vectorOriginBox) &&
     previous.selectedTableCell === next.selectedTableCell &&
     previous.onTableCellSelect === next.onTableCellSelect &&
     previous.onTableCellEdit === next.onTableCellEdit &&
@@ -1303,10 +1812,10 @@ function RawImageElement({
   const color = readString(element.color);
   const isIcon = isRawIconElement(element);
   const renderSrc = useMemo(() => {
-    if (!src || !color || !isIcon || typeof window === "undefined") return src;
+    if (!src || !isIcon || typeof window === "undefined") return src;
     const baseUrl = window.location.href;
     if (!isStaticSvgIconSource(src, baseUrl)) return src;
-    return buildSvgUpdateUrl(src, baseUrl, { color }) ?? src;
+    return buildSvgUpdateUrl(src, baseUrl, { color, forceRoute: true }) ?? src;
   }, [color, isIcon, src]);
   const loaded = useLoadedKonvaImage(renderSrc);
 
@@ -1323,7 +1832,7 @@ function RawImageElement({
     );
   }
 
-  const fit = readString(element.fit) ?? "contain";
+  const fit = imageFit(element.fit);
   const focusX = clamp(readNumber(element.focus_x) ?? 50, 0, 100) / 100;
   const focusY = clamp(readNumber(element.focus_y) ?? 50, 0, 100) / 100;
   const cropScale = clamp(readNumber(element.crop_scale) ?? 1, 1, 6);
@@ -1381,21 +1890,27 @@ function RawImageElement({
   const imageNode = (
     <KonvaImage
       image={loaded}
-      x={offsetX + (flipH ? drawW : 0)}
-      y={offsetY + (flipV ? drawH : 0)}
+      x={offsetX}
+      y={offsetY}
       width={drawW}
       height={drawH}
       crop={crop}
-      scaleX={flipH ? -1 : 1}
-      scaleY={flipV ? -1 : 1}
       listening={interactive}
     />
   );
 
-  const clippedImageNode = clipPath ? (
+  const contentNode = clipPath || flipH || flipV ? (
     <Group
-      clipFunc={(context) =>
-        drawImageClipPath(context, clipPath, width, height)
+      x={flipH ? width : 0}
+      y={flipV ? height : 0}
+      width={width}
+      height={height}
+      scaleX={flipH ? -1 : 1}
+      scaleY={flipV ? -1 : 1}
+      clipFunc={
+        clipPath
+          ? (context) => drawImageClipPath(context, clipPath, width, height)
+          : undefined
       }
       listening={interactive}
     >
@@ -1412,9 +1927,16 @@ function RawImageElement({
       }
       listening={interactive}
     >
-      {clippedImageNode}
+      {contentNode}
     </Group>
   );
+}
+
+function imageFit(value: unknown): "contain" | "cover" | "fill" {
+  const fit = readString(value);
+  return fit === "contain" || fit === "cover" || fit === "fill"
+    ? fit
+    : "contain";
 }
 
 type ParsedImageClipPath =

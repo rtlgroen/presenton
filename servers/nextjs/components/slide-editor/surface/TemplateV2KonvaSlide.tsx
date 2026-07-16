@@ -132,6 +132,8 @@ import {
   isManualPositioned,
   isRecord,
   isRawIconElement,
+  isVectorLineElement,
+  isVectorType,
   keyForSelection,
   keysForSelection,
   layoutChildren,
@@ -147,10 +149,10 @@ import {
   readString,
   renderedLocalBoxForElementSelection,
   rootElementsComponent,
+  selectionForInsertedComponent,
   selectionWithComponentToggle,
   setComponentPositionsInUi,
   surfaceSelectionTarget,
-  unclampedPositionFromNodeInParent,
   updateComponentInUi,
   updateElementInUi,
   type ComponentSelection,
@@ -303,6 +305,11 @@ function TemplateV2KonvaSlideComponent({
   } = useTemplateV2InlineEditing<ElementSelection>({
     keyForSelection,
   });
+  const [vectorEditSelection, setVectorEditSelection] =
+    useState<ElementSelection | null>(null);
+  const vectorEditingKey = vectorEditSelection
+    ? keyForSelection(vectorEditSelection)
+    : null;
   const [iconEditorSelection, setIconEditorSelection] =
     useState<ElementSelection | null>(null);
   const [chartEditorSelection, setChartEditorSelection] =
@@ -458,6 +465,18 @@ function TemplateV2KonvaSlideComponent({
   const horizontalResizeOnly =
     editorToolbarTarget?.element.type === "line" ||
     readString(selectedElement?.type) === "line";
+  const selectedIsVectorElement =
+    selection?.kind === "element" &&
+    isVectorType(readString(selectedElement?.type));
+  const selectedIsVectorPointEditing =
+    selectedIsVectorElement &&
+    selection?.kind === "element" &&
+    (isVectorLineElement(selectedElement) ||
+      vectorEditingKey === keyForSelection(selection));
+  const shouldHideParentComponentBoundary = inlineEdit || selectedIsVectorElement;
+  const transformerParentComponentKey = shouldHideParentComponentBoundary
+    ? null
+    : selectedParentComponentKey;
   const toolbarElement = useMemo(
     () => {
       if (!selectedElement || !selectedBox) return null;
@@ -598,6 +617,7 @@ function TemplateV2KonvaSlideComponent({
     setSelection(null);
     clearTableCellSelection();
     clearInlineEdit();
+    setVectorEditSelection(null);
     setIconEditorSelection(null);
     setChartEditorSelection(null);
     undoStackRef.current = [];
@@ -739,6 +759,7 @@ function TemplateV2KonvaSlideComponent({
       clearTableCellSelection();
       clearTableCellEditing();
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       setChartEditorSelection(null);
       if (options?.clearActiveSurface) {
@@ -887,6 +908,13 @@ function TemplateV2KonvaSlideComponent({
       );
       selectionRef.current = resolvedSelection;
       setSelection(resolvedSelection);
+      setVectorEditSelection((current) =>
+        current &&
+        resolvedSelection?.kind === "element" &&
+        keyForSelection(current) === keyForSelection(resolvedSelection)
+          ? current
+          : null,
+      );
       activateSurface(resolvedSelection);
     },
     [activateSurface, clearTableCellSelection],
@@ -901,6 +929,7 @@ function TemplateV2KonvaSlideComponent({
       activateSurface(elementSelection);
       setSelection(elementSelection);
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       selectTableCellSelection(elementSelection, rowIndex, colIndex);
     },
@@ -916,6 +945,7 @@ function TemplateV2KonvaSlideComponent({
       activateSurface(elementSelection);
       setSelection(elementSelection);
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       editTableCellSelection(elementSelection, rowIndex, colIndex);
     },
@@ -1000,14 +1030,16 @@ function TemplateV2KonvaSlideComponent({
     (componentIndex: number, node: Konva.Node) => {
       const dragState = multiComponentDragRef.current;
       if (!dragState || dragState.draggedComponentIndex !== componentIndex) {
-        updateComponent(componentIndex, (current) => ({
-          ...current,
-          position: unclampedPositionFromNodeInParent(
-            node,
-            STAGE_BOX,
-            componentBox(current),
-          ),
-        }));
+        updateComponent(componentIndex, (current) => {
+          const box = componentBox(current);
+          return {
+            ...current,
+            position: {
+              x: node.x() - box.width / 2,
+              y: node.y() - box.height / 2,
+            },
+          };
+        });
         return;
       }
 
@@ -1066,6 +1098,7 @@ function TemplateV2KonvaSlideComponent({
       setSelection(null);
       clearTableCellSelection();
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       closeChartEditor();
     },
@@ -1097,6 +1130,7 @@ function TemplateV2KonvaSlideComponent({
     setSelection(null);
     clearTableCellSelection();
     clearInlineEdit();
+    setVectorEditSelection(null);
     setIconEditorSelection(null);
     closeChartEditor();
   }, [
@@ -1135,6 +1169,7 @@ function TemplateV2KonvaSlideComponent({
       setSelection(result.selection);
       clearTableCellSelection();
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       activateSurface(result.selection);
     },
@@ -1190,6 +1225,7 @@ function TemplateV2KonvaSlideComponent({
       const element = getElementAtSelection(currentUiRef.current, elementSelection);
       if (!element) return;
       clearTableCellEditing();
+      setVectorEditSelection(null);
       const type = readString(element.type);
       const frame = renderedLocalBoxForElementSelection(
         currentUiRef.current,
@@ -1294,6 +1330,7 @@ function TemplateV2KonvaSlideComponent({
       }
       setSelection(current.selection);
       clearInlineEdit();
+      setVectorEditSelection(null);
     },
     [clearInlineEdit, commitUi, editorAnalyticsProps, inlineEdit],
   );
@@ -1520,6 +1557,7 @@ function TemplateV2KonvaSlideComponent({
     setSelection(result.selection);
     clearInlineEdit();
     clearTableCellSelection();
+    setVectorEditSelection(null);
     setIconEditorSelection(null);
   }, [
     clearInlineEdit,
@@ -1563,6 +1601,7 @@ function TemplateV2KonvaSlideComponent({
       setSelection(nextSelection);
       clearTableCellSelection();
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       activateSurface(nextSelection);
     },
@@ -1674,6 +1713,7 @@ function TemplateV2KonvaSlideComponent({
       activateSurface(elementSelection);
       setSelection(elementSelection);
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(elementSelection);
     },
     [activateSurface, clearInlineEdit],
@@ -1703,6 +1743,7 @@ function TemplateV2KonvaSlideComponent({
       activateSurface(elementSelection);
       setSelection(elementSelection);
       clearInlineEdit();
+      setVectorEditSelection(null);
       setIconEditorSelection(null);
       setChartEditorSelection(elementSelection);
     },
@@ -1789,9 +1830,28 @@ function TemplateV2KonvaSlideComponent({
         openChartEditor(elementSelection);
         return;
       }
+      if (isVectorType(type)) {
+        activateSurface(elementSelection);
+        setSelection(elementSelection);
+        clearTableCellSelection();
+        clearTableCellEditing();
+        clearInlineEdit();
+        setIconEditorSelection(null);
+        setChartEditorSelection(null);
+        setVectorEditSelection(elementSelection);
+        return;
+      }
       openInlineEditor(elementSelection);
     },
-    [openChartEditor, openIconEditor, openInlineEditor],
+    [
+      activateSurface,
+      clearInlineEdit,
+      clearTableCellEditing,
+      clearTableCellSelection,
+      openChartEditor,
+      openIconEditor,
+      openInlineEditor,
+    ],
   );
 
   useEffect(() => {
@@ -1837,11 +1897,12 @@ function TemplateV2KonvaSlideComponent({
         insertedComponents as unknown as UnknownRecord[],
         detail.label,
       );
+      const nextSelection = selectionForInsertedComponent(nextUi, nextIndex);
       commitUi(nextUi);
-      setSelection({
-        kind: "component",
-        componentIndex: Math.max(0, nextIndex),
-      });
+      setSelection(nextSelection);
+      setVectorEditSelection(
+        nextSelection?.kind === "element" ? nextSelection : null,
+      );
       detail.handled = true;
     };
 
@@ -1989,7 +2050,9 @@ function TemplateV2KonvaSlideComponent({
               elementPath={[elementIndex]}
               isEditMode={isEditMode}
               editingKey={editingKey}
+              vectorEditingKey={vectorEditingKey}
               selectedTableCell={visibleSelectedTableCell}
+              selectedKey={selectedKey}
               setNodeRef={setSelectionNodeRef}
               onSelect={select}
               onTableCellSelect={selectTableCell}
@@ -2012,7 +2075,9 @@ function TemplateV2KonvaSlideComponent({
                 selectedComponentIndexSet.has(componentIndex)
               }
               editingKey={editingKey}
+              vectorEditingKey={vectorEditingKey}
               selectedTableCell={visibleSelectedTableCell}
+              selectedKey={selectedKey}
               setNodeRef={setSelectionNodeRef}
               onSelect={select}
               onTableCellSelect={selectTableCell}
@@ -2029,15 +2094,17 @@ function TemplateV2KonvaSlideComponent({
           {isEditMode ? (
             <TemplateV2SelectionTransformers
               nodeRefs={nodeRefs}
-              parentComponentKey={inlineEdit ? null : selectedParentComponentKey}
+              parentComponentKey={transformerParentComponentKey}
               selectedKey={selectedKey}
               selectedKeys={selectedKeys}
               selectionKind={selection?.kind ?? null}
               horizontalResizeOnly={horizontalResizeOnly}
+              fullElementTransform={selectedIsVectorElement}
               suppressSelectedOutline={Boolean(
                 selectedTableCell ||
                   inlineEdit ||
-                  readString(selectedElement?.type) === "chart",
+                  readString(selectedElement?.type) === "chart" ||
+                  selectedIsVectorPointEditing,
               )}
             />
           ) : null}

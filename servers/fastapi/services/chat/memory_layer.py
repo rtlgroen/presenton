@@ -52,9 +52,14 @@ BLANK_TEMPLATE_V2_LAYOUT: dict[str, Any] = {
     "components": [],
     "elements": [
         {
-            "type": "rectangle",
-            "position": {"x": 0, "y": 0},
-            "size": {"width": 1280, "height": 720},
+            "type": "vector",
+            "points": [
+                {"x": 0, "y": 0},
+                {"x": 1280, "y": 0},
+                {"x": 1280, "y": 720},
+                {"x": 0, "y": 720},
+            ],
+            "closed": True,
             "fill": {"color": "#FFFFFF"},
             "decorative": True,
         }
@@ -1240,10 +1245,20 @@ class PresentationChatMemoryLayer:
         # Persist the mutated raw layout dict directly. We intentionally avoid
         # round-tripping through pydantic so richer runtime fields on the slide
         # UI (assets, tiptap ids, etc.) are preserved untouched.
+        self._strip_component_sizes(ui)
         slide.ui = ui
         self._sql_session.add(slide)
         await self._sql_session.commit()
         await self._sql_session.refresh(slide)
+
+    @staticmethod
+    def _strip_component_sizes(ui: dict[str, Any]) -> None:
+        components = ui.get("components")
+        if not isinstance(components, list):
+            return
+        for component in components:
+            if isinstance(component, dict):
+                component.pop("size", None)
 
     async def get_slide_ui_elements(
         self, *, index: int, include_full_json: bool = False
@@ -1512,7 +1527,7 @@ class PresentationChatMemoryLayer:
             replacement["id"] = component_id
             replacement.setdefault("description", component.get("description"))
             replacement.setdefault("position", component.get("position"))
-            replacement.setdefault("size", component.get("size"))
+            replacement.pop("size", None)
             component_index = components.index(component)
             components[component_index] = replacement
             component = replacement
@@ -1525,8 +1540,9 @@ class PresentationChatMemoryLayer:
             # Match the editor's corner-resize behavior. Updating only the
             # component frame leaves a standalone chart/image/table at its old
             # size and creates empty space inside the enlarged selection box.
-            self._scale_component_contents_for_resize(component, size)
-        if self._update_ui_box(component, position=position, size=size):
+            if self._scale_component_contents_for_resize(component, size):
+                updated = True
+        if self._update_ui_box(component, position=position):
             updated = True
         if not updated:
             raise ValueError("No component geometry update was provided.")
@@ -1538,7 +1554,7 @@ class PresentationChatMemoryLayer:
             "slide_number": slide.index + 1,
             "component_id": component_id,
             "position": component.get("position"),
-            "size": component.get("size"),
+            "box": self._component_box(component),
             "message": f"Updated component '{component_id}' on slide {slide.index + 1}.",
         }
 
@@ -1620,7 +1636,7 @@ class PresentationChatMemoryLayer:
             for _, component in selected
         ]
         if any(box is None for box in boxes):
-            raise ValueError("Cannot group components without valid position and size.")
+            raise ValueError("Cannot group components without valid derived bounds.")
         typed_boxes = [box for box in boxes if box is not None]
         left = min(box["x"] for box in typed_boxes)
         top = min(box["y"] for box in typed_boxes)
@@ -1663,7 +1679,6 @@ class PresentationChatMemoryLayer:
             "id": group_id,
             "description": "Grouped component",
             "position": {"x": left, "y": top},
-            "size": {"width": right - left, "height": bottom - top},
             "elements": grouped_elements,
         }
 
@@ -1810,13 +1825,62 @@ class PresentationChatMemoryLayer:
     @staticmethod
     def _component_box(component: dict[str, Any]) -> dict[str, float] | None:
         position = component.get("position")
-        size = component.get("size")
-        if not isinstance(position, dict) or not isinstance(size, dict):
+        if not isinstance(position, dict):
             return None
         x = position.get("x")
         y = position.get("y")
-        width = size.get("width")
-        height = size.get("height")
+        content_size = PresentationChatMemoryLayer._component_content_size(component)
+        if content_size is None:
+            return None
+        width = content_size.get("width")
+        height = content_size.get("height")
+        if not all(
+            isinstance(value, (int, float))
+            for value in (x, y, width, height)
+        ):
+            return None
+        if width <= 0 or height <= 0:
+            return None
+        return {
+            "x": float(x),
+            "y": float(y),
+            "width": float(width),
+            "height": float(height),
+        }
+
+    @staticmethod
+    def _component_content_size(component: dict[str, Any]) -> dict[str, float] | None:
+        elements = component.get("elements")
+        if not isinstance(elements, list):
+            return None
+        width = 1.0
+        height = 1.0
+        has_element = False
+        for element in elements:
+            if not isinstance(element, dict):
+                continue
+            box = PresentationChatMemoryLayer._element_local_box(element)
+            if box is None:
+                continue
+            has_element = True
+            width = max(width, box["x"] + box["width"])
+            height = max(height, box["y"] + box["height"])
+        if not has_element:
+            return None
+        return {"width": width, "height": height}
+
+    @staticmethod
+    def _element_local_box(element: dict[str, Any]) -> dict[str, float] | None:
+        element_type = str(element.get("type") or "").lower()
+        if element_type == "vector":
+            return PresentationChatMemoryLayer._vector_element_box(element)
+
+        position = element.get("position")
+        size = element.get("size")
+        x = position.get("x") if isinstance(position, dict) else 0
+        y = position.get("y") if isinstance(position, dict) else 0
+        width = size.get("width") if isinstance(size, dict) else None
+        height = size.get("height") if isinstance(size, dict) else None
         if not all(isinstance(value, (int, float)) for value in (x, y, width, height)):
             return None
         if width <= 0 or height <= 0:
@@ -1828,15 +1892,45 @@ class PresentationChatMemoryLayer:
             "height": float(height),
         }
 
+    @staticmethod
+    def _vector_element_box(element: dict[str, Any]) -> dict[str, float] | None:
+        points = element.get("points")
+        if not isinstance(points, list):
+            return None
+        parsed = []
+        for point in points:
+            if not isinstance(point, dict):
+                continue
+            x = point.get("x")
+            y = point.get("y")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                parsed.append((float(x), float(y)))
+        if not parsed:
+            return None
+        min_x = min(point[0] for point in parsed)
+        min_y = min(point[1] for point in parsed)
+        max_x = max(point[0] for point in parsed)
+        max_y = max(point[1] for point in parsed)
+        stroke = element.get("stroke")
+        stroke_width = 1.0
+        if isinstance(stroke, dict) and isinstance(stroke.get("width"), (int, float)):
+            stroke_width = max(0.0, float(stroke["width"]))
+        return {
+            "x": min_x,
+            "y": min_y,
+            "width": max(max_x - min_x, stroke_width, 1.0),
+            "height": max(max_y - min_y, stroke_width, 1.0),
+        }
+
     @classmethod
     def _scale_component_contents_for_resize(
         cls,
         component: dict[str, Any],
         target_size: dict[str, Any],
-    ) -> None:
-        current_size = component.get("size")
+    ) -> bool:
+        current_size = cls._component_content_size(component)
         if not isinstance(current_size, dict):
-            return
+            return False
         current_width = current_size.get("width")
         current_height = current_size.get("height")
         target_width = target_size.get("width")
@@ -1845,18 +1939,18 @@ class PresentationChatMemoryLayer:
             isinstance(value, (int, float))
             for value in (current_width, current_height, target_width, target_height)
         ):
-            return
+            return False
         if current_width <= 0 or current_height <= 0:
-            return
+            return False
 
         scale_x = float(target_width) / float(current_width)
         scale_y = float(target_height) / float(current_height)
         if abs(scale_x - 1.0) < 0.001 and abs(scale_y - 1.0) < 0.001:
-            return
+            return False
 
         elements = component.get("elements")
         if not isinstance(elements, list):
-            return
+            return False
         font_scale = (scale_x * scale_y) ** 0.5
         for element in elements:
             if isinstance(element, dict):
@@ -1866,6 +1960,7 @@ class PresentationChatMemoryLayer:
                     scale_y=scale_y,
                     font_scale=font_scale,
                 )
+        return True
 
     @classmethod
     def _scale_ui_element_for_component_resize(
@@ -1896,6 +1991,14 @@ class PresentationChatMemoryLayer:
                     "height": max(1.0, float(height) * scale_y),
                 }
 
+        if str(element.get("type") or "").lower() == "vector":
+            points = element.get("points")
+            if isinstance(points, list):
+                element["points"] = [
+                    cls._scale_vector_point(point, scale_x=scale_x, scale_y=scale_y)
+                    for point in points
+                ]
+
         if str(element.get("type") or "").lower() in {"text", "text-list", "table"}:
             cls._scale_font_metrics_for_component_resize(element, font_scale)
 
@@ -1918,6 +2021,25 @@ class PresentationChatMemoryLayer:
                 scale_y=scale_y,
                 font_scale=font_scale,
             )
+
+    @staticmethod
+    def _scale_vector_point(
+        point: Any,
+        *,
+        scale_x: float,
+        scale_y: float,
+    ) -> Any:
+        if not isinstance(point, dict):
+            return point
+        x = point.get("x")
+        y = point.get("y")
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            return point
+        return {
+            **point,
+            "x": float(x) * scale_x,
+            "y": float(y) * scale_y,
+        }
 
     @classmethod
     def _scale_font_metrics_for_component_resize(
@@ -2167,17 +2289,15 @@ class PresentationChatMemoryLayer:
                     "x": float(position_box.get("x") or 128),
                     "y": float(position_box.get("y") or 120),
                 },
-                "size": {
-                    "width": float(size_box.get("width") or 320),
-                    "height": float(size_box.get("height") or 120),
-                },
                 "elements": [new_element],
             }
             new_element["position"] = {"x": 0, "y": 0}
+            new_element["size"] = {
+                "width": float(size_box.get("width") or 320),
+                "height": float(size_box.get("height") or 120),
+            }
             self._normalize_added_visual_block(component)
             self._fit_component_to_stage(component)
-            if isinstance(component.get("size"), dict):
-                new_element["size"] = copy.deepcopy(component["size"])
             component_position = len(components) if insert_index is None else min(max(0, insert_index), len(components))
             components.insert(component_position, component)
             component_id = str(component["id"])
@@ -2376,16 +2496,6 @@ class PresentationChatMemoryLayer:
             return
         defaults = DEFAULT_INSERT_BOXES[kind]
         min_size = defaults["min_size"]
-        if PresentationChatMemoryLayer._box_too_small(
-            component.get("size"),
-            min_size,
-        ):
-            component["position"] = copy.deepcopy(defaults["position"])
-            component["size"] = copy.deepcopy(defaults["size"])
-
-        component_size = component.get("size")
-        if not isinstance(component_size, dict):
-            return
         for element in component.get("elements", []):
             if not isinstance(element, dict) or element.get("type") != kind:
                 continue
@@ -2393,27 +2503,38 @@ class PresentationChatMemoryLayer:
                 element.get("size"),
                 min_size,
             ):
+                component["position"] = copy.deepcopy(defaults["position"])
                 element["position"] = {"x": 0, "y": 0}
-                element["size"] = {
-                    "width": float(component_size["width"]),
-                    "height": float(component_size["height"]),
-                }
+                element["size"] = copy.deepcopy(defaults["size"])
 
     @staticmethod
     def _fit_component_to_stage(component: dict[str, Any]) -> None:
         position = component.get("position")
-        size = component.get("size")
-        if not isinstance(position, dict) or not isinstance(size, dict):
+        box = PresentationChatMemoryLayer._component_box(component)
+        if not isinstance(position, dict) or box is None:
             return
         x = position.get("x")
         y = position.get("y")
-        width = size.get("width")
-        height = size.get("height")
+        width = box.get("width")
+        height = box.get("height")
         if not all(isinstance(value, (int, float)) for value in (x, y, width, height)):
             return
-        width = min(max(1.0, float(width)), SLIDE_STAGE_WIDTH)
-        height = min(max(1.0, float(height)), SLIDE_STAGE_HEIGHT)
-        component["size"] = {"width": width, "height": height}
+        width = max(1.0, float(width))
+        height = max(1.0, float(height))
+        scale = min(SLIDE_STAGE_WIDTH / width, SLIDE_STAGE_HEIGHT / height, 1.0)
+        if scale < 1.0:
+            PresentationChatMemoryLayer._scale_component_contents_for_resize(
+                component,
+                {
+                    "width": width * scale,
+                    "height": height * scale,
+                },
+            )
+            box = PresentationChatMemoryLayer._component_box(component)
+            if box is None:
+                return
+            width = min(max(1.0, float(box["width"])), SLIDE_STAGE_WIDTH)
+            height = min(max(1.0, float(box["height"])), SLIDE_STAGE_HEIGHT)
         component["position"] = {
             "x": min(max(0.0, float(x)), SLIDE_STAGE_WIDTH - width),
             "y": min(max(0.0, float(y)), SLIDE_STAGE_HEIGHT - height),
@@ -2868,7 +2989,7 @@ class PresentationChatMemoryLayer:
             "component_id": component_id,
             "description": description,
             "position": copy.deepcopy(component.get("position")),
-            "size": copy.deepcopy(component.get("size")),
+            "box": copy.deepcopy(cls._component_box(component)),
             "element_count": len(component.get("elements", []))
             if isinstance(component.get("elements"), list)
             else 0,
@@ -3490,7 +3611,12 @@ class PresentationChatMemoryLayer:
         if element_type == "image":
             asset_url = cls._template_v2_asset_url(value)
             if asset_url:
+                from services.chat.slide_ui_helpers import (
+                    _normalize_generated_image_fit,
+                )
+
                 element["data"] = asset_url
+                _normalize_generated_image_fit(element, asset_url)
                 prompt = cls._template_v2_asset_prompt(
                     value,
                     element.get("is_icon") is True,

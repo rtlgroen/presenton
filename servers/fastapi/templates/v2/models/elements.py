@@ -61,6 +61,15 @@ class ImageFit(str, Enum):
     FILL = "fill"
 
 
+class IconType(str, Enum):
+    BOLD = "bold"
+    DUOTONE = "duotone"
+    FILL = "fill"
+    LIGHT = "light"
+    REGULAR = "regular"
+    THIN = "thin"
+
+
 class ChartType(str, Enum):
     BAR = "bar"
     HORIZONTAL_BAR = "horizontal_bar"
@@ -208,6 +217,7 @@ class Image(BaseModel):  # Konva Image
     name: str
     prompt: Optional[str] = None
     is_icon: bool
+    icon_type: Optional[IconType] = None
 
 
 class TextList(BaseModel):  # Konva Group
@@ -252,33 +262,22 @@ class Table(BaseModel):
     min_rows: int
 
 
-class Rectangle(BaseModel):
-    type: Literal["rectangle"]
-    position: Optional[Position] = None
-    size: Optional[Size] = None
+class VectorCurve(BaseModel):
+    type: Literal["smooth"]
+    tension: Optional[float] = Field(default=None, ge=0, le=1)
+    segments: Optional[int] = Field(default=16, ge=1, le=96)
+
+
+class Vector(BaseModel):
+    type: Literal["vector"]
+    points: list[Position] = Field(min_length=2)
+    closed: Optional[bool] = None
+    curve: Optional[VectorCurve] = None
+    corner_radii: Optional[list[Annotated[float, Field(ge=0)]]] = None
     rotation: Optional[float] = None
+    opacity: Optional[float] = None
     fill: Optional[Fill] = None
     stroke: Optional[Stroke] = None
-    border_radius: Optional[BorderRadius] = None
-    shadow: Optional[Shadow] = None
-
-
-class Ellipse(BaseModel):
-    type: Literal["ellipse"]
-    position: Optional[Position] = None
-    size: Optional[Size] = None
-    rotation: Optional[float] = None
-    fill: Optional[Fill] = None
-    stroke: Optional[Stroke] = None
-    shadow: Optional[Shadow] = None
-
-
-class Line(BaseModel):
-    type: Literal["line"]
-    position: Optional[Position] = None
-    size: Optional[Size] = None
-    rotation: Optional[float] = None
-    stroke: Stroke
     shadow: Optional[Shadow] = None
 
 
@@ -424,9 +423,7 @@ SlideElement: TypeAlias = Annotated[
         Image,
         TextList,
         Table,
-        Rectangle,
-        Ellipse,
-        Line,
+        Vector,
         Chart,
         Infographic,
         Flex,
@@ -448,7 +445,6 @@ __all__ = [
     "ChartSeries",
     "ChartType",
     "Container",
-    "Ellipse",
     "Fill",
     "Flex",
     "FlexDirection",
@@ -457,14 +453,13 @@ __all__ = [
     "HorizontalAlignment",
     "Image",
     "ImageFit",
+    "IconType",
     "Infographic",
     "InfographicType",
     "LayoutAlignment",
-    "Line",
     "Marker",
     "Padding",
     "Position",
-    "Rectangle",
     "Shadow",
     "Size",
     "SlideElement",
@@ -476,4 +471,6 @@ __all__ = [
     "TextList",
     "TextRun",
     "VerticalAlignment",
+    "Vector",
+    "VectorCurve",
 ]

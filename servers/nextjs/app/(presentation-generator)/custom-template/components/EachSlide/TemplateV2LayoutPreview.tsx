@@ -134,8 +134,8 @@ function renderElement(
   if (!element || typeof element !== "object") return null;
 
   switch (element.type) {
-    case "rectangle":
-      return renderRectangle(element, key, mode);
+    case "vector":
+      return renderPolygon(element, key, mode);
     case "image":
       return renderImage(element, key, mode);
     case "text":
@@ -163,19 +163,51 @@ function renderElement(
   }
 }
 
-function renderRectangle(
+function renderPolygon(
   element: TemplateV2Element,
   key: string,
   mode: RenderMode
 ) {
+  const points = polygonPoints(element);
+  if (points.length < 2) return null;
+
+  const box = polygonBox(element, points);
+  const closed = polygonClosed(element, points);
+  const fill = readRecord(element.fill);
+  const stroke = readRecord(element.stroke);
+  const fillColor = closed ? readString(fill.color) : null;
+  const strokeColor = readString(stroke.color) ?? (!closed ? "#000000" : null);
+  const strokeWidth = Math.max(0, readNumber(stroke.width) ?? 1);
+  if (!fillColor && !(strokeColor && strokeWidth > 0)) return null;
+
+  const pointString = points
+    .map((point) => `${point.x - box.x},${point.y - box.y}`)
+    .join(" ");
+  const ShapeTag = closed ? "polygon" : "polyline";
   return (
     <div
       key={key}
       style={{
-        ...frameStyle(element, mode),
-        ...boxStyle(element),
+        ...frameStyleFromBox(box, mode),
+        overflow: "visible",
+        transform: transformStyle(element),
       }}
-    />
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${box.width ?? 1} ${box.height ?? 1}`}
+        preserveAspectRatio="none"
+        style={{ display: "block", overflow: "visible" }}
+      >
+        <ShapeTag
+          points={pointString}
+          fill={closed ? fillColor ?? "none" : "none"}
+          stroke={strokeColor ?? undefined}
+          strokeWidth={strokeColor ? strokeWidth : undefined}
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -191,9 +223,15 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
   const flipH = readBoolean(element.flip_h);
   const flipV = readBoolean(element.flip_v);
   const cropScale = imageCropScale(element);
-  const transform = imageTransform(flipH, flipV, cropScale);
-  const transformOrigin =
-    cropScale > 1 ? objectPosition ?? "center" : undefined;
+  const frameTransform = imageFlipTransform(flipH, flipV);
+  const cropTransform = imageCropTransform(cropScale);
+  const cropTransformOrigin = cropScale > 1 ? objectPosition ?? "center" : undefined;
+  const imageTransform = clipPath
+    ? cropTransform
+    : imageTransformValue(frameTransform, cropTransform);
+  const imageTransformOrigin = clipPath
+    ? cropTransformOrigin
+    : cropTransformOrigin ?? (frameTransform ? "center" : undefined);
 
   return (
     <div
@@ -202,6 +240,10 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
         ...frameStyle(element, mode),
         borderRadius,
         overflow: "hidden",
+        clipPath,
+        transform: clipPath ? frameTransform : undefined,
+        transformOrigin: clipPath && frameTransform ? "center" : undefined,
+        WebkitClipPath: clipPath,
       }}
     >
       <img
@@ -211,12 +253,10 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
         style={{
           display: "block",
           height: "100%",
-          clipPath,
           objectFit: fit,
           objectPosition,
-          transform,
-          transformOrigin,
-          WebkitClipPath: clipPath,
+          transform: imageTransform,
+          transformOrigin: imageTransformOrigin,
           width: "100%",
         }}
       />
@@ -233,9 +273,8 @@ function renderImage(element: TemplateV2Element, key: string, mode: RenderMode) 
             maskSize: fit === "fill" ? "100% 100%" : fit,
             pointerEvents: "none",
             position: "absolute",
-            transform,
-            transformOrigin,
-            WebkitClipPath: clipPath,
+            transform: imageTransform,
+            transformOrigin: imageTransformOrigin,
             WebkitMaskImage: `url(${resolvedSrc})`,
             WebkitMaskPosition: objectPosition ?? "center",
             WebkitMaskRepeat: "no-repeat",
@@ -542,6 +581,10 @@ function frameStyle(
   fallbackSize?: { width: number; height: number }
 ): React.CSSProperties {
   const box = readBox(element, fallbackSize);
+  return frameStyleFromBox(box, mode);
+}
+
+function frameStyleFromBox(box: Box, mode: RenderMode): React.CSSProperties {
   const style: React.CSSProperties = {
     boxSizing: "border-box",
     minHeight: 0,
@@ -566,6 +609,9 @@ function readBox(
 ): Box {
   const position = readRecord(element.position);
   const size = readRecord(element.size);
+  if (element.type === "vector") {
+    return polygonBox(element, polygonPoints(element));
+  }
   return {
     x: readNumber(position.x) ?? 0,
     y: readNumber(position.y) ?? 0,
@@ -587,6 +633,198 @@ function childrenBounds(children: TemplateV2Element[]): { width: number; height:
     },
     { width: 1, height: 1 }
   );
+}
+
+type PreviewPoint = { x: number; y: number };
+
+function polygonSourcePoints(element: TemplateV2Element): PreviewPoint[] {
+  return readPointArray(element.points);
+}
+
+function polygonPoints(element: TemplateV2Element): PreviewPoint[] {
+  const points = polygonSourcePoints(element);
+  const closed = polygonClosed(element, points);
+  const rounded = closed
+    ? roundedPolygonPoints(points, cornerRadii(element, points.length))
+    : points;
+  const curve = readRecord(element.curve);
+  const rawType = readString(curve.type)?.trim().toLowerCase();
+  const segments = Math.max(1, Math.min(96, Math.round(readNumber(curve.segments) ?? 16)));
+  if (rawType === "smooth") {
+    return sampleSmoothCurve(
+      rounded,
+      closed,
+      Math.max(
+        0,
+        Math.min(
+          1,
+          readNumber(curve.tension) ?? 0.4,
+        ),
+      ),
+      segments,
+    );
+  }
+  return rounded;
+}
+
+function readPointArray(value: unknown): PreviewPoint[] {
+  return Array.isArray(value)
+    ? value
+        .map((point) => {
+          const record = readRecord(point);
+          const x = readNumber(record.x);
+          const y = readNumber(record.y);
+          return x != null && y != null ? { x, y } : null;
+        })
+        .filter((point): point is PreviewPoint => point != null)
+    : [];
+}
+
+function cornerRadii(element: TemplateV2Element, pointCount: number): number[] {
+  const value = element.corner_radii ?? element.cornerRadii;
+  return Array.isArray(value)
+    ? value
+        .map(readNumber)
+        .filter((item): item is number => item != null)
+        .slice(0, pointCount)
+        .map((item) => Math.max(0, item))
+    : [];
+}
+
+function pointAt(points: PreviewPoint[], index: number) {
+  return points[((index % points.length) + points.length) % points.length];
+}
+
+function lerpPoint(start: PreviewPoint, end: PreviewPoint, t: number): PreviewPoint {
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
+function roundedPolygonPoints(points: PreviewPoint[], radii: number[], segments = 8) {
+  if (points.length < 3 || radii.length === 0) return points;
+  const rounded: PreviewPoint[] = [];
+  points.forEach((point, index) => {
+    const previous = pointAt(points, index - 1);
+    const next = pointAt(points, index + 1);
+    const prevDistance = Math.hypot(point.x - previous.x, point.y - previous.y);
+    const nextDistance = Math.hypot(point.x - next.x, point.y - next.y);
+    const radius = Math.min(radii[index] ?? 0, prevDistance / 2, nextDistance / 2);
+    if (radius <= 0) {
+      rounded.push(point);
+      return;
+    }
+    const from = lerpPoint(point, previous, radius / prevDistance);
+    const to = lerpPoint(point, next, radius / nextDistance);
+    rounded.push(from);
+    for (let step = 1; step < segments; step += 1) {
+      const t = step / segments;
+      rounded.push({
+        x: (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * point.x + t * t * to.x,
+        y: (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * point.y + t * t * to.y,
+      });
+    }
+    rounded.push(to);
+  });
+  return rounded;
+}
+
+function hermitePoint(
+  start: PreviewPoint,
+  end: PreviewPoint,
+  startTangent: PreviewPoint,
+  endTangent: PreviewPoint,
+  t: number,
+): PreviewPoint {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  return {
+    x:
+      h00 * start.x +
+      h10 * startTangent.x +
+      h01 * end.x +
+      h11 * endTangent.x,
+    y:
+      h00 * start.y +
+      h10 * startTangent.y +
+      h01 * end.y +
+      h11 * endTangent.y,
+  };
+}
+
+function sampleSmoothCurve(
+  points: PreviewPoint[],
+  closed: boolean,
+  tension: number,
+  segments: number,
+) {
+  if (points.length < 3 || tension <= 0) return points;
+  const sampled: PreviewPoint[] = [];
+  const segmentCount = closed ? points.length : points.length - 1;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const p0 = closed ? pointAt(points, index - 1) : points[Math.max(0, index - 1)];
+    const p1 = pointAt(points, index);
+    const p2 = pointAt(points, index + 1);
+    const p3 = closed ? pointAt(points, index + 2) : points[Math.min(points.length - 1, index + 2)];
+    const tangentScale = tension * 0.5;
+    const startTangent = {
+      x: (p2.x - p0.x) * tangentScale,
+      y: (p2.y - p0.y) * tangentScale,
+    };
+    const endTangent = {
+      x: (p3.x - p1.x) * tangentScale,
+      y: (p3.y - p1.y) * tangentScale,
+    };
+    if (index === 0) sampled.push(p1);
+    for (let step = 1; step <= segments; step += 1) {
+      sampled.push({
+        ...hermitePoint(p1, p2, startTangent, endTangent, step / segments),
+      });
+    }
+  }
+  return sampled;
+}
+
+function polygonClosed(
+  element: TemplateV2Element,
+  points: Array<{ x: number; y: number }>
+) {
+  if (element.closed === false || element.closed === "false" || element.closed === "0") {
+    return false;
+  }
+  if (element.closed === true || element.closed === "true" || element.closed === "1") {
+    return true;
+  }
+  return points.length > 2;
+}
+
+function polygonBox(
+  element: TemplateV2Element,
+  points: Array<{ x: number; y: number }>
+): Box {
+  if (!points.length) return { x: 0, y: 0, width: 1, height: 1 };
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const stroke = readRecord(element.stroke);
+  const strokeWidth = Math.max(1, readNumber(stroke.width) ?? 1);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(maxX - minX, strokeWidth, 1),
+    height: Math.max(maxY - minY, strokeWidth, 1),
+  };
+}
+
+function transformStyle(element: TemplateV2Element) {
+  const rotation = readNumber(element.rotation);
+  return rotation ? `rotate(${rotation}deg)` : undefined;
 }
 
 function boxStyle(element: TemplateV2Element): React.CSSProperties {
@@ -809,13 +1047,23 @@ function imageCropScale(element: TemplateV2Element) {
   return Math.min(6, Math.max(1, value));
 }
 
-function imageTransform(flipH: boolean, flipV: boolean, cropScale: number) {
+function imageFlipTransform(flipH: boolean, flipV: boolean) {
   const transforms = [
     flipH ? "scaleX(-1)" : "",
     flipV ? "scaleY(-1)" : "",
-    cropScale > 1 ? `scale(${cropScale})` : "",
   ].filter(Boolean);
   return transforms.length ? transforms.join(" ") : undefined;
+}
+
+function imageCropTransform(cropScale: number) {
+  return cropScale > 1 ? `scale(${cropScale})` : undefined;
+}
+
+function imageTransformValue(
+  frameTransform: string | undefined,
+  cropTransform: string | undefined,
+) {
+  return [frameTransform, cropTransform].filter(Boolean).join(" ") || undefined;
 }
 
 function horizontalAlign(value: string | null) {

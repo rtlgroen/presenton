@@ -712,8 +712,8 @@ class UpdateSlideComponentInput(OpenAIStrictSchemaModel):
     size: SlideElementSizeInput | None = Field(
         ...,
         description=(
-            "Optional component size update for resize/shrink/grow requests. "
-            "The component's contained elements scale with this size."
+            "Optional target bounds for resize/shrink/grow requests. The component's "
+            "contained elements scale to these bounds; component JSON does not store size."
         ),
     )
 
@@ -772,9 +772,10 @@ class AddSlideComponentInput(OpenAIStrictSchemaModel):
         description=(
             "A JSON-serialized component object to add to the slide: "
             '{"id": "...", "description": "...", "position": {"x": 128, "y": 120}, '
-            '"size": {"width": 1024, "height": 410}, "elements": [ ... ]}. '
+            '"elements": [ ... ]}. Do not include component size; child element '
+            "bounds define the component bounds. "
             "Use 1280 x 720 stage pixels, not normalized 0-1 values, and keep "
-            "position/size fully inside that visible window. "
+            "position and derived bounds fully inside that visible window. "
             "Copy the shape of an existing component from getAvailableBlocks or "
             "getSlideAtIndex(includeFullContent=true)."
         ),
@@ -843,8 +844,8 @@ class UpdateComponentInput(OpenAIStrictSchemaModel):
     size: SlideElementSizeInput | None = Field(
         ...,
         description=(
-            "Optional component size update for resize/shrink/grow requests. "
-            "The component's contained elements scale with this size."
+            "Optional target bounds for resize/shrink/grow requests. The component's "
+            "contained elements scale to these bounds; component JSON does not store size."
         ),
     )
     component: str | None = Field(

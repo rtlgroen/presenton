@@ -48,6 +48,11 @@ interface Box {
   height?: number;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
 interface FontFaceDefinition {
   family: string;
   url: string;
@@ -76,6 +81,7 @@ const ELEMENT_TYPES = new Set([
   "image",
   "text-list",
   "table",
+  "vector",
   "rectangle",
   "ellipse",
   "line",
@@ -418,12 +424,16 @@ function renderItem(item: JsonRecord, mode: RenderMode): string {
   }
 
   switch (readString(item.type)) {
+    case "vector":
+      return renderPolygon(item, mode);
     case "rectangle":
-      return `<div style="${frameAndBoxStyle(item, mode)}"></div>`;
+      return renderPolygon(item, mode);
     case "ellipse":
-      return `<div style="${frameAndBoxStyle(item, mode, "border-radius:50%")}"></div>`;
+      return `<div style="${frameStyle(item, mode)}${boxStyle(
+        item
+      )}border-radius:50%"></div>`;
     case "line":
-      return renderLine(item, mode);
+      return renderPolygon(item, mode);
     case "svg":
       return renderSvg(item, mode);
     case "image":
@@ -478,6 +488,13 @@ function renderImage(item: JsonRecord, mode: RenderMode): string {
     )}${clipPath}overflow:hidden;"><img alt="" src="${escapeAttribute(
       source
     )}" style="display:block;max-width:none;max-height:none;height:100%;width:100%;object-fit:${fit};${focusStyle}${cropTransformStyle}"></div>`;
+  }
+  if (clipPath) {
+    return `<div style="${frameStyle(item, mode)}${boxStyle(
+      item
+    )}${clipPath}overflow:hidden;"><img alt="" src="${escapeAttribute(
+      source
+    )}" style="display:block;max-width:none;max-height:none;height:100%;width:100%;object-fit:${fit};${focusStyle}"></div>`;
   }
   return `<img alt="" src="${escapeAttribute(source)}" style="${frameStyle(
     item,
@@ -685,49 +702,47 @@ function renderGroup(item: JsonRecord, mode: RenderMode): string {
   )}overflow:visible">${content}</div>`;
 }
 
-function renderLine(item: JsonRecord, mode: RenderMode): string {
-  const box = readBox(item);
+function renderPolygon(item: JsonRecord, mode: RenderMode): string {
+  const points = polygonPoints(item);
+  if (points.length < 2) return "";
+
+  const box = polygonBox(item, points);
+  const closed = polygonClosed(item, points);
   const stroke = readRecord(item.stroke);
-  const color = colorWithOpacity(
-    readString(stroke.color) ?? "#000000",
+  const fill = readRecord(item.fill);
+  const fillColor = closed
+    ? colorWithOpacity(readString(fill.color) ?? "", readNumber(fill.opacity))
+    : "";
+  const strokeWidth = Math.max(0, readNumber(stroke.width) ?? 1);
+  const strokeColor = colorWithOpacity(
+    readString(stroke.color) ?? (!closed ? "#000000" : ""),
     readNumber(stroke.opacity)
   );
-  const width = Math.max(0, readNumber(stroke.width) ?? 1);
-  const deltaX = box.width ?? 0;
-  const deltaY = box.height ?? 0;
-  const left = box.x + Math.min(0, deltaX);
-  const top = box.y + Math.min(0, deltaY);
-  const frameWidth = Math.max(Math.abs(deltaX), width, 1);
-  const frameHeight = Math.max(Math.abs(deltaY), width, 1);
-  const x1 = deltaX < 0 ? frameWidth : 0;
-  const y1 = deltaY < 0 ? frameHeight : 0;
-  const x2 = deltaX < 0 ? 0 : Math.abs(deltaX);
-  const y2 = deltaY < 0 ? 0 : Math.abs(deltaY);
-  const frame =
-    mode === "absolute"
-      ? `box-sizing:border-box;min-height:0;min-width:0;position:absolute;left:${cssNumber(
-        left
-      )}px;top:${cssNumber(top)}px;width:${cssNumber(
-        frameWidth
-      )}px;height:${cssNumber(frameHeight)}px;`
-      : `box-sizing:border-box;min-height:0;min-width:0;position:relative;width:${cssNumber(
-        frameWidth
-      )}px;height:${cssNumber(frameHeight)}px;`;
+  if (!fillColor && !(strokeColor && strokeWidth > 0)) return "";
+
+  const pointString = points
+    .map((point) => `${cssNumber(point.x - box.x)},${cssNumber(point.y - box.y)}`)
+    .join(" ");
   const dash = readArray(stroke.dash)
     .map(readNumber)
     .filter((value): value is number => value != null)
     .join(" ");
-  return `<div style="${frame}${transformStyle(
+  const shape = closed
+    ? `<polygon points="${escapeAttribute(pointString)}"${fillColor ? ` fill="${escapeAttribute(fillColor)}"` : ` fill="none"`}${strokeColor && strokeWidth > 0
+      ? ` stroke="${escapeAttribute(strokeColor)}" stroke-width="${cssNumber(strokeWidth)}"`
+      : ""
+    }${dash ? ` stroke-dasharray="${dash}"` : ""}/>`
+    : `<polyline points="${escapeAttribute(pointString)}" fill="none"${strokeColor && strokeWidth > 0
+      ? ` stroke="${escapeAttribute(strokeColor)}" stroke-width="${cssNumber(strokeWidth)}"`
+      : ""
+    }${dash ? ` stroke-dasharray="${dash}"` : ""}/>`;
+  return `<div style="${frameStyleFromBox(box, mode)}${transformStyle(
     item
   )}overflow:visible"><svg width="100%" height="100%" viewBox="0 0 ${cssNumber(
-    frameWidth
-  )} ${cssNumber(frameHeight)}" preserveAspectRatio="none" style="display:block;overflow:visible"><line x1="${cssNumber(
-    x1
-  )}" y1="${cssNumber(y1)}" x2="${cssNumber(x2)}" y2="${cssNumber(
-    y2
-  )}" stroke="${escapeAttribute(
-    color
-  )}" stroke-width="${cssNumber(width)}"${dash ? ` stroke-dasharray="${dash}"` : ""}/></svg></div>`;
+    box.width ?? 1
+  )} ${cssNumber(
+    box.height ?? 1
+  )}" preserveAspectRatio="none" style="display:block;overflow:visible">${shape}</svg></div>`;
 }
 
 function renderSvg(item: JsonRecord, mode: RenderMode): string {
@@ -1683,16 +1698,16 @@ if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded"
 `;
 }
 
-function frameAndBoxStyle(item: JsonRecord, mode: RenderMode, extra = ""): string {
-  return `${frameStyle(item, mode)}${boxStyle(item)}${extra}`;
-}
-
 function frameStyle(
   item: JsonRecord,
   mode: RenderMode,
   fallbackSize?: { width: number; height: number }
 ): string {
   const box = readBox(item, fallbackSize);
+  return frameStyleFromBox(box, mode);
+}
+
+function frameStyleFromBox(box: Box, mode: RenderMode): string {
   let style = `box-sizing:border-box;min-height:0;min-width:0;position:${mode === "absolute" ? "absolute" : "relative"
     };`;
   if (mode === "absolute") {
@@ -1709,6 +1724,14 @@ function readBox(
 ): Box {
   const position = readRecord(item.position);
   const size = readRecord(item.size);
+  const type = readString(item.type);
+  if (
+    type === "vector" ||
+    type === "line" ||
+    type === "rectangle"
+  ) {
+    return polygonBox(item, polygonPoints(item));
+  }
   return {
     x: readNumber(position.x) ?? 0,
     y: readNumber(position.y) ?? 0,
@@ -1730,6 +1753,196 @@ function childrenBounds(
     },
     { width: 1, height: 1 }
   );
+}
+
+function polygonSourcePoints(item: JsonRecord): Point[] {
+  const type = readString(item.type);
+  if (type === "line") {
+    const position = readRecord(item.position);
+    const size = readRecord(item.size);
+    const x = readNumber(position.x) ?? 0;
+    const y = readNumber(position.y) ?? 0;
+    return [
+      { x, y },
+      {
+        x: x + (readNumber(size.width) ?? 0),
+        y: y + (readNumber(size.height) ?? 0),
+      },
+    ];
+  }
+
+  if (type === "rectangle") {
+    const box = readBox({ ...item, type: "__legacy_rectangle_box" });
+    const width = box.width ?? 1;
+    const height = box.height ?? 1;
+    return [
+      { x: box.x, y: box.y },
+      { x: box.x + width, y: box.y },
+      { x: box.x + width, y: box.y + height },
+      { x: box.x, y: box.y + height },
+    ];
+  }
+
+  return readArray(item.points)
+    .map(readRecord)
+    .map((point) => {
+      const x = readNumber(point.x);
+      const y = readNumber(point.y);
+      return x != null && y != null ? { x, y } : null;
+    })
+    .filter((point): point is Point => point != null);
+}
+
+function polygonPoints(item: JsonRecord): Point[] {
+  const points = polygonSourcePoints(item);
+  const closed = polygonClosed(item, points);
+  const rounded = closed
+    ? roundedPolygonPoints(points, cornerRadii(item, points.length))
+    : points;
+  const curve = curveSettings(item);
+  if (!curve) return rounded;
+  return sampleSmoothCurve(rounded, closed, curve.tension, curve.segments);
+}
+
+function cornerRadii(item: JsonRecord, pointCount: number): number[] {
+  return readArray(item.corner_radii ?? item.cornerRadii)
+    .map(readNumber)
+    .filter((value): value is number => value != null)
+    .slice(0, pointCount)
+    .map((value) => Math.max(0, value));
+}
+
+function pointAt(points: Point[], index: number) {
+  return points[((index % points.length) + points.length) % points.length];
+}
+
+function lerpPoint(start: Point, end: Point, t: number): Point {
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
+function roundedPolygonPoints(points: Point[], radii: number[], segments = 8): Point[] {
+  if (points.length < 3 || radii.length === 0) return points;
+  const rounded: Point[] = [];
+  points.forEach((point, index) => {
+    const radius = radii[index] ?? 0;
+    const previous = pointAt(points, index - 1);
+    const next = pointAt(points, index + 1);
+    const prevDistance = Math.hypot(point.x - previous.x, point.y - previous.y);
+    const nextDistance = Math.hypot(point.x - next.x, point.y - next.y);
+    const safeRadius = Math.min(radius, prevDistance / 2, nextDistance / 2);
+    if (safeRadius <= 0) {
+      rounded.push(point);
+      return;
+    }
+    const from = lerpPoint(point, previous, safeRadius / prevDistance);
+    const to = lerpPoint(point, next, safeRadius / nextDistance);
+    rounded.push(from);
+    for (let step = 1; step < segments; step += 1) {
+      const t = step / segments;
+      rounded.push({
+        x: (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * point.x + t * t * to.x,
+        y: (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * point.y + t * t * to.y,
+      });
+    }
+    rounded.push(to);
+  });
+  return rounded;
+}
+
+function curveSettings(item: JsonRecord) {
+  const curve = readRecordOrNull(item.curve);
+  if (!curve) return null;
+  const rawType = readString(curve.type)?.trim().toLowerCase();
+  if (rawType !== "smooth") return null;
+  return {
+    type: "smooth",
+    tension: clamp(readNumber(curve.tension) ?? 0.4, 0, 1),
+    segments: Math.max(1, Math.min(96, Math.round(readNumber(curve.segments) ?? 16))),
+  };
+}
+
+function hermitePoint(
+  start: Point,
+  end: Point,
+  startTangent: Point,
+  endTangent: Point,
+  t: number
+): Point {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  return {
+    x:
+      h00 * start.x +
+      h10 * startTangent.x +
+      h01 * end.x +
+      h11 * endTangent.x,
+    y:
+      h00 * start.y +
+      h10 * startTangent.y +
+      h01 * end.y +
+      h11 * endTangent.y,
+  };
+}
+
+function sampleSmoothCurve(points: Point[], closed: boolean, tension: number, segments: number): Point[] {
+  if (points.length < 3 || tension <= 0) return points;
+  const sampled: Point[] = [];
+  const segmentCount = closed ? points.length : points.length - 1;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const p0 = closed ? pointAt(points, index - 1) : points[Math.max(0, index - 1)];
+    const p1 = pointAt(points, index);
+    const p2 = pointAt(points, index + 1);
+    const p3 = closed ? pointAt(points, index + 2) : points[Math.min(points.length - 1, index + 2)];
+    if (index === 0) sampled.push(p1);
+    const tangentScale = tension * 0.5;
+    const startTangent = {
+      x: (p2.x - p0.x) * tangentScale,
+      y: (p2.y - p0.y) * tangentScale,
+    };
+    const endTangent = {
+      x: (p3.x - p1.x) * tangentScale,
+      y: (p3.y - p1.y) * tangentScale,
+    };
+    for (let step = 1; step <= segments; step += 1) {
+      sampled.push(
+        hermitePoint(p1, p2, startTangent, endTangent, step / segments)
+      );
+    }
+  }
+  return sampled;
+}
+
+function polygonClosed(item: JsonRecord, points: Point[]): boolean {
+  const value = item.closed;
+  if (value === false || value === "false" || value === "0") return false;
+  if (value === true || value === "true" || value === "1") return true;
+  return points.length > 2;
+}
+
+function polygonBox(item: JsonRecord, points: Point[]): Box {
+  if (points.length === 0) {
+    return { x: 0, y: 0, width: 1, height: 1 };
+  }
+
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  const stroke = readRecord(item.stroke);
+  const strokeWidth = Math.max(1, readNumber(stroke.width) ?? 1);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(maxX - minX, strokeWidth, 1),
+    height: Math.max(maxY - minY, strokeWidth, 1),
+  };
 }
 
 function boxStyle(item: JsonRecord): string {
@@ -1858,6 +2071,7 @@ function tableCellStyle(
   const background = fillColor
     ? colorWithOpacity(fillColor, readNumber(fill.opacity))
     : "transparent";
+  const forceHeaderBold = header && !tableCellHasExplicitBold(cellValue);
   let style = `${fontStyle(cellFont)}display:flex;align-items:center;justify-content:${horizontalAlign(
     alignment
   )};border:${cssNumber(
@@ -1867,7 +2081,7 @@ function tableCellStyle(
   )};min-height:0;min-width:0;overflow:hidden;padding:4px 6px;text-align:${textAlign(
     alignment
   )};vertical-align:middle;white-space:pre-wrap;word-break:break-word;`;
-  if (header && !readBoolean(cellFont.bold)) style += "font-weight:700;";
+  if (forceHeaderBold && !readBoolean(cellFont.bold)) style += "font-weight:700;";
   style += `background:${escapeCssColor(background)};`;
   return style;
 }
@@ -1892,6 +2106,21 @@ function tableCellFont(cellValue: unknown, tableFont: JsonRecord): JsonRecord {
   };
 }
 
+function tableCellHasExplicitBold(cellValue: unknown): boolean {
+  if (typeof cellValue === "string" || typeof cellValue === "number") {
+    return false;
+  }
+
+  const cell = readRecord(cellValue);
+  const firstRun = readRecord(readArray(cell.runs)[0]);
+  const text = readRecord(cell.text);
+  return (
+    Object.prototype.hasOwnProperty.call(readRecord(cell.font), "bold") ||
+    Object.prototype.hasOwnProperty.call(readRecord(firstRun.font), "bold") ||
+    Object.prototype.hasOwnProperty.call(readRecord(text.font), "bold")
+  );
+}
+
 function cellText(
   cellValue: unknown,
   tableFont: JsonRecord,
@@ -1906,6 +2135,8 @@ function cellText(
   const fillColor = readString(fill.color)
     ? colorWithOpacity(readString(fill.color) ?? "", readNumber(fill.opacity))
     : null;
+  const forceHeaderBold = header && !tableCellHasExplicitBold(cellValue);
+  const headerFontPatch = forceHeaderBold ? { bold: true } : {};
   const directRuns = readArray(cell.runs).map(readRecord);
   if (directRuns.length) {
     const runs = normalizeRunsForHtml(
@@ -1922,7 +2153,7 @@ function cellText(
             ...tableFont,
             ...readRecord(cell.font),
             ...readRecord(run.font),
-            ...(header ? { bold: true } : {}),
+            ...headerFontPatch,
           },
           fillColor,
           header
@@ -1938,7 +2169,7 @@ function cellText(
   if (typeof text === "string") {
     return `<span style="${fontStyle(
       readableTableFont(
-        { ...tableFont, ...readRecord(cell.font), ...(header ? { bold: true } : {}) },
+        { ...tableFont, ...readRecord(cell.font), ...headerFontPatch },
         fillColor,
         header
       )
@@ -1955,7 +2186,7 @@ function cellText(
             ...readRecord(cell.font),
             ...readRecord(textRecord.font),
             ...readRecord(run.font),
-            ...(header ? { bold: true } : {}),
+            ...headerFontPatch,
           },
           fillColor,
           header
@@ -1968,7 +2199,7 @@ function cellText(
   }
   return `<span style="${fontStyle(
     readableTableFont(
-      { ...tableFont, ...readRecord(cell.font), ...(header ? { bold: true } : {}) },
+      { ...tableFont, ...readRecord(cell.font), ...headerFontPatch },
       fillColor,
       header
     )

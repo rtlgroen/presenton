@@ -4,24 +4,30 @@ import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   AlignCenter,
   AreaChart,
+  ArrowRight,
   BarChart3,
+  ChartNoAxesGantt,
   ChevronDown,
   Circle,
   Columns2,
+  Diamond,
+  Gauge,
   Grid3X3,
   GripVertical,
+  Hexagon,
   Image,
   LineChart,
   List,
   ListOrdered,
   Minus,
+  Pentagon,
   PieChart,
   Quote,
   RectangleHorizontal,
   Rows3,
-  Send,
   Shapes,
   Table2,
+  Triangle,
   Type,
   ListMinus,
   Search,
@@ -36,6 +42,7 @@ import {
   createChartInsertElements,
   createElementInsertElements,
   createImageInsertContent,
+  createInfographicInsertElements,
   createTableInsertElements,
   createTextInsertElements,
   type EditorInsertContent,
@@ -56,7 +63,6 @@ import {
 } from "@/components/slide-editor/events/events";
 import Chat from "./Chat";
 import TemplateService from "../../services/api/template";
-import { TemplateV2KonvaSlide } from "@/components/slide-editor/surface/TemplateV2KonvaSlide";
 import { TemplateV2HtmlSlidePreview } from "../../components/TemplateV2HtmlSlidePreview";
 
 type PresentationActionsProps = React.ComponentProps<typeof Chat> & {
@@ -199,6 +205,11 @@ const chartTypeItems = [
   { id: "polar_area", label: "Polar Area", icon: PieChart },
 ] satisfies PaletteItem[];
 
+const infographicItems = [
+  { id: "progress_bar", label: "Progress Bar", icon: ChartNoAxesGantt },
+  { id: "gauge", label: "Gauge Chart", icon: Gauge },
+] satisfies PaletteItem[];
+
 const tableTypeItems = [
   { id: "simple-table", label: "Simple Table", icon: Table2 },
 ] satisfies PaletteItem[];
@@ -210,9 +221,15 @@ const imageItems = [
 ] satisfies PaletteItem[];
 
 const elementItems = [
-  { id: "rectangle", label: "Rectangle", icon: RectangleHorizontal },
-  { id: "ellipse", label: "Ellipse", icon: Circle },
-  { id: "line", label: "Line", icon: Minus },
+  { id: "vector-rectangle", label: "Rectangle", icon: RectangleHorizontal },
+  { id: "vector-circle", label: "Circle", icon: Circle },
+  { id: "vector-ellipse", label: "Ellipse", icon: Circle },
+  { id: "vector-triangle", label: "Triangle", icon: Triangle },
+  { id: "vector-diamond", label: "Diamond", icon: Diamond },
+  { id: "vector-pentagon", label: "Pentagon", icon: Pentagon },
+  { id: "vector-hexagon", label: "Hexagon", icon: Hexagon },
+  { id: "vector-arrow", label: "Arrow", icon: ArrowRight },
+  { id: "vector-line", label: "Line", icon: Minus },
 ] satisfies PaletteItem[];
 
 const templateBlocksCache = new Map<string, TemplateBlockGroup[]>();
@@ -1188,7 +1205,10 @@ function ActionsPanel({
         <InsertPanel
           disabled={editingDisabled}
           title="Charts"
-          groups={[{ label: "Chart Type", items: chartTypeItems }]}
+          groups={[
+            { label: "Chart Type", items: chartTypeItems },
+            { label: "Infographics", items: infographicItems },
+          ]}
           onItemSelect={onChartItemSelect}
         />
       )}
@@ -1370,10 +1390,25 @@ const PresentationActions = (props: PresentationActionsProps) => {
   };
 
   const handleChartItemSelect = (item: PaletteItem) => {
-    if (insertEditorElements(createChartInsertElements(item.id), item.label)) {
+    const chartElements = createChartInsertElements(item.id);
+    if (chartElements.length > 0) {
+      if (insertEditorElements(chartElements, item.label)) {
+        trackEvent(MixpanelEvent.Editor_Insert_Palette_Item_Selected, {
+          presentation_id: props.presentationId,
+          category: "charts",
+          item_id: item.id,
+          item_label: item.label,
+          slide_index: props.currentSlide,
+        });
+      }
+      return;
+    }
+
+    const infographicElements = createInfographicInsertElements(item.id);
+    if (insertEditorElements(infographicElements, item.label)) {
       trackEvent(MixpanelEvent.Editor_Insert_Palette_Item_Selected, {
         presentation_id: props.presentationId,
-        category: "charts",
+        category: "infographics",
         item_id: item.id,
         item_label: item.label,
         slide_index: props.currentSlide,

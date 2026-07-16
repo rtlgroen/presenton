@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import random
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from functools import partial
@@ -47,6 +48,7 @@ from templates.v2.generation import (
     generate_template,
     merge_similar_components,
 )
+from templates.v2.models.elements import Image as SlideImageElement
 from templates.v2.models.layouts import (
     MergedComponents,
     RawSlideLayouts,
@@ -56,6 +58,7 @@ from templates.v2.models.layouts import (
 from utils.asset_directory_utils import resolve_app_path_to_filesystem
 from utils.file_utils import get_original_file_name
 from utils.icon_weights import (
+    ALLOWED_ICON_TYPES,
     DEFAULT_ICON_TYPE,
     IconType,
     extract_icon_type_from_settings,
@@ -287,6 +290,65 @@ def _collect_image_urls_from_layouts(layouts_json: dict[str, Any]) -> list[str]:
 
     visit(layouts_json)
     return images
+
+
+def _icon_type_value(value: Any) -> str | None:
+    raw_value = getattr(value, "value", value)
+    if not isinstance(raw_value, str):
+        return None
+
+    normalized = raw_value.strip().lower().replace("_", "-")
+    if normalized in ALLOWED_ICON_TYPES:
+        return normalized
+    return None
+
+
+def _count_icon_types_in_elements(
+    elements: list[Any],
+    counts: Counter[str],
+) -> None:
+    for element in elements:
+        if isinstance(element, SlideImageElement):
+            icon_type = _icon_type_value(element.icon_type)
+            if icon_type is not None:
+                counts[icon_type] += 1
+
+        child = getattr(element, "child", None)
+        if child is not None:
+            _count_icon_types_in_elements([child], counts)
+
+        children = getattr(element, "children", None)
+        if isinstance(children, list):
+            _count_icon_types_in_elements(children, counts)
+
+
+def _most_common_icon_type_in_layouts(layouts: SlideLayouts) -> str | None:
+    counts: Counter[str] = Counter()
+    for layout in layouts.layouts:
+        for component in layout.components:
+            _count_icon_types_in_elements(component.elements, counts)
+
+    return counts.most_common(1)[0][0] if counts else None
+
+
+def _template_v2_generated_icon_type(
+    request: InitTemplateV2Request,
+    generated_layouts: SlideLayouts,
+) -> str:
+    generated_icon_type = _most_common_icon_type_in_layouts(generated_layouts)
+    return generated_icon_type or _template_v2_request_icon_type(request)
+
+
+def _set_template_icon_type_asset(
+    assets: dict[str, Any],
+    generated_layouts: SlideLayouts,
+) -> None:
+    icon_type = _most_common_icon_type_in_layouts(generated_layouts)
+    if icon_type is None:
+        return
+
+    assets["icon_type"] = icon_type
+    assets["icon_weight"] = icon_type
 
 
 def _count_layouts(layouts_json: Any) -> int:
@@ -922,7 +984,7 @@ def _build_created_template_v2(
     generated_layouts: SlideLayouts,
     merged_components: MergedComponents,
 ) -> TemplateV2:
-    icon_type = _template_v2_request_icon_type(request)
+    icon_type = _template_v2_generated_icon_type(request, generated_layouts)
     return TemplateV2(
         name=(request.name or "").strip() or _derive_template_name(
             request.pptx_url, pptx_path
@@ -1310,6 +1372,7 @@ async def patch_template_v2_slide_layout(
 
         assets = dict(template.assets) if isinstance(template.assets, dict) else {}
         assets["layout_indexes"] = layout_indexes
+        _set_template_icon_type_asset(assets, updated_layouts)
         template.layouts = updated_layouts.model_dump(mode="json", exclude_none=True)
         template.assets = assets
         sql_session.add(template)

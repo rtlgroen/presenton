@@ -54,6 +54,8 @@ export function TemplateV2TableElement({
             asRecord(cell.font) ?? asRecord(firstRun.font),
             font,
           );
+          const forceHeaderBold =
+            rowIndex === 0 && !hasExplicitBold(cell, firstRun);
           const fill = fillColor(cell.fill ?? cell.color);
           const runs = readableTableCellRuns(
             rawTableCellRuns(cell, cellFont),
@@ -61,7 +63,7 @@ export function TemplateV2TableElement({
             rowIndex === 0,
           );
           const renderRuns =
-            rowIndex === 0
+            forceHeaderBold
               ? runs.map((run) => ({
                 ...run,
                 font: { ...run.font, bold: true },
@@ -119,7 +121,7 @@ export function TemplateV2TableElement({
                 width={textWidth}
                 height={Math.max(1, cellH - 8)}
                 runs={renderRuns}
-                font={rowIndex === 0 ? { ...cellFont, bold: true } : cellFont}
+                font={forceHeaderBold ? { ...cellFont, bold: true } : cellFont}
                 align={readString(cell.alignment) ?? "left"}
                 verticalAlign="middle"
                 lineHeight={cellLineHeight}
@@ -358,6 +360,13 @@ function fontFromRecord(
       fallback.letterSpacing,
     opacity: readNumber(font?.opacity) ?? fallback.opacity,
   };
+}
+
+function hasExplicitBold(cell: UnknownRecord, firstRun: UnknownRecord) {
+  return (
+    Object.prototype.hasOwnProperty.call(asRecord(cell.font) ?? {}, "bold") ||
+    Object.prototype.hasOwnProperty.call(asRecord(firstRun.font) ?? {}, "bold")
+  );
 }
 
 function fillColor(fill: unknown) {

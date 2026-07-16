@@ -265,6 +265,22 @@ export type LineElement = ElementBase & {
   stroke: Stroke;
 };
 
+export type VectorCurve = {
+  type: "smooth";
+  tension?: number | null;
+  segments?: number | null;
+};
+
+export type VectorElement = ElementBase & {
+  type: "vector";
+  points: Position[];
+  closed?: boolean | null;
+  curve?: VectorCurve | null;
+  corner_radii?: number[] | null;
+  fill?: Fill | null;
+  stroke?: Stroke | null;
+};
+
 export type SvgElement = ElementBase & {
   type: "svg";
   svg: string;
@@ -349,6 +365,7 @@ export type SlideElement =
   | RectangleElement
   | EllipseElement
   | LineElement
+  | VectorElement
   | SvgElement
   | ChartElement
   | InfographicElement
@@ -391,7 +408,6 @@ export type SlideComponent = {
   id: string;
   description: string;
   position?: Position | null;
-  size?: Size | null;
   elements: SlideElement[];
 };
 
@@ -443,6 +459,7 @@ export type LayoutTableElement = TableElement;
 export type LayoutRectangleElement = RectangleElement;
 export type LayoutEllipseElement = EllipseElement;
 export type LayoutLineElement = LineElement;
+export type LayoutVectorElement = VectorElement;
 export type LayoutSvgElement = SvgElement;
 export type LayoutChartElement = ChartElement;
 export type LayoutInfographicElement = InfographicElement;

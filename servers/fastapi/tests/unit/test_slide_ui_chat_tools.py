@@ -27,12 +27,13 @@ def _slide_ui():
                 "id": "hero",
                 "description": "Hero title component for testing.",
                 "position": {"x": 0, "y": 0},
-                "size": {"width": 100, "height": 40},
                 "elements": [
                     {
                         "type": "text",
                         "decorative": False,
                         "name": "Title",
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 100, "height": 40},
                         "max_length": 100,
                         "min_length": 1,
                         "runs": [
@@ -48,12 +49,13 @@ def _slide_ui():
                 "id": "body",
                 "description": "Body list component for testing.",
                 "position": {"x": 0, "y": 50},
-                "size": {"width": 100, "height": 60},
                 "elements": [
                     {
                         "type": "text-list",
                         "decorative": False,
                         "name": "Bullets",
+                        "position": {"x": 0, "y": 0},
+                        "size": {"width": 100, "height": 60},
                         "max_items": 6,
                         "min_items": 1,
                         "max_item_length": 80,
@@ -915,7 +917,7 @@ def test_update_slide_element_accepts_whole_table_payload():
     assert session.commit_count == 1
 
 
-def test_update_slide_component_edits_ui_size():
+def test_update_slide_component_scales_ui_contents():
     slide = _slide()
     tools, session = _tools(slide)
 
@@ -931,7 +933,14 @@ def test_update_slide_component_edits_ui_size():
 
     assert result["ok"] is True
     assert result["result"]["updated"] is True
-    assert slide.ui["components"][0]["size"] == {
+    assert "size" not in slide.ui["components"][0]
+    assert result["result"]["box"] == {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 70.0,
+        "height": 30.0,
+    }
+    assert slide.ui["components"][0]["elements"][0]["size"] == {
         "width": 70.0,
         "height": 30.0,
     }
@@ -945,7 +954,6 @@ def test_update_component_resize_scales_standalone_chart_contents():
             "id": "line-chart",
             "description": "Line Chart",
             "position": {"x": 371, "y": 155},
-            "size": {"width": 538, "height": 410},
             "elements": [
                 {
                     "type": "chart",
@@ -961,8 +969,14 @@ def test_update_component_resize_scales_standalone_chart_contents():
             "id": "thank-you",
             "description": "Thank You heading",
             "position": {"x": 400, "y": 60},
-            "size": {"width": 480, "height": 80},
-            "elements": [{"type": "text", "runs": [{"text": "Thank You"}]}],
+            "elements": [
+                {
+                    "type": "text",
+                    "position": {"x": 0, "y": 0},
+                    "size": {"width": 480, "height": 80},
+                    "runs": [{"text": "Thank You"}],
+                }
+            ],
         },
     ]
     untouched_heading = json.loads(json.dumps(slide.ui["components"][1]))
@@ -984,7 +998,7 @@ def test_update_component_resize_scales_standalone_chart_contents():
     chart = chart_component["elements"][0]
     assert result["ok"] is True
     assert chart_component["position"] == {"x": 0.0, "y": 0.0}
-    assert chart_component["size"] == {"width": 1280.0, "height": 720.0}
+    assert "size" not in chart_component
     assert chart["position"] == {"x": 0.0, "y": 0.0}
     assert chart["size"] == {"width": 1280.0, "height": 720.0}
     assert slide.ui["components"][1] == untouched_heading
@@ -1012,7 +1026,7 @@ def test_update_component_groups_components():
     assert result["result"]["action"] == "grouped"
     assert component["id"] == "hero"
     assert component["position"] == {"x": 0.0, "y": 0.0}
-    assert component["size"] == {"width": 100.0, "height": 110.0}
+    assert "size" not in component
     assert len(component["elements"]) == 2
     assert [item["id"] for item in slide.ui["components"]] == ["hero"]
     assert session.commit_count == 1
@@ -1025,7 +1039,6 @@ def test_update_component_ungroups_component():
             "id": "combo",
             "description": "Two element group.",
             "position": {"x": 10, "y": 20},
-            "size": {"width": 200, "height": 100},
             "elements": [
                 {
                     "type": "text",
@@ -1071,7 +1084,6 @@ def test_update_component_ungroups_container_child():
             "id": "card",
             "description": "Container card.",
             "position": {"x": 20, "y": 30},
-            "size": {"width": 240, "height": 120},
             "elements": [
                 {
                     "type": "container",
@@ -1102,7 +1114,11 @@ def test_update_component_ungroups_container_child():
         "card_part_1",
     ]
     assert slide.ui["components"][0]["position"] == {"x": 32.0, "y": 38.0}
-    assert slide.ui["components"][0]["size"] == {"width": 216.0, "height": 104.0}
+    assert "size" not in slide.ui["components"][0]
+    assert slide.ui["components"][0]["elements"][0]["size"] == {
+        "width": 216.0,
+        "height": 104.0,
+    }
     assert slide.ui["components"][0]["elements"][0]["type"] == "text"
     assert slide.ui["components"][0]["elements"][0]["runs"] == [
         {"text": "Nested title"}
@@ -1117,7 +1133,6 @@ def test_update_component_ungroups_one_level_for_flex_group_children():
             "id": "cards",
             "description": "Flex with grouped children.",
             "position": {"x": 10, "y": 20},
-            "size": {"width": 300, "height": 100},
             "elements": [
                 {
                     "type": "flex",
@@ -1176,7 +1191,11 @@ def test_update_component_ungroups_one_level_for_flex_group_children():
         "cards_part_2",
     ]
     assert slide.ui["components"][0]["position"] == {"x": 10.0, "y": 20.0}
-    assert slide.ui["components"][0]["size"] == {"width": 145.0, "height": 100.0}
+    assert "size" not in slide.ui["components"][0]
+    assert slide.ui["components"][0]["elements"][0]["size"] == {
+        "width": 145.0,
+        "height": 100.0,
+    }
     assert slide.ui["components"][1]["position"] == {"x": 165.0, "y": 20.0}
     assert slide.ui["components"][1]["elements"][0]["type"] == "group"
     assert slide.ui["components"][1]["elements"][0]["elements"] == [
@@ -1238,7 +1257,6 @@ def test_update_component_ungroups_grid_immediate_children_only():
             "id": "feature_grid",
             "description": "Two-by-two grid of feature items.",
             "position": {"x": 96, "y": 291.75},
-            "size": {"width": 674, "height": 256.5},
             "elements": [
                 {
                     "type": "grid",
@@ -1275,7 +1293,8 @@ def test_update_component_ungroups_grid_immediate_children_only():
         {"x": 96.0, "y": 448.0},
         {"x": 460.0, "y": 448.0},
     ]
-    assert [component["size"] for component in slide.ui["components"]] == [
+    assert all("size" not in component for component in slide.ui["components"])
+    assert [component["elements"][0]["size"] for component in slide.ui["components"]] == [
         {"width": 310.0, "height": 100.25},
         {"width": 310.0, "height": 100.25},
         {"width": 310.0, "height": 100.25},
@@ -1365,12 +1384,13 @@ def test_add_slide_component_appends_block():
         "id": "note",
         "description": "A short callout note component.",
         "position": {"x": 0, "y": 80},
-        "size": {"width": 100, "height": 20},
         "elements": [
             {
                 "type": "text",
                 "decorative": False,
                 "name": "Note",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": 100, "height": 20},
                 "runs": [{"text": "Added note", "font": {"size": 14}}],
             }
         ],
@@ -1394,11 +1414,12 @@ def test_add_slide_component_clamps_to_visible_stage():
         "id": "offscreen",
         "description": "Bad geometry component.",
         "position": {"x": 1400, "y": -40},
-        "size": {"width": 2000, "height": 900},
         "elements": [
             {
                 "type": "text",
                 "name": "Offscreen",
+                "position": {"x": 0, "y": 0},
+                "size": {"width": 2000, "height": 900},
                 "runs": [{"text": "Visible now"}],
             }
         ],
@@ -1413,7 +1434,8 @@ def test_add_slide_component_clamps_to_visible_stage():
     added = slide.ui["components"][-1]
     assert result["ok"] is True
     assert added["position"] == {"x": 0.0, "y": 0.0}
-    assert added["size"] == {"width": 1280.0, "height": 720.0}
+    assert "size" not in added
+    assert added["elements"][0]["size"] == {"width": 1280.0, "height": 576.0}
 
 
 def test_add_slide_component_expands_tiny_chart_block():
@@ -1423,7 +1445,6 @@ def test_add_slide_component_expands_tiny_chart_block():
         "id": "tiny-chart",
         "description": "A chart block with bad assistant geometry.",
         "position": {"x": 0.25, "y": 0.2},
-        "size": {"width": 0.6, "height": 0.5},
         "elements": [
             {
                 "type": "chart",
@@ -1448,7 +1469,7 @@ def test_add_slide_component_expands_tiny_chart_block():
     chart = chart_component["elements"][0]
     assert result["ok"] is True
     assert chart_component["position"] == {"x": 128.0, "y": 108.0}
-    assert chart_component["size"] == {"width": 1024.0, "height": 460.0}
+    assert "size" not in chart_component
     assert chart["position"] == {"x": 0, "y": 0}
     assert chart["size"] == {"width": 1024.0, "height": 460.0}
     assert chart["colors"][:3] == ["#123456", "#234567", "#345678"]
@@ -1804,7 +1825,6 @@ def test_add_slide_component_expands_tiny_table_block():
         "id": "tiny-table",
         "description": "A table block with bad assistant geometry.",
         "position": {"x": 0.25, "y": 0.2},
-        "size": {"width": 0.6, "height": 0.5},
         "elements": [
             {
                 "type": "table",
@@ -1832,7 +1852,7 @@ def test_add_slide_component_expands_tiny_table_block():
     table = table_component["elements"][0]
     assert result["ok"] is True
     assert table_component["position"] == {"x": 128.0, "y": 120.0}
-    assert table_component["size"] == {"width": 1024.0, "height": 410.0}
+    assert "size" not in table_component
     assert table["position"] == {"x": 0, "y": 0}
     assert table["size"] == {"width": 1024.0, "height": 410.0}
 
