@@ -42,6 +42,12 @@ type TransformerPoint = {
   y: number;
 };
 
+type FixedSideTransform = {
+  anchor: string;
+  right?: number;
+  bottom?: number;
+};
+
 type TemplateV2SelectionTransformersProps = {
   nodeRefs: RefObject<Map<string, Konva.Node>>;
   parentComponentKey: string | null;
@@ -90,7 +96,7 @@ function preventInvertedTransform(
   const minHeight = allowThinBox ? 1 : MIN_TRANSFORM_BOX_SIZE;
   const hasMinimumVisibleSize = allowThinBox
     ? Math.max(Math.abs(newBox.width), Math.abs(newBox.height)) >=
-      MIN_TRANSFORM_BOX_SIZE
+    MIN_TRANSFORM_BOX_SIZE
     : true;
 
   if (
@@ -109,20 +115,50 @@ function pinFixedSideTransformBox(
   anchor: string | null | undefined,
   oldBox: TransformerBox,
   newBox: TransformerBox,
+  fixedSide: FixedSideTransform | null,
 ) {
-  if (anchor === "middle-left") {
-    return {
-      ...newBox,
-      x: oldBox.x + oldBox.width - newBox.width,
+  let pinnedBox = newBox;
+  if (anchor?.includes("left")) {
+    const right =
+      fixedSide?.anchor === anchor
+        ? fixedSide.right ?? oldBox.x + oldBox.width
+        : oldBox.x + oldBox.width;
+    pinnedBox = {
+      ...pinnedBox,
+      x: right - newBox.width,
     };
   }
-  if (anchor === "top-center") {
-    return {
-      ...newBox,
-      y: oldBox.y + oldBox.height - newBox.height,
+  if (anchor?.includes("top")) {
+    const bottom =
+      fixedSide?.anchor === anchor
+        ? fixedSide.bottom ?? oldBox.y + oldBox.height
+        : oldBox.y + oldBox.height;
+    pinnedBox = {
+      ...pinnedBox,
+      y: bottom - newBox.height,
     };
   }
-  return newBox;
+  return pinnedBox;
+}
+
+function fixedSideTransformFromTransformer(
+  transformer: Konva.Transformer | null,
+): FixedSideTransform | null {
+  const anchor = transformer?.getActiveAnchor();
+  if (!transformer || !anchor || anchor === "rotater") {
+    return null;
+  }
+
+  const fixedSide: FixedSideTransform = { anchor };
+  if (anchor.includes("left")) {
+    fixedSide.right = transformer.x() + transformer.width();
+  }
+  if (anchor.includes("top")) {
+    fixedSide.bottom = transformer.y() + transformer.height();
+  }
+  return fixedSide.right != null || fixedSide.bottom != null
+    ? fixedSide
+    : null;
 }
 
 function preventInvertedAnchorDrag(
@@ -326,6 +362,16 @@ export function TemplateV2SelectionTransformers({
   const isTransformableElementSelection =
     selectionKind === "element" &&
     (horizontalResizeOnly || fullElementTransform);
+  const fixedSideTransformRef = useRef<FixedSideTransform | null>(null);
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      Object.assign(window, {
+        __presentonResizeProbeTransformer: selectedTransformerRef.current,
+      });
+    }
+  });
+  const isLineElementSelection =
+    selectionKind === "element" && horizontalResizeOnly;
   const canTransformSelection =
     selectionKind === "component" || isTransformableElementSelection;
   const boundAnchorDrag = useCallback(
@@ -345,10 +391,19 @@ export function TemplateV2SelectionTransformers({
         selectedTransformerRef.current?.getActiveAnchor(),
         oldBox,
         boundedBox,
+        fixedSideTransformRef.current,
       );
     },
     [horizontalResizeOnly],
   );
+  const handleTransformStart = useCallback(() => {
+    fixedSideTransformRef.current = fixedSideTransformFromTransformer(
+      selectedTransformerRef.current,
+    );
+  }, []);
+  const handleTransformEnd = useCallback(() => {
+    fixedSideTransformRef.current = null;
+  }, []);
   const isMultiComponentSelection = selectionKind === "multi-component";
   const selectedNode =
     canTransformSelection && selectedKey
@@ -370,9 +425,9 @@ export function TemplateV2SelectionTransformers({
     const selectedNodes = suppressSelectedOutline
       ? []
       : keys.flatMap((key) => {
-          const node = nodeRefs.current?.get(key);
-          return node ? [node] : [];
-        });
+        const node = nodeRefs.current?.get(key);
+        return node ? [node] : [];
+      });
     const parentComponentNode = parentComponentKey
       ? nodeRefs.current?.get(parentComponentKey)
       : null;
@@ -380,6 +435,11 @@ export function TemplateV2SelectionTransformers({
     const selectedTransformer = selectedTransformerRef.current;
     if (selectedTransformer) {
       selectedTransformer.nodes(selectedNodes);
+      if (process.env.NODE_ENV === "development") {
+        Object.assign(window, {
+          __presentonResizeProbeTransformer: selectedTransformer,
+        });
+      }
     }
 
     const contextTransformer = contextTransformerRef.current;
@@ -461,6 +521,10 @@ export function TemplateV2SelectionTransformers({
         resizeEnabled={false}
         rotateEnabled={false}
         rotateLineVisible={false}
+        // Stroke bounds belong to the rendered child, not to the component
+        // frame. Including them makes Konva recompute the opposite edge while
+        // the preview is being rebuilt during a resize gesture.
+        ignoreStroke
       />
       <Transformer
         ref={selectedTransformerRef}
@@ -486,11 +550,14 @@ export function TemplateV2SelectionTransformers({
             : []
         }
         flipEnabled={false}
+        ignoreStroke
         resizeEnabled={canTransformSelection}
         rotateAnchorAngle={bottomCenterRotationAnchorAngle}
         rotateAnchorOffset={BOTTOM_CENTER_ROTATION_ANCHOR_OFFSET}
         rotateEnabled={canTransformSelection}
         rotateLineVisible={false}
+        onTransformStart={handleTransformStart}
+        onTransformEnd={handleTransformEnd}
       />
       {multiSelectionMemberKeys.map((key) => (
         <TemplateV2MultiSelectionMemberOutline

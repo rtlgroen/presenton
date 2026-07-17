@@ -3,6 +3,7 @@ import {
   readArray,
   readNumber,
   readOptionalSize,
+  readPoint,
   readString,
   type Box,
   type ChildArrayInfo,
@@ -111,6 +112,7 @@ export function resizeRawElementBounds(
   return elements.map((value) => {
     const element = asRecord(value);
     if (!element) return value;
+    const position = readPoint(element.position);
     const explicitSize = readOptionalSize(element.size);
     const type = readString(element.type);
     const polygonPoints =
@@ -123,6 +125,10 @@ export function resizeRawElementBounds(
       : null;
     return {
       ...element,
+      position: {
+        x: position.x * safeScaleX,
+        y: position.y * safeScaleY,
+      },
       ...(explicitSize
         ? {
             size: {
