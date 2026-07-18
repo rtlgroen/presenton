@@ -64,9 +64,15 @@ def _write_template_bundle(root: Path) -> Path:
 
 
 class _FakeSession:
-    def __init__(self, existing: TemplateV2 | None = None):
+    def __init__(
+        self,
+        existing: TemplateV2 | None = None,
+        default_templates: list[TemplateV2] | None = None,
+    ):
         self.existing = existing
+        self.default_templates = default_templates or []
         self.added: list[TemplateV2] = []
+        self.deleted: list[TemplateV2] = []
         self.commit_count = 0
 
     async def get(self, _model: Any, _key: str):
@@ -77,6 +83,21 @@ class _FakeSession:
 
     async def commit(self) -> None:
         self.commit_count += 1
+
+    async def delete(self, template: TemplateV2) -> None:
+        self.deleted.append(template)
+
+    async def execute(self, *_args: Any, **_kwargs: Any):
+        templates = self.default_templates
+
+        class _Result:
+            def scalars(self):
+                return self
+
+            def all(self):
+                return templates
+
+        return _Result()
 
 
 class _SessionContext:
@@ -216,6 +237,70 @@ def test_default_template_import_updates_existing_database_row(tmp_path, monkeyp
         "/app_data/templates/general/static/thumbnail.png"
     )
     assert (app_data_dir / "templates/general/static/image.png").exists()
+
+
+def test_default_template_import_removes_stale_default_database_rows(
+    tmp_path,
+    monkeypatch,
+):
+    templates_root = tmp_path / "templates"
+    _write_template_bundle(templates_root)
+    app_data_dir = tmp_path / "app_data"
+    stale_template_dir = app_data_dir / "templates/legacy-default/static"
+    stale_template_dir.mkdir(parents=True)
+    (stale_template_dir / "old.png").write_bytes(b"stale")
+    stale_template = TemplateV2(
+        id="legacy-default",
+        name="Legacy Default",
+        layouts={"layouts": []},
+        is_default=True,
+    )
+    session = _FakeSession(default_templates=[stale_template])
+    monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data_dir))
+    monkeypatch.setattr(
+        default_templates,
+        "async_session_maker",
+        lambda: _SessionContext(session),
+    )
+
+    asyncio.run(default_templates.import_default_templates_on_startup(templates_root))
+
+    assert session.commit_count == 2
+    assert session.deleted == [stale_template]
+    assert not (app_data_dir / "templates/legacy-default").exists()
+    assert (app_data_dir / "templates/general/static/image.png").exists()
+
+
+def test_default_template_import_removes_all_defaults_when_bundle_is_empty(
+    tmp_path,
+    monkeypatch,
+):
+    templates_root = tmp_path / "templates"
+    templates_root.mkdir()
+    app_data_dir = tmp_path / "app_data"
+    stale_template_dir = app_data_dir / "templates/legacy-default/static"
+    stale_template_dir.mkdir(parents=True)
+    (stale_template_dir / "old.png").write_bytes(b"stale")
+    stale_template = TemplateV2(
+        id="legacy-default",
+        name="Legacy Default",
+        layouts={"layouts": []},
+        is_default=True,
+    )
+    session = _FakeSession(default_templates=[stale_template])
+    monkeypatch.setenv("APP_DATA_DIRECTORY", str(app_data_dir))
+    monkeypatch.setattr(
+        default_templates,
+        "async_session_maker",
+        lambda: _SessionContext(session),
+    )
+
+    asyncio.run(default_templates.import_default_templates_on_startup(templates_root))
+
+    assert session.commit_count == 1
+    assert session.added == []
+    assert session.deleted == [stale_template]
+    assert not (app_data_dir / "templates/legacy-default").exists()
 
 
 def test_bundled_general_template_json_matches_template_v2_shapes():
