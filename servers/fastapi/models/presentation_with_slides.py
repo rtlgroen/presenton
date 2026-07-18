@@ -23,7 +23,3 @@ class PresentationWithSlides(BaseModel):
     structure: Optional[dict] = None
     theme: Optional[dict] = None
     fonts: Optional[Any] = None
-
-
-class PresentationDetailWithSlides(PresentationWithSlides):
-    merged_components: Optional[Any] = None

@@ -7,7 +7,7 @@ import os
 import random
 import re
 import traceback
-from typing import Annotated, Any, List, Literal, Optional, Tuple
+from typing import Annotated, Any, List, Optional, Tuple
 import dirtyjson
 from fastapi import (
     APIRouter,
@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from constants.presentation import DEFAULT_TEMPLATES, MAX_NUMBER_OF_SLIDES
+from constants.presentation import MAX_NUMBER_OF_SLIDES
 from enums.webhook_event import WebhookEvent
 from models.api_error_model import APIErrorModel
 from models.generate_presentation_request import GeneratePresentationRequest
@@ -37,7 +37,6 @@ from enums.tone import Tone
 from enums.verbosity import Verbosity
 from models.presentation_structure_model import PresentationStructureModel
 from models.presentation_with_slides import (
-    PresentationDetailWithSlides,
     PresentationWithSlides,
 )
 from services.documents_loader import DocumentsLoader
@@ -55,7 +54,6 @@ from utils.llm_calls.generate_presentation_outlines import (
     get_messages as get_outline_messages,
 )
 from models.sql.slide import SlideModel
-from models.sql.presentation_layout_code import PresentationLayoutCodeModel
 from models.sse_response import SSECompleteResponse, SSEErrorResponse, SSEResponse
 
 from services.database import get_async_session
@@ -105,6 +103,7 @@ logger = logging.getLogger(__name__)
 
 PRESENTATION_ROUTER = APIRouter(prefix="/presentation", tags=["Presentation"])
 ASYNC_TASK_TYPE_PRESENTATION_GENERATE = "presentation.generate"
+CUSTOM_TEMPLATE_PREFIX = "custom-"
 
 
 def _presentation_task_progress_data(
@@ -123,78 +122,35 @@ def _requested_slide_count(request: GeneratePresentationRequest) -> int:
     return request.n_slides or 0
 
 
-def _extract_custom_template_id(layout_name: Optional[str]) -> Optional[uuid.UUID]:
-    if not layout_name or not layout_name.startswith("custom-"):
-        return None
-    try:
-        return uuid.UUID(layout_name.replace("custom-", ""))
-    except Exception:
-        return None
+def _template_reference(template_id: str) -> str:
+    return f"{CUSTOM_TEMPLATE_PREFIX}{template_id}"
 
 
-def _extract_template_v2_id(layout_name: Optional[str]) -> Optional[str]:
-    if not isinstance(layout_name, str):
-        return None
-
-    layout_name = layout_name.strip()
-    if not layout_name:
-        return None
-    for prefix in ("template-v2-", "template-v2:"):
-        if layout_name.startswith(prefix):
-            candidate = layout_name[len(prefix) :].strip()
-            return candidate or None
-    return None
-
-
-def _extract_requested_template_v2_id(
-    template_name: Optional[str],
-    *,
-    allow_bare: bool = False,
-) -> Optional[str]:
-    if not isinstance(template_name, str):
-        return None
-
-    value = template_name.strip()
-    if not value:
-        return None
-    for prefix in ("template-v2-", "template-v2:", "custom-"):
-        if not value.startswith(prefix):
-            continue
-        candidate = value[len(prefix) :]
-        return candidate.strip() or None
-
-    return value if allow_bare else None
-
-
-def _extract_template_v2_metadata_id(key: str, value: Any) -> Optional[str]:
+def _extract_template_id(value: Optional[str]) -> Optional[str]:
     if not isinstance(value, str):
         return None
 
-    prefixed = _extract_template_v2_id(value)
-    if prefixed:
-        return prefixed
-    if key in {"template_id", "template_v2_id"}:
-        candidate = value.strip()
-        return candidate or None
-    return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if candidate.startswith(CUSTOM_TEMPLATE_PREFIX):
+        candidate = candidate[len(CUSTOM_TEMPLATE_PREFIX) :].strip()
+    return candidate or None
 
 
-async def _resolve_requested_template_v2(
+async def _resolve_requested_template(
     template_name: str,
     sql_session: AsyncSession,
-    *,
-    allow_bare: bool = False,
 ) -> Optional[TemplateV2]:
-    template_id = _extract_requested_template_v2_id(
-        template_name,
-        allow_bare=allow_bare,
-    )
+    template_id = _extract_template_id(template_name)
     if not template_id:
         return None
 
     template = await sql_session.get(TemplateV2, template_id)
     if template:
         return template
+    if resolve_default_template_id(template_name):
+        return None
 
     raise HTTPException(
         status_code=400,
@@ -202,23 +158,25 @@ async def _resolve_requested_template_v2(
     )
 
 
-def _copy_template_v2_layout_payload(
+def _copy_template_layout_payload(
     template: TemplateV2,
 ) -> dict[str, Any]:
     layout_payload = copy.deepcopy(template.layouts)
     if not isinstance(layout_payload, dict):
         raise HTTPException(
             status_code=400,
-            detail="Template v2 layout JSON must be an object",
+            detail="Template layout JSON must be an object",
         )
 
-    icon_type = _template_v2_icon_type(template, layout_payload)
+    icon_type = _template_icon_type(template, layout_payload)
     layout_payload["icon_type"] = icon_type
     layout_payload["icon_weight"] = icon_type
+    layout_payload["name"] = _template_reference(template.id)
+    layout_payload["template_id"] = template.id
     return layout_payload
 
 
-def _template_v2_icon_type(
+def _template_icon_type(
     template: TemplateV2,
     layout_payload: dict[str, Any] | None = None,
 ) -> str:
@@ -233,17 +191,17 @@ def _template_v2_icon_type(
 async def _resolve_generation_layout(
     template_name: str,
     sql_session: AsyncSession,
-) -> tuple[dict[str, Any], PresentationLayoutModel, Optional[dict[str, str]], bool]:
-    template_v2 = await _resolve_requested_template_v2(template_name, sql_session)
-    if template_v2 is None:
+) -> tuple[dict[str, Any], PresentationLayoutModel, Optional[dict[str, str]]]:
+    template = await _resolve_requested_template(template_name, sql_session)
+    if template is None:
         bundled_template_id = resolve_default_template_id(template_name)
         if not bundled_template_id:
             raise HTTPException(
                 status_code=400,
                 detail="Template not found. Please use a valid template.",
             )
-        template_v2 = await sql_session.get(TemplateV2, bundled_template_id)
-        if not template_v2:
+        template = await sql_session.get(TemplateV2, bundled_template_id)
+        if not template:
             raise HTTPException(
                 status_code=503,
                 detail=(
@@ -253,56 +211,30 @@ async def _resolve_generation_layout(
             )
         logger.info(
             "[presentation.generate] resolved bundled template alias "
-            "name=%r template_v2_id=%s",
+            "name=%r template_id=%s",
             template_name,
             bundled_template_id,
         )
 
-    layout_payload = _copy_template_v2_layout_payload(template_v2)
+    layout_payload = _copy_template_layout_payload(template)
     return (
         layout_payload,
-        _build_template_v2_structure_layout(template_v2, layout_payload),
-        _extract_template_v2_fonts_from_assets(template_v2.assets),
-        True,
+        _build_template_structure_layout(template, layout_payload),
+        _extract_template_fonts_from_assets(template.assets),
     )
 
 
-def _is_template_v2_slide(slide: SlideModel) -> bool:
-    return slide.layout_group.startswith("template-v2") or slide.layout.startswith(
-        "template-v2"
-    )
-
-
-def _hydrate_template_v2_slide_ui(
+def _hydrate_template_slide_ui(
     slide: SlideModel,
     layout_payload: Any = None,
 ) -> None:
-    if not _is_template_v2_slide(slide):
+    if not _is_template_layout_payload(layout_payload):
         return
 
     ui = slide.ui
     if not isinstance(ui, dict):
-        ui = _template_v2_slide_ui(layout_payload, slide.layout)
-    slide.ui = _apply_template_v2_content_to_ui(ui, slide.content)
-
-
-def _canonical_template_v2_layout_payload(layout_payload: Any) -> Optional[str]:
-    if not _is_template_v2_layout_payload(layout_payload):
-        return None
-
-    comparable_payload = copy.deepcopy(layout_payload)
-    if isinstance(comparable_payload, dict):
-        for metadata_key in ("name", "template_id", "template_v2_id"):
-            comparable_payload.pop(metadata_key, None)
-
-    try:
-        return json.dumps(
-            comparable_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    except (TypeError, ValueError):
-        return None
+        ui = _template_slide_ui(layout_payload, slide.layout)
+    slide.ui = _apply_template_content_to_ui(ui, slide.content)
 
 
 def _coerce_presentation_font_map(value: Any) -> Optional[dict[str, str]]:
@@ -320,175 +252,14 @@ def _coerce_presentation_font_map(value: Any) -> Optional[dict[str, str]]:
     return fonts or None
 
 
-def _extract_template_v2_fonts_from_assets(assets: Any) -> Optional[dict[str, str]]:
+def _extract_template_fonts_from_assets(assets: Any) -> Optional[dict[str, str]]:
     if not isinstance(assets, dict):
         return None
     return _coerce_presentation_font_map(assets.get("fonts"))
 
 
-async def _resolve_presentation_template_v2_fonts(
-    presentation: PresentationModel,
-    slides: List[SlideModel],
-    sql_session: AsyncSession,
-):
-    candidate_template_ids: List[str] = []
-    seen: set[str] = set()
-
-    if isinstance(presentation.layout, dict):
-        for key in ("name", "template_id", "template_v2_id"):
-            value = presentation.layout.get(key)
-            template_id = _extract_template_v2_metadata_id(key, value)
-            if template_id and template_id not in seen:
-                candidate_template_ids.append(template_id)
-                seen.add(template_id)
-
-    for slide in slides:
-        for value in (slide.layout_group, slide.layout):
-            template_id = _extract_template_v2_id(value)
-            if template_id and template_id not in seen:
-                candidate_template_ids.append(template_id)
-                seen.add(template_id)
-
-    for template_id in candidate_template_ids:
-        template = await sql_session.get(TemplateV2, template_id)
-        if template:
-            fonts = _extract_template_v2_fonts_from_assets(template.assets)
-            if fonts is not None:
-                return fonts
-
-    target_layout_payload = _canonical_template_v2_layout_payload(presentation.layout)
-    if not target_layout_payload:
-        return None
-
-    try:
-        result = await sql_session.execute(
-            select(TemplateV2.id, TemplateV2.layouts, TemplateV2.assets)
-        )
-        for _template_id, layouts, assets in result.all():
-            if _canonical_template_v2_layout_payload(layouts) != target_layout_payload:
-                continue
-            fonts = _extract_template_v2_fonts_from_assets(assets)
-            if fonts is not None:
-                return fonts
-    except Exception:
-        logger.exception("[presentation.detail] failed to resolve template v2 fonts")
-
-    return None
-
-
-async def _resolve_presentation_fonts(
-    presentation: PresentationModel,
-    slides: List[SlideModel],
-    sql_session: AsyncSession,
-):
-    stored_fonts = _coerce_presentation_font_map(getattr(presentation, "fonts", None))
-    if stored_fonts is not None:
-        return stored_fonts
-
-    candidate_template_ids: List[uuid.UUID] = []
-    seen: set[uuid.UUID] = set()
-
-    layout_name = None
-    if isinstance(presentation.layout, dict):
-        layout_name = presentation.layout.get("name")
-    layout_template_id = _extract_custom_template_id(layout_name)
-    if layout_template_id and layout_template_id not in seen:
-        candidate_template_ids.append(layout_template_id)
-        seen.add(layout_template_id)
-
-    for slide in slides:
-        template_id = _extract_custom_template_id(slide.layout_group)
-        if template_id and template_id not in seen:
-            candidate_template_ids.append(template_id)
-            seen.add(template_id)
-
-    for template_id in candidate_template_ids:
-        result = await sql_session.execute(
-            select(PresentationLayoutCodeModel.fonts).where(
-                PresentationLayoutCodeModel.presentation == template_id
-            )
-        )
-        fonts_list = result.scalars().all()
-        for fonts in fonts_list:
-            if fonts is not None:
-                return fonts
-
-    return await _resolve_presentation_template_v2_fonts(
-        presentation,
-        slides,
-        sql_session,
-    )
-
-
 def _presentation_response_data(presentation: PresentationModel) -> dict:
-    return presentation.model_dump(exclude={"fonts"})
-
-
-async def _resolve_presentation_template_v2_payload(
-    presentation: PresentationModel,
-    slides: List[SlideModel],
-    sql_session: AsyncSession,
-    payload_field: Literal["components", "merged_components"],
-):
-    candidate_template_ids: List[str] = []
-    seen: set[str] = set()
-
-    if isinstance(presentation.layout, dict):
-        for key in ("name", "template_id", "template_v2_id"):
-            value = presentation.layout.get(key)
-            template_id = _extract_template_v2_metadata_id(key, value)
-            if template_id and template_id not in seen:
-                candidate_template_ids.append(template_id)
-                seen.add(template_id)
-
-    for slide in slides:
-        for value in (slide.layout_group, slide.layout):
-            template_id = _extract_template_v2_id(value)
-            if template_id and template_id not in seen:
-                candidate_template_ids.append(template_id)
-                seen.add(template_id)
-
-    for template_id in candidate_template_ids:
-        template = await sql_session.get(TemplateV2, template_id)
-        if template:
-            payload = getattr(template, payload_field, None)
-            if payload is not None:
-                return payload
-
-    target_layout_payload = _canonical_template_v2_layout_payload(presentation.layout)
-    if not target_layout_payload:
-        return None
-
-    try:
-        payload_column = getattr(TemplateV2, payload_field)
-        result = await sql_session.execute(
-            select(TemplateV2.id, TemplateV2.layouts, payload_column)
-        )
-        for _template_id, layouts, payload in result.all():
-            if payload is None:
-                continue
-            if _canonical_template_v2_layout_payload(layouts) == target_layout_payload:
-                return payload
-    except Exception:
-        logger.exception(
-            "[presentation.detail] failed to resolve template v2 %s",
-            payload_field,
-        )
-
-    return None
-
-
-async def _resolve_presentation_merged_components(
-    presentation: PresentationModel,
-    slides: List[SlideModel],
-    sql_session: AsyncSession,
-):
-    return await _resolve_presentation_template_v2_payload(
-        presentation,
-        slides,
-        sql_session,
-        "merged_components",
-    )
+    return presentation.model_dump()
 
 
 def _insert_toc_layouts(
@@ -514,7 +285,7 @@ def _layout_count(layout_payload: Any) -> int:
     return 0
 
 
-def _build_template_v2_layout_model(
+def _build_template_layout_model(
     layout_payload: dict[str, Any],
     *,
     layout_name: str,
@@ -524,7 +295,7 @@ def _build_template_v2_layout_model(
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid template v2 layout JSON: {exc}",
+            detail=f"Invalid template layout JSON: {exc}",
         ) from exc
 
     source_layouts = layout_payload.get("layouts")
@@ -566,7 +337,7 @@ def _build_template_v2_layout_model(
     if not slides:
         raise HTTPException(
             status_code=400,
-            detail="Template v2 layout JSON must contain at least one layout",
+            detail="Template layout JSON must contain at least one layout",
         )
 
     return PresentationLayoutModel(
@@ -577,28 +348,28 @@ def _build_template_v2_layout_model(
     )
 
 
-def _build_template_v2_structure_layout(
+def _build_template_structure_layout(
     template: TemplateV2,
     layout_payload: dict[str, Any],
 ) -> PresentationLayoutModel:
-    return _build_template_v2_layout_model(
+    return _build_template_layout_model(
         layout_payload,
-        layout_name=f"template-v2-{template.id}",
+        layout_name=_template_reference(template.id),
     )
 
 
-def _is_template_v2_layout_payload(layout_payload: Any) -> bool:
+def _is_template_layout_payload(layout_payload: Any) -> bool:
     return (
         isinstance(layout_payload, dict)
         and isinstance(layout_payload.get("layouts"), list)
     )
 
 
-def _template_v2_slide_ui(
+def _template_slide_ui(
     layout_payload: Any,
     layout_id: str,
 ) -> Optional[dict[str, Any]]:
-    if not _is_template_v2_layout_payload(layout_payload):
+    if not _is_template_layout_payload(layout_payload):
         return None
 
     for layout in layout_payload["layouts"]:
@@ -626,15 +397,15 @@ GENERATED_TABLE_CELL_STROKE = {
     "opacity": 1,
     "width": 1,
 }
-TEMPLATE_V2_STRONG_MARKDOWN_DELIMITERS = ("**", "__")
-TEMPLATE_V2_EMPHASIS_MARKDOWN_DELIMITERS = ("*", "_")
-TEMPLATE_V2_MARKDOWN_DELIMITERS = (
-    *TEMPLATE_V2_STRONG_MARKDOWN_DELIMITERS,
-    *TEMPLATE_V2_EMPHASIS_MARKDOWN_DELIMITERS,
+TEMPLATE_STRONG_MARKDOWN_DELIMITERS = ("**", "__")
+TEMPLATE_EMPHASIS_MARKDOWN_DELIMITERS = ("*", "_")
+TEMPLATE_MARKDOWN_DELIMITERS = (
+    *TEMPLATE_STRONG_MARKDOWN_DELIMITERS,
+    *TEMPLATE_EMPHASIS_MARKDOWN_DELIMITERS,
 )
 
 
-def _template_v2_component_content_keys(components: list[Any]) -> list[str]:
+def _template_component_content_keys(components: list[Any]) -> list[str]:
     ids: list[str] = []
     for index, component in enumerate(components):
         component_id = (
@@ -671,7 +442,7 @@ def _template_v2_component_content_keys(components: list[Any]) -> list[str]:
     return keys
 
 
-def _apply_template_v2_content_to_ui(
+def _apply_template_content_to_ui(
     ui: Optional[dict[str, Any]],
     content: dict[str, Any],
 ) -> Optional[dict[str, Any]]:
@@ -682,7 +453,7 @@ def _apply_template_v2_content_to_ui(
     if not isinstance(components, list) or not components:
         return ui
 
-    component_keys = _template_v2_component_content_keys(components)
+    component_keys = _template_component_content_keys(components)
     hydrated_ui = copy.deepcopy(ui)
     hydrated_components = hydrated_ui.get("components")
     if not isinstance(hydrated_components, list):
@@ -701,7 +472,7 @@ def _apply_template_v2_content_to_ui(
 
         elements = component.get("elements")
         if isinstance(elements, list):
-            component["elements"] = _apply_template_v2_content_to_element_list(
+            component["elements"] = _apply_template_content_to_element_list(
                 elements,
                 component_content,
             )
@@ -709,7 +480,7 @@ def _apply_template_v2_content_to_ui(
     return hydrated_ui
 
 
-def _apply_template_v2_content_to_element(
+def _apply_template_content_to_element(
     element: Any,
     content: Any,
     *,
@@ -725,7 +496,7 @@ def _apply_template_v2_content_to_element(
     has_value = False
     value = None
     if name:
-        has_value, value = _template_v2_content_value(
+        has_value, value = _template_content_value(
             content_values,
             name,
             preferred_keys=preferred_content_keys,
@@ -737,7 +508,7 @@ def _apply_template_v2_content_to_element(
         and has_value
         and element_type in GENERATED_VALUE_ELEMENT_TYPES
     ):
-        return _apply_template_v2_content_value(element, value)
+        return _apply_template_content_value(element, value)
 
     # Repeated flex/grid schemas omit the child-name wrapper when an item is a
     # direct generated value. For example, three image children are emitted as
@@ -750,14 +521,14 @@ def _apply_template_v2_content_to_element(
         and element.get("decorative") is False
         and element_type in GENERATED_VALUE_ELEMENT_TYPES
     ):
-        return _apply_template_v2_content_value(element, content)
+        return _apply_template_content_value(element, content)
 
     nested_content = value if isinstance(value, dict) else content_values
     nested_direct_value = direct_value and not has_value
 
     if element_type == "container":
         updated = copy.deepcopy(element)
-        updated["child"] = _apply_template_v2_content_to_element(
+        updated["child"] = _apply_template_content_to_element(
             element.get("child"),
             nested_content,
             direct_value=nested_direct_value,
@@ -769,7 +540,7 @@ def _apply_template_v2_content_to_element(
         children = element.get("children")
         if not isinstance(children, list):
             children = []
-        updated["children"] = _apply_template_v2_content_to_children(
+        updated["children"] = _apply_template_content_to_children(
             children,
             value,
             nested_content,
@@ -780,7 +551,7 @@ def _apply_template_v2_content_to_element(
     return copy.deepcopy(element)
 
 
-def _template_v2_content_value(
+def _template_content_value(
     content: dict[str, Any],
     name: str,
     *,
@@ -789,7 +560,7 @@ def _template_v2_content_value(
     candidates: list[str] = []
     for candidate in [
         *(preferred_keys or []),
-        *_template_v2_content_name_candidates(name),
+        *_template_content_name_candidates(name),
     ]:
         if candidate and candidate not in candidates:
             candidates.append(candidate)
@@ -800,7 +571,7 @@ def _template_v2_content_value(
     return False, None
 
 
-def _template_v2_content_name_candidates(name: str) -> list[str]:
+def _template_content_name_candidates(name: str) -> list[str]:
     without_numeric_token = re.sub(r"_\d+(?=_|$)", "", name)
     without_prefix = (
         without_numeric_token.split("_", 1)[1]
@@ -815,7 +586,7 @@ def _template_v2_content_name_candidates(name: str) -> list[str]:
     return candidates
 
 
-def _apply_template_v2_content_to_children(
+def _apply_template_content_to_children(
     children: list[Any],
     value: Any,
     content: Any,
@@ -824,7 +595,7 @@ def _apply_template_v2_content_to_children(
 ) -> list[Any]:
     if isinstance(value, list) and children:
         return [
-            _apply_template_v2_content_to_element(
+            _apply_template_content_to_element(
                 children[min(index, len(children) - 1)],
                 item,
                 direct_value=True,
@@ -832,14 +603,14 @@ def _apply_template_v2_content_to_children(
             for index, item in enumerate(value)
         ]
 
-    return _apply_template_v2_content_to_element_list(
+    return _apply_template_content_to_element_list(
         children,
         content,
         direct_value=direct_value,
     )
 
 
-def _apply_template_v2_content_to_element_list(
+def _apply_template_content_to_element_list(
     elements: list[Any],
     content: Any,
     *,
@@ -849,13 +620,13 @@ def _apply_template_v2_content_to_element_list(
     name_occurrences: dict[str, int] = {}
     hydrated_elements: list[Any] = []
     for element in elements:
-        preferred_keys = _template_v2_repeated_sibling_content_keys(
+        preferred_keys = _template_repeated_sibling_content_keys(
             element,
             content_values,
             name_occurrences,
         )
         hydrated_elements.append(
-            _apply_template_v2_content_to_element(
+            _apply_template_content_to_element(
                 element,
                 content,
                 direct_value=direct_value,
@@ -865,7 +636,7 @@ def _apply_template_v2_content_to_element_list(
     return hydrated_elements
 
 
-def _template_v2_repeated_sibling_content_keys(
+def _template_repeated_sibling_content_keys(
     element: Any,
     content: dict[str, Any],
     name_occurrences: dict[str, int],
@@ -886,22 +657,22 @@ def _template_v2_repeated_sibling_content_keys(
     return [suffixed_key] if suffixed_key in content else None
 
 
-def _apply_template_v2_content_value(element: dict[str, Any], value: Any) -> dict[str, Any]:
+def _apply_template_content_value(element: dict[str, Any], value: Any) -> dict[str, Any]:
     element_type = element.get("type")
     if element_type == "text":
-        return _apply_template_v2_text_content(element, value)
+        return _apply_template_text_content(element, value)
     if element_type == "image":
-        return _apply_template_v2_image_content(element, value)
+        return _apply_template_image_content(element, value)
     if element_type == "text-list":
-        return _apply_template_v2_text_list_content(element, value)
+        return _apply_template_text_list_content(element, value)
     if element_type == "table":
-        return _apply_template_v2_table_content(element, value)
+        return _apply_template_table_content(element, value)
     if element_type == "chart":
-        return _apply_template_v2_chart_content(element, value)
+        return _apply_template_chart_content(element, value)
     return copy.deepcopy(element)
 
 
-def _read_template_v2_text(value: Any) -> Optional[str]:
+def _read_template_text(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -915,17 +686,17 @@ def _read_template_v2_text(value: Any) -> Optional[str]:
     return None
 
 
-def _apply_template_v2_text_content(
+def _apply_template_text_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
-    text = _read_template_v2_text(value)
+    text = _read_template_text(value)
     if text is None or text == "":
         return copy.deepcopy(element)
 
     updated = copy.deepcopy(element)
-    first_run = _first_template_v2_text_run(element.get("runs"))
-    updated["runs"] = _template_v2_text_runs_from_markdown(
+    first_run = _first_template_text_run(element.get("runs"))
+    updated["runs"] = _template_text_runs_from_markdown(
         text,
         first_run,
         fallback_font=element.get("font"),
@@ -934,7 +705,7 @@ def _apply_template_v2_text_content(
     return updated
 
 
-def _apply_template_v2_image_content(
+def _apply_template_image_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
@@ -954,13 +725,13 @@ def _apply_template_v2_image_content(
     updated = copy.deepcopy(element)
     updated["data"] = url
     _normalize_generated_image_fit(updated, url)
-    prompt = _template_v2_asset_prompt(value, element.get("is_icon") is True)
+    prompt = _template_asset_prompt(value, element.get("is_icon") is True)
     if prompt:
         updated["prompt"] = prompt
     return updated
 
 
-def _template_v2_asset_prompt(value: Any, is_icon: bool) -> Optional[str]:
+def _template_asset_prompt(value: Any, is_icon: bool) -> Optional[str]:
     if not isinstance(value, dict):
         return None
 
@@ -976,7 +747,7 @@ def _template_v2_asset_prompt(value: Any, is_icon: bool) -> Optional[str]:
     return None
 
 
-def _apply_template_v2_text_list_content(
+def _apply_template_text_list_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
@@ -989,7 +760,7 @@ def _apply_template_v2_text_list_content(
 
     items = []
     for index, item in enumerate(value):
-        text = _read_template_v2_text(item)
+        text = _read_template_text(item)
         if text is not None and text != "":
             existing_runs = (
                 existing_items[index]
@@ -1004,7 +775,7 @@ def _apply_template_v2_text_list_content(
                 else {}
             )
             items.append(
-                _template_v2_text_runs_from_markdown(
+                _template_text_runs_from_markdown(
                     text,
                     first_run,
                     fallback_font=element.get("font"),
@@ -1016,7 +787,7 @@ def _apply_template_v2_text_list_content(
     return updated
 
 
-def _apply_template_v2_table_content(
+def _apply_template_table_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
@@ -1033,11 +804,11 @@ def _apply_template_v2_table_content(
     ]
 
     generated_columns = [
-        _read_template_v2_table_text(item)
+        _read_template_table_text(item)
         for item in value.get("columns", [])
     ] if isinstance(value.get("columns"), list) else []
     generated_rows = [
-        [_read_template_v2_table_text(cell) for cell in row]
+        [_read_template_table_text(cell) for cell in row]
         for row in value.get("rows", [])
         if isinstance(row, list)
     ] if isinstance(value.get("rows"), list) else []
@@ -1045,7 +816,7 @@ def _apply_template_v2_table_content(
 
     updated = copy.deepcopy(element)
     updated["columns"] = (
-        _merge_template_v2_table_row_to_length(
+        _merge_template_table_row_to_length(
             template_columns,
             generated_columns,
             is_header=True,
@@ -1055,7 +826,7 @@ def _apply_template_v2_table_content(
     )
     updated["rows"] = (
         [
-            _merge_template_v2_table_row_to_length(
+            _merge_template_table_row_to_length(
                 template_rows[index] if index < len(template_rows) else fallback_row,
                 row,
                 is_header=False,
@@ -1068,7 +839,7 @@ def _apply_template_v2_table_content(
     return updated
 
 
-def _merge_template_v2_table_row_to_length(
+def _merge_template_table_row_to_length(
     template_cells: list[Any],
     generated_texts: list[Optional[str]],
     *,
@@ -1076,7 +847,7 @@ def _merge_template_v2_table_row_to_length(
 ) -> list[Any]:
     fallback_cell = template_cells[-1] if template_cells else None
     return [
-        _replace_template_v2_table_cell_text(
+        _replace_template_table_cell_text(
             template_cells[index] if index < len(template_cells) else fallback_cell,
             text or "",
             is_header=is_header,
@@ -1085,7 +856,7 @@ def _merge_template_v2_table_row_to_length(
     ]
 
 
-def _replace_template_v2_table_cell_text(
+def _replace_template_table_cell_text(
     cell: Any,
     text: str,
     *,
@@ -1097,20 +868,20 @@ def _replace_template_v2_table_cell_text(
             "color": GENERATED_TABLE_CELL_FILL,
             "stroke": GENERATED_TABLE_CELL_STROKE,
             "font": font,
-            "runs": _template_v2_text_runs_from_markdown(
+            "runs": _template_text_runs_from_markdown(
                 text,
                 {"font": font},
             ),
         }
 
     updated = copy.deepcopy(cell)
-    first_run = _first_template_v2_text_run(cell.get("runs"))
+    first_run = _first_template_text_run(cell.get("runs"))
     run_font = first_run.get("font") if isinstance(first_run.get("font"), dict) else None
     next_font = run_font or cell.get("font") or font
     updated["color"] = cell.get("color") or cell.get("fill") or GENERATED_TABLE_CELL_FILL
     updated["stroke"] = cell.get("stroke") or GENERATED_TABLE_CELL_STROKE
     updated["font"] = cell.get("font") or next_font
-    updated["runs"] = _template_v2_text_runs_from_markdown(
+    updated["runs"] = _template_text_runs_from_markdown(
         text,
         first_run,
         fallback_font=next_font,
@@ -1120,22 +891,22 @@ def _replace_template_v2_table_cell_text(
     return updated
 
 
-def _first_template_v2_text_run(runs: Any) -> dict[str, Any]:
+def _first_template_text_run(runs: Any) -> dict[str, Any]:
     if isinstance(runs, list) and runs and isinstance(runs[0], dict):
         return runs[0]
     return {}
 
 
-def _template_v2_text_runs_from_markdown(
+def _template_text_runs_from_markdown(
     text: str,
     first_run: Any,
     *,
     fallback_font: Any = None,
 ) -> list[dict[str, Any]]:
     base_run = copy.deepcopy(first_run) if isinstance(first_run, dict) else {}
-    parsed = _parse_template_v2_markdown_text(text)
+    parsed = _parse_template_markdown_text(text)
     has_markdown_style = any(style for _parsed_text, style in parsed)
-    base_run = _template_v2_base_run_for_markdown(
+    base_run = _template_base_run_for_markdown(
         base_run,
         fallback_font,
         strip_inline_emphasis=has_markdown_style,
@@ -1151,14 +922,14 @@ def _template_v2_text_runs_from_markdown(
                 **(copy.deepcopy(font) if isinstance(font, dict) else {}),
                 **style,
             }
-        _append_template_v2_text_run(text_runs, run)
+        _append_template_text_run(text_runs, run)
 
     if text_runs:
         return text_runs
     return [{**base_run, "text": " "}]
 
 
-def _template_v2_base_run_for_markdown(
+def _template_base_run_for_markdown(
     base_run: dict[str, Any],
     fallback_font: Any,
     *,
@@ -1181,17 +952,17 @@ def _template_v2_base_run_for_markdown(
     return base_run
 
 
-def _parse_template_v2_markdown_text(
+def _parse_template_markdown_text(
     text: str,
 ) -> list[tuple[str, dict[str, bool]]]:
     parsed: list[tuple[str, dict[str, bool]]] = []
     index = 0
 
     while index < len(text):
-        strong_delimiter = _template_v2_read_markdown_delimiter(
+        strong_delimiter = _template_read_markdown_delimiter(
             text,
             index,
-            TEMPLATE_V2_STRONG_MARKDOWN_DELIMITERS,
+            TEMPLATE_STRONG_MARKDOWN_DELIMITERS,
         )
         if strong_delimiter:
             close = text.find(strong_delimiter, index + len(strong_delimiter))
@@ -1205,10 +976,10 @@ def _parse_template_v2_markdown_text(
                 index = close + len(strong_delimiter)
                 continue
 
-        emphasis_delimiter = _template_v2_read_markdown_delimiter(
+        emphasis_delimiter = _template_read_markdown_delimiter(
             text,
             index,
-            TEMPLATE_V2_EMPHASIS_MARKDOWN_DELIMITERS,
+            TEMPLATE_EMPHASIS_MARKDOWN_DELIMITERS,
         )
         if emphasis_delimiter:
             close = text.find(emphasis_delimiter, index + len(emphasis_delimiter))
@@ -1222,7 +993,7 @@ def _parse_template_v2_markdown_text(
                 index = close + len(emphasis_delimiter)
                 continue
 
-        next_index = _template_v2_next_markdown_delimiter_index(text, index + 1)
+        next_index = _template_next_markdown_delimiter_index(text, index + 1)
         parsed.append(
             (
                 text[index : len(text) if next_index == -1 else next_index],
@@ -1234,7 +1005,7 @@ def _parse_template_v2_markdown_text(
     return parsed
 
 
-def _template_v2_read_markdown_delimiter(
+def _template_read_markdown_delimiter(
     text: str,
     index: int,
     delimiters: tuple[str, ...],
@@ -1245,19 +1016,19 @@ def _template_v2_read_markdown_delimiter(
     return None
 
 
-def _template_v2_next_markdown_delimiter_index(text: str, start: int) -> int:
+def _template_next_markdown_delimiter_index(text: str, start: int) -> int:
     indexes = [
         index
         for index in (
             text.find(delimiter, start)
-            for delimiter in TEMPLATE_V2_MARKDOWN_DELIMITERS
+            for delimiter in TEMPLATE_MARKDOWN_DELIMITERS
         )
         if index != -1
     ]
     return min(indexes) if indexes else -1
 
 
-def _append_template_v2_text_run(
+def _append_template_text_run(
     text_runs: list[dict[str, Any]],
     run: dict[str, Any],
 ) -> None:
@@ -1276,8 +1047,8 @@ def _append_template_v2_text_run(
     text_runs.append(run)
 
 
-def _read_template_v2_table_text(value: Any) -> Optional[str]:
-    primitive_text = _read_template_v2_primitive_table_text(value)
+def _read_template_table_text(value: Any) -> Optional[str]:
+    primitive_text = _read_template_primitive_table_text(value)
     if primitive_text is not None:
         return primitive_text[:80]
 
@@ -1295,14 +1066,14 @@ def _read_template_v2_table_text(value: Any) -> Optional[str]:
             return run_text[:80]
 
     for key in ("text", "value"):
-        text = _read_template_v2_primitive_table_text(value.get(key))
+        text = _read_template_primitive_table_text(value.get(key))
         if text is not None:
             return text[:80]
 
     return None
 
 
-def _read_template_v2_primitive_table_text(value: Any) -> Optional[str]:
+def _read_template_primitive_table_text(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value
     if isinstance(value, bool):
@@ -1312,7 +1083,7 @@ def _read_template_v2_primitive_table_text(value: Any) -> Optional[str]:
     return None
 
 
-def _read_template_v2_data_labels(value: Any) -> Optional[str]:
+def _read_template_data_labels(value: Any) -> Optional[str]:
     if value is True:
         return "top"
     if value is False or value is None:
@@ -1324,7 +1095,7 @@ def _read_template_v2_data_labels(value: Any) -> Optional[str]:
     return None
 
 
-def _apply_template_v2_chart_content(
+def _apply_template_chart_content(
     element: dict[str, Any],
     value: Any,
 ) -> dict[str, Any]:
@@ -1386,16 +1157,16 @@ def _apply_template_v2_chart_content(
             updated[target_key] = value[source_key]
     for source_key in ("dataLabels", "data_labels"):
         if source_key in value:
-            updated["data_labels"] = _read_template_v2_data_labels(value.get(source_key))
+            updated["data_labels"] = _read_template_data_labels(value.get(source_key))
     return updated
 
 
 def _get_presentation_stream_layout(
     presentation: PresentationModel,
 ) -> PresentationLayoutModel:
-    if _is_template_v2_layout_payload(presentation.layout):
-        layout_name = str(presentation.layout.get("name") or "template-v2")
-        return _build_template_v2_layout_model(
+    if _is_template_layout_payload(presentation.layout):
+        layout_name = str(presentation.layout.get("name") or "template")
+        return _build_template_layout_model(
             presentation.layout,
             layout_name=layout_name,
         )
@@ -1404,30 +1175,27 @@ def _get_presentation_stream_layout(
 
 
 async def _resolve_prepare_layout(
-    layout: PresentationLayoutModel | str,
+    layout: str,
     sql_session: AsyncSession,
 ) -> tuple[dict[str, Any], PresentationLayoutModel, Optional[dict[str, str]]]:
-    if isinstance(layout, PresentationLayoutModel):
-        return layout.model_dump(mode="json"), layout, None
-
-    template_id = layout.strip()
+    template_id = _extract_template_id(layout)
     if not template_id:
         raise HTTPException(
             status_code=400,
-            detail="Template v2 layout id is required",
+            detail="Template id is required",
         )
 
     template = await sql_session.get(TemplateV2, template_id)
     if not template:
-        raise HTTPException(status_code=404, detail="Template v2 layout not found")
+        raise HTTPException(status_code=404, detail="Template layout not found")
 
-    layout_payload = _copy_template_v2_layout_payload(template)
+    layout_payload = _copy_template_layout_payload(template)
 
-    structure_layout = _build_template_v2_structure_layout(template, layout_payload)
+    structure_layout = _build_template_structure_layout(template, layout_payload)
     return (
         layout_payload,
         structure_layout,
-        _extract_template_v2_fonts_from_assets(template.assets),
+        _extract_template_fonts_from_assets(template.assets),
     )
 
 
@@ -1463,7 +1231,7 @@ async def get_all_presentations(
         bool,
         Query(
             description=(
-                "Include the first slide and resolved fonts for dashboard previews. "
+                "Include the first slide for dashboard previews. "
                 "Disable this for metadata-only presentation lists."
             )
         ),
@@ -1488,7 +1256,6 @@ async def get_all_presentations(
             PresentationWithSlides(
                 **_presentation_response_data(presentation),
                 slides=[],
-                fonts=None,
             )
             for presentation in results.scalars().all()
         ]
@@ -1497,18 +1264,16 @@ async def get_all_presentations(
     presentations_with_slides = []
     for presentation, first_slide in rows:
         slides = [first_slide]
-        fonts = await _resolve_presentation_fonts(presentation, slides, sql_session)
         presentations_with_slides.append(
             PresentationWithSlides(
                 **_presentation_response_data(presentation),
                 slides=slides,
-                fonts=fonts,
             )
         )
     return presentations_with_slides
 
 
-@PRESENTATION_ROUTER.get("/{id}", response_model=PresentationDetailWithSlides)
+@PRESENTATION_ROUTER.get("/{id}", response_model=PresentationWithSlides)
 async def get_presentation(
     id: uuid.UUID,
     request: Request,
@@ -1523,17 +1288,9 @@ async def get_presentation(
         .order_by(SlideModel.index)
     )
     slides = list(slides_result)
-    fonts = await _resolve_presentation_fonts(presentation, slides, sql_session)
-    merged_components = await _resolve_presentation_merged_components(
-        presentation,
-        slides,
-        sql_session,
-    )
-    return PresentationDetailWithSlides(
+    return PresentationWithSlides(
         **_presentation_response_data(presentation),
         slides=slides,
-        fonts=fonts,
-        merged_components=merged_components,
     )
 
 
@@ -1577,11 +1334,6 @@ async def duplicate_presentation(
     return PresentationWithSlides(
         **_presentation_response_data(new_presentation),
         slides=new_slides,
-        fonts=await _resolve_presentation_fonts(
-            new_presentation,
-            new_slides,
-            sql_session,
-        ),
     )
 
 
@@ -1668,7 +1420,7 @@ async def create_presentation(
 async def prepare_presentation(
     presentation_id: Annotated[uuid.UUID, Body()],
     outlines: Annotated[List[SlideOutlineModel], Body()],
-    layout: Annotated[PresentationLayoutModel | str, Body()],
+    layout: Annotated[str, Body()],
     title: Annotated[Optional[str], Body()] = None,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
@@ -1757,7 +1509,7 @@ async def prepare_presentation(
     return presentation
 
 
-@PRESENTATION_ROUTER.get("/stream/{id}", response_model=PresentationDetailWithSlides)
+@PRESENTATION_ROUTER.get("/stream/{id}", response_model=PresentationWithSlides)
 async def stream_presentation(
     id: uuid.UUID, sql_session: AsyncSession = Depends(get_async_session)
 ):
@@ -1864,13 +1616,13 @@ async def stream_presentation(
                 index=i,
                 speaker_note=slide_content.get("__speaker_note__", ""),
                 content=slide_content,
-                ui=_template_v2_slide_ui(presentation.layout, slide_layout.id),
+                ui=_template_slide_ui(presentation.layout, slide_layout.id),
             )
             slides.append(slide)
 
             # This will mutate slide and add placeholder assets
             process_slide_add_placeholder_assets(slide)
-            slide.ui = _apply_template_v2_content_to_ui(slide.ui, slide.content)
+            slide.ui = _apply_template_content_to_ui(slide.ui, slide.content)
 
             # This will mutate slide - start task immediately so it runs in parallel with next slide LLM generation
             asset_warnings_by_slide[i] = []
@@ -1901,7 +1653,7 @@ async def stream_presentation(
                     done_idx = asset_events.get_nowait()
                 except asyncio.QueueEmpty:
                     break
-                slides[done_idx].ui = _apply_template_v2_content_to_ui(
+                slides[done_idx].ui = _apply_template_content_to_ui(
                     slides[done_idx].ui,
                     slides[done_idx].content,
                 )
@@ -1925,7 +1677,7 @@ async def stream_presentation(
 
         while yielded_slide_asset_sse_count < len(slides):
             done_idx = await asset_events.get()
-            slides[done_idx].ui = _apply_template_v2_content_to_ui(
+            slides[done_idx].ui = _apply_template_content_to_ui(
                 slides[done_idx].ui,
                 slides[done_idx].content,
             )
@@ -1957,7 +1709,7 @@ async def stream_presentation(
             generated_assets.extend(assets_list)
 
         for slide in slides:
-            slide.ui = _apply_template_v2_content_to_ui(slide.ui, slide.content)
+            slide.ui = _apply_template_content_to_ui(slide.ui, slide.content)
 
         # Moved this here to make sure new slides are generated before deleting the old ones
         await sql_session.execute(
@@ -1970,15 +1722,9 @@ async def stream_presentation(
         sql_session.add_all(generated_assets)
         await sql_session.commit()
 
-        response = PresentationDetailWithSlides(
+        response = PresentationWithSlides(
             **_presentation_response_data(presentation),
             slides=slides,
-            fonts=await _resolve_presentation_fonts(presentation, slides, sql_session),
-            merged_components=await _resolve_presentation_merged_components(
-                presentation,
-                slides,
-                sql_session,
-            ),
         )
 
         yield SSECompleteResponse(
@@ -2000,7 +1746,7 @@ async def stream_presentation(
     )
 
 
-@PRESENTATION_ROUTER.patch("/update", response_model=PresentationDetailWithSlides)
+@PRESENTATION_ROUTER.patch("/update", response_model=PresentationWithSlides)
 async def update_presentation(
     id: Annotated[uuid.UUID, Body()],
     n_slides: Annotated[Optional[int], Body()] = None,
@@ -2052,22 +1798,9 @@ async def update_presentation(
     await sql_session.commit()
 
     response_slides = slides or []
-    fonts = await _resolve_presentation_fonts(
-        presentation,
-        response_slides,
-        sql_session,
-    )
-    merged_components = await _resolve_presentation_merged_components(
-        presentation,
-        response_slides,
-        sql_session,
-    )
-
-    return PresentationDetailWithSlides(
+    return PresentationWithSlides(
         **_presentation_response_data(presentation),
         slides=response_slides,
-        fonts=fonts,
-        merged_components=merged_components,
     )
 
 
@@ -2151,21 +1884,23 @@ async def check_if_api_request_is_valid(
             detail="Number of slides cannot be less than 3 if table of contents is included",
         )
 
-    # Checking if template is valid
-    if request.template not in DEFAULT_TEMPLATES:
-        template_v2 = await _resolve_requested_template_v2(
-            request.template,
-            sql_session,
-        )
-        if not template_v2:
-            raise HTTPException(
-                status_code=400,
-                detail="Template not found. Please use a valid template.",
-            )
-        request.template = f"template-v2-{template_v2.id}"
+    # Checking if template is valid. Generation supports TemplateV2 rows and
+    # bundled TemplateV2 names only.
+    template = await _resolve_requested_template(
+        request.template,
+        sql_session,
+    )
+    if template:
+        request.template = template.id
         return (presentation_id,)
 
-    return (presentation_id,)
+    if resolve_default_template_id(request.template):
+        return (presentation_id,)
+
+    raise HTTPException(
+        status_code=400,
+        detail="Template not found. Please use a valid template.",
+    )
 
 
 async def generate_presentation_handler(
@@ -2343,7 +2078,6 @@ async def generate_presentation_handler(
             layout_payload,
             layout_model,
             template_fonts,
-            is_template_v2,
         ) = await _resolve_generation_layout(request.template, sql_session)
         logger.info(
             "[presentation.generate] layout ready template=%r slides=%d ordered=%s icon_weight=%s",
@@ -2406,11 +2140,7 @@ async def generate_presentation_handler(
         # Create PresentationModel
         presentation = PresentationModel(
             id=presentation_id,
-            version=(
-                PresentationVersion.V2_STANDARD
-                if is_template_v2
-                else PresentationVersion.V1_STANDARD
-            ),
+            version=PresentationVersion.V2_STANDARD,
             content=request.content,
             n_slides=final_n_slides,
             language=language_to_use or "",
@@ -2481,11 +2211,7 @@ async def generate_presentation_handler(
                     index=i,
                     speaker_note=slide_content.get("__speaker_note__"),
                     content=slide_content,
-                    ui=(
-                        _template_v2_slide_ui(layout_payload, slide_layout.id)
-                        if is_template_v2
-                        else None
-                    ),
+                    ui=_template_slide_ui(layout_payload, slide_layout.id),
                 )
                 slides.append(slide)
                 batch_slides.append(slide)
@@ -2544,9 +2270,8 @@ async def generate_presentation_handler(
                 warning.get("detail"),
             )
 
-        if is_template_v2:
-            for slide in slides:
-                _hydrate_template_v2_slide_ui(slide, layout_payload)
+        for slide in slides:
+            _hydrate_template_slide_ui(slide, layout_payload)
 
         # 8. Save PresentationModel and Slides
         sql_session.add(presentation)
@@ -2753,7 +2478,7 @@ async def edit_presentation_with_new_content(
         if new_slide_data:
             updated_content = deep_update(each_slide.content, new_slide_data[0].content)
             new_slide = each_slide.get_new_slide(presentation.id, updated_content)
-            _hydrate_template_v2_slide_ui(new_slide, presentation.layout)
+            _hydrate_template_slide_ui(new_slide, presentation.layout)
             new_slides.append(new_slide)
             slides_to_delete.append(each_slide.id)
 
@@ -2801,7 +2526,7 @@ async def derive_presentation_from_existing_one(
         if new_slide_data:
             updated_content = deep_update(each_slide.content, new_slide_data[0].content)
         new_slide = each_slide.get_new_slide(new_presentation.id, updated_content)
-        _hydrate_template_v2_slide_ui(new_slide, new_presentation.layout)
+        _hydrate_template_slide_ui(new_slide, new_presentation.layout)
         new_slides.append(new_slide)
 
     sql_session.add(new_presentation)

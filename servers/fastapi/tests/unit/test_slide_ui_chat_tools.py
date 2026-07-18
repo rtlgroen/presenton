@@ -72,7 +72,7 @@ def _slide():
     return SlideModel(
         id=uuid.uuid4(),
         presentation=uuid.uuid4(),
-        layout_group="template-v2-x",
+        layout_group="custom-x",
         layout="intro",
         index=0,
         content={},
@@ -141,7 +141,7 @@ def _call(tools: ChatTools, name: str, arguments: dict):
 
 def _set_reusable_table_layout(session: _FakeSlideSession):
     session.presentation.layout = {
-        "name": "template-v2-test",
+        "name": "custom-test",
         "layouts": [
             {
                 "id": "comparison",
@@ -185,7 +185,7 @@ def test_get_available_blocks_returns_matching_block_summary_only():
     slide = _slide()
     tools, session = _tools(slide)
     session.presentation.layout = {
-        "name": "template-v2-test",
+        "name": "custom-test",
         "layouts": [
             {
                 "id": "comparison",
@@ -240,7 +240,7 @@ def test_get_available_blocks_matches_title_element_names():
     slide = _slide()
     tools, session = _tools(slide)
     session.presentation.layout = {
-        "name": "template-v2-test",
+        "name": "custom-test",
         "layouts": [
             {
                 "id": "metrics",
@@ -1938,7 +1938,7 @@ def test_ui_tool_reports_non_ui_slide():
     assert "ui_summary" not in result["result"]["slide"]
 
 
-def _template_v2_presentation(presentation_id: uuid.UUID) -> PresentationModel:
+def _template_presentation(presentation_id: uuid.UUID) -> PresentationModel:
     return PresentationModel(
         id=presentation_id,
         version=PresentationVersion.V1_STANDARD,
@@ -1946,6 +1946,8 @@ def _template_v2_presentation(presentation_id: uuid.UUID) -> PresentationModel:
         n_slides=0,
         language="English",
         layout={
+            "name": "custom-template",
+            "template_id": "template",
             "layouts": [
                 {
                     "id": "thanks",
@@ -2017,9 +2019,9 @@ class _FakeSaveSlideSession:
             self.slides.remove(obj)
 
 
-def test_save_slide_for_template_v2_payload_persists_renderable_ui():
+def test_save_slide_for_template_payload_persists_renderable_ui():
     presentation_id = uuid.uuid4()
-    presentation = _template_v2_presentation(presentation_id)
+    presentation = _template_presentation(presentation_id)
     session = _FakeSaveSlideSession(presentation)
     memory = PresentationChatMemoryLayer(session, presentation_id)
 
@@ -2046,7 +2048,7 @@ def test_save_slide_for_template_v2_payload_persists_renderable_ui():
     assert result["saved"] is True
     assert len(session.slides) == 1
     saved_slide = session.slides[0]
-    assert saved_slide.layout_group == "template-v2"
+    assert saved_slide.layout_group == "custom-template"
     assert saved_slide.layout == "thanks"
     assert saved_slide.ui["id"] == "thanks"
     title_element = saved_slide.ui["components"][0]["elements"][0]
@@ -2056,7 +2058,7 @@ def test_save_slide_for_template_v2_payload_persists_renderable_ui():
 
 def test_chat_add_outline_refuses_more_than_max_slides():
     presentation_id = uuid.uuid4()
-    presentation = _template_v2_presentation(presentation_id)
+    presentation = _template_presentation(presentation_id)
     presentation.outlines = {
         "slides": [
             {"content": f"## Slide {index}"}
@@ -2076,7 +2078,7 @@ def test_chat_add_outline_refuses_more_than_max_slides():
 
 def test_chat_update_outline_trims_content_to_word_limit():
     presentation_id = uuid.uuid4()
-    presentation = _template_v2_presentation(presentation_id)
+    presentation = _template_presentation(presentation_id)
     presentation.outlines = {"slides": [{"content": "## Existing"}]}
     session = _FakeSaveSlideSession(presentation)
     memory = PresentationChatMemoryLayer(session, presentation_id)
@@ -2099,12 +2101,12 @@ def test_chat_update_outline_trims_content_to_word_limit():
 
 def test_chat_add_blank_slide_refuses_more_than_max_slides():
     presentation_id = uuid.uuid4()
-    presentation = _template_v2_presentation(presentation_id)
+    presentation = _template_presentation(presentation_id)
     session = _FakeSaveSlideSession(presentation)
     session.slides = [
         SlideModel(
             presentation=presentation_id,
-            layout_group="template-v2",
+            layout_group="custom-template",
             layout="thanks",
             index=index,
             content={},
@@ -2125,12 +2127,12 @@ def test_chat_add_blank_slide_refuses_more_than_max_slides():
 
 def test_chat_delete_final_slide_replaces_it_with_blank_fallback():
     presentation_id = uuid.uuid4()
-    presentation = _template_v2_presentation(presentation_id)
+    presentation = _template_presentation(presentation_id)
     presentation.n_slides = 1
     source_slide = SlideModel(
         id=uuid.uuid4(),
         presentation=presentation_id,
-        layout_group="template-v2",
+        layout_group="custom-template",
         layout="thanks",
         index=0,
         content={"hero": {"Title": "Thanks"}},
@@ -2150,7 +2152,7 @@ def test_chat_delete_final_slide_replaces_it_with_blank_fallback():
     fallback_slide = session.slides[0]
     assert fallback_slide.id != source_slide.id
     assert fallback_slide.index == 0
-    assert fallback_slide.layout_group == "template-v2"
+    assert fallback_slide.layout_group == "custom-template"
     assert fallback_slide.layout == "__blank_slide__"
     assert fallback_slide.content == {}
     assert fallback_slide.speaker_note == ""
@@ -2162,12 +2164,12 @@ def test_chat_delete_final_slide_replaces_it_with_blank_fallback():
 
 def test_chat_save_slide_refuses_new_slide_at_max_slides():
     presentation_id = uuid.uuid4()
-    presentation = _template_v2_presentation(presentation_id)
+    presentation = _template_presentation(presentation_id)
     session = _FakeSaveSlideSession(presentation)
     session.slides = [
         SlideModel(
             presentation=presentation_id,
-            layout_group="template-v2",
+            layout_group="custom-template",
             layout="thanks",
             index=index,
             content={},

@@ -282,7 +282,7 @@ def _table_element_has_explicit_data(element: dict[str, Any]) -> bool:
 
 
 def _image_element_has_explicit_data(element: dict[str, Any]) -> bool:
-    asset_url = _template_v2_asset_url(element)
+    asset_url = _template_asset_url(element)
     return bool(asset_url and _looks_like_asset_reference(asset_url))
 
 
@@ -298,11 +298,11 @@ def _normalize_image_tree(node: Any) -> None:
 
 
 def _normalize_image_element(element: dict[str, Any]) -> None:
-    asset_url = _template_v2_asset_url(element)
+    asset_url = _template_asset_url(element)
     if asset_url and _looks_like_asset_reference(asset_url):
         element["data"] = asset_url
     element.setdefault("is_icon", False)
-    prompt = _template_v2_asset_prompt(
+    prompt = _template_asset_prompt(
         element,
         is_icon=element.get("is_icon") is True,
     )
@@ -1583,7 +1583,7 @@ def _resolve_image_update_payload(
     return None
 
 
-def _template_v2_asset_url(value: Any) -> str | None:
+def _template_asset_url(value: Any) -> str | None:
     from utils.asset_directory_utils import normalize_slide_asset_url
 
     if isinstance(value, str):
@@ -1610,7 +1610,7 @@ def _template_v2_asset_url(value: Any) -> str | None:
     return fallback_url
 
 
-def _template_v2_asset_prompt(value: Any, *, is_icon: bool) -> str | None:
+def _template_asset_prompt(value: Any, *, is_icon: bool) -> str | None:
     if not isinstance(value, dict):
         return None
 
@@ -1627,14 +1627,14 @@ def _template_v2_asset_prompt(value: Any, *, is_icon: bool) -> str | None:
 
 
 def _apply_image_element_value(element: dict[str, Any], value: Any) -> None:
-    asset_url = _template_v2_asset_url(value)
+    asset_url = _template_asset_url(value)
     if not asset_url:
         raise ValueError(
             "Image/icon updates require `text` with an image or icon URL."
         )
     element["data"] = asset_url
     _normalize_generated_image_fit(element, asset_url)
-    prompt = _template_v2_asset_prompt(
+    prompt = _template_asset_prompt(
         value,
         is_icon=element.get("is_icon") is True,
     )

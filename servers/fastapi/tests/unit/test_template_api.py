@@ -7,24 +7,24 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
-from api.v1.ppt.endpoints.templates import (
-    CreateTemplateV2LayoutsRequest,
-    CreateTemplateV2Request,
-    GenerateTemplateV2BlocksRequest,
-    InitTemplateV2Request,
-    PatchTemplateV2SlideLayoutRequest,
-    UpdateTemplateV2MetadataRequest,
-    _create_template_v2_sync,
-    _run_create_template_v2_task,
-    create_template_v2_slide_layouts,
-    create_template_v2,
-    delete_template_v2,
-    generate_template_v2_blocks,
-    get_template_v2,
-    init_template_v2,
-    list_templates_v2,
-    patch_template_v2_slide_layout,
-    update_template_v2_metadata,
+from api.v1.ppt.endpoints.template import (
+    CreateTemplateLayoutsRequest,
+    CreateTemplateRequest,
+    GenerateTemplateBlocksRequest,
+    InitTemplateRequest,
+    PatchTemplateSlideLayoutRequest,
+    UpdateTemplateMetadataRequest,
+    _create_template_sync,
+    _run_create_template_task,
+    create_template_slide_layouts,
+    create_template,
+    delete_template,
+    generate_template_blocks,
+    get_template,
+    init_template,
+    list_templates,
+    patch_template_slide_layout,
+    update_template_metadata,
 )
 from models.sql.async_task import AsyncTaskModel
 from models.sql.template_v2 import TemplateV2
@@ -263,28 +263,28 @@ class _TemplateTaskSessionContext:
         return False
 
 
-def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async_session):
+def test_create_template_converts_generates_and_persists(tmp_path, fake_async_session):
     pptx_path = tmp_path / "quarterly-review.pptx"
     pptx_path.write_bytes(b"pptx")
     with patch(
-        "api.v1.ppt.endpoints.templates.resolve_app_path_to_filesystem",
+        "api.v1.ppt.endpoints.template.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
     ), patch(
-        "api.v1.ppt.endpoints.templates.EXPORT_TASK_SERVICE.convert_pptx_to_json",
+        "api.v1.ppt.endpoints.template.EXPORT_TASK_SERVICE.convert_pptx_to_json",
         new=AsyncMock(return_value=PptxToJsonDocument(**RAW_LAYOUTS)),
     ) as convert_mock, patch(
-        "api.v1.ppt.endpoints.templates.generate_template",
+        "api.v1.ppt.endpoints.template.generate_template",
         new=Mock(return_value=GENERATED_LAYOUTS),
     ) as generate_mock, patch(
-        "api.v1.ppt.endpoints.templates.merge_similar_components",
+        "api.v1.ppt.endpoints.template.merge_similar_components",
         new=Mock(return_value=MERGED_COMPONENTS),
     ) as merge_mock, patch(
-        "api.v1.ppt.endpoints.templates.random.randint",
+        "api.v1.ppt.endpoints.template.random.randint",
         return_value=4801,
     ) as randint_mock:
         template = asyncio.run(
-            _create_template_v2_sync(
-                CreateTemplateV2Request(
+            _create_template_sync(
+                CreateTemplateRequest(
                     pptx_url="/app_data/uploads/quarterly-review.pptx",
                     slide_image_urls=["/app_data/images/slide-1.png"],
                     fonts={"Inter": "Inter"},
@@ -330,7 +330,7 @@ def test_create_template_v2_converts_generates_and_persists(tmp_path, fake_async
     assert fake_async_session.commit_count == 1
 
 
-def test_create_template_v2_uses_most_common_generated_icon_type(
+def test_create_template_uses_most_common_generated_icon_type(
     tmp_path,
     fake_async_session,
 ):
@@ -339,24 +339,24 @@ def test_create_template_v2_uses_most_common_generated_icon_type(
     generated_layouts = SlideLayouts.model_validate(_template_layouts_with_icon_types())
 
     with patch(
-        "api.v1.ppt.endpoints.templates.resolve_app_path_to_filesystem",
+        "api.v1.ppt.endpoints.template.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
     ), patch(
-        "api.v1.ppt.endpoints.templates.EXPORT_TASK_SERVICE.convert_pptx_to_json",
+        "api.v1.ppt.endpoints.template.EXPORT_TASK_SERVICE.convert_pptx_to_json",
         new=AsyncMock(return_value=PptxToJsonDocument(**RAW_LAYOUTS)),
     ), patch(
-        "api.v1.ppt.endpoints.templates.generate_template",
+        "api.v1.ppt.endpoints.template.generate_template",
         new=Mock(return_value=generated_layouts),
     ), patch(
-        "api.v1.ppt.endpoints.templates.merge_similar_components",
+        "api.v1.ppt.endpoints.template.merge_similar_components",
         new=Mock(return_value=MERGED_COMPONENTS),
     ), patch(
-        "api.v1.ppt.endpoints.templates.random.randint",
+        "api.v1.ppt.endpoints.template.random.randint",
         return_value=4801,
     ):
         template = asyncio.run(
-            _create_template_v2_sync(
-                CreateTemplateV2Request(
+            _create_template_sync(
+                CreateTemplateRequest(
                     pptx_url="/app_data/uploads/icon-style.pptx",
                     slide_image_urls=["/app_data/images/slide-1.png"],
                     icon_type="bold",
@@ -372,7 +372,7 @@ def test_create_template_v2_uses_most_common_generated_icon_type(
     assert elements[2]["children"][0]["icon_type"] == "thin"
 
 
-def test_create_template_v2_caps_raw_layouts_to_preview_images(tmp_path, fake_async_session):
+def test_create_template_caps_raw_layouts_to_preview_images(tmp_path, fake_async_session):
     pptx_path = tmp_path / "slidesgo.pptx"
     pptx_path.write_bytes(b"pptx")
     raw_layouts = {
@@ -386,24 +386,24 @@ def test_create_template_v2_caps_raw_layouts_to_preview_images(tmp_path, fake_as
         ]
     }
     with patch(
-        "api.v1.ppt.endpoints.templates.resolve_app_path_to_filesystem",
+        "api.v1.ppt.endpoints.template.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
     ), patch(
-        "api.v1.ppt.endpoints.templates.EXPORT_TASK_SERVICE.convert_pptx_to_json",
+        "api.v1.ppt.endpoints.template.EXPORT_TASK_SERVICE.convert_pptx_to_json",
         new=AsyncMock(return_value=PptxToJsonDocument(**raw_layouts)),
     ), patch(
-        "api.v1.ppt.endpoints.templates.generate_template",
+        "api.v1.ppt.endpoints.template.generate_template",
         new=Mock(return_value=GENERATED_LAYOUTS),
     ) as generate_mock, patch(
-        "api.v1.ppt.endpoints.templates.merge_similar_components",
+        "api.v1.ppt.endpoints.template.merge_similar_components",
         new=Mock(return_value=MERGED_COMPONENTS),
     ), patch(
-        "api.v1.ppt.endpoints.templates.random.randint",
+        "api.v1.ppt.endpoints.template.random.randint",
         return_value=4801,
     ):
         template = asyncio.run(
-            _create_template_v2_sync(
-                CreateTemplateV2Request(
+            _create_template_sync(
+                CreateTemplateRequest(
                     pptx_url="/app_data/uploads/slidesgo.pptx",
                     slide_image_urls=["/app_data/images/slide-1.png"],
                 ),
@@ -417,31 +417,31 @@ def test_create_template_v2_caps_raw_layouts_to_preview_images(tmp_path, fake_as
     assert template.assets["slide_image_urls"] == ["/app_data/images/slide-1.png"]
 
 
-def test_create_template_v2_persists_when_component_dedup_fails(
+def test_create_template_persists_when_component_dedup_fails(
     tmp_path,
     fake_async_session,
 ):
     pptx_path = tmp_path / "dedup-fails.pptx"
     pptx_path.write_bytes(b"pptx")
     with patch(
-        "api.v1.ppt.endpoints.templates.resolve_app_path_to_filesystem",
+        "api.v1.ppt.endpoints.template.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
     ), patch(
-        "api.v1.ppt.endpoints.templates.EXPORT_TASK_SERVICE.convert_pptx_to_json",
+        "api.v1.ppt.endpoints.template.EXPORT_TASK_SERVICE.convert_pptx_to_json",
         new=AsyncMock(return_value=PptxToJsonDocument(**RAW_LAYOUTS)),
     ), patch(
-        "api.v1.ppt.endpoints.templates.generate_template",
+        "api.v1.ppt.endpoints.template.generate_template",
         new=Mock(return_value=GENERATED_LAYOUTS),
     ), patch(
-        "api.v1.ppt.endpoints.templates.merge_similar_components",
+        "api.v1.ppt.endpoints.template.merge_similar_components",
         new=Mock(side_effect=ValueError("bad clusters")),
     ), patch(
-        "api.v1.ppt.endpoints.templates.random.randint",
+        "api.v1.ppt.endpoints.template.random.randint",
         return_value=4801,
     ):
         template = asyncio.run(
-            _create_template_v2_sync(
-                CreateTemplateV2Request(
+            _create_template_sync(
+                CreateTemplateRequest(
                     pptx_url="/app_data/uploads/dedup-fails.pptx",
                     slide_image_urls=["/app_data/images/slide-1.png"],
                 ),
@@ -454,11 +454,11 @@ def test_create_template_v2_persists_when_component_dedup_fails(
     assert fake_async_session.commit_count == 1
 
 
-def test_create_template_v2_requires_slide_images(fake_async_session):
+def test_create_template_requires_slide_images(fake_async_session):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            _create_template_v2_sync(
-                CreateTemplateV2Request(
+            _create_template_sync(
+                CreateTemplateRequest(
                     pptx_url="/app_data/uploads/template.pptx",
                     slide_image_urls=[],
                 ),
@@ -470,13 +470,13 @@ def test_create_template_v2_requires_slide_images(fake_async_session):
     assert exc.value.detail == "At least one slide image is required"
 
 
-def test_create_template_v2_async_enqueues_task(fake_async_session):
+def test_create_template_async_enqueues_task(fake_async_session):
     background_tasks = BackgroundTasks()
 
     task = asyncio.run(
-        create_template_v2(
+        create_template(
             background_tasks=background_tasks,
-            request=CreateTemplateV2Request(
+            request=CreateTemplateRequest(
                 pptx_url="/app_data/uploads/template.pptx",
                 slide_image_urls=["/app_data/images/slide-1.png"],
             ),
@@ -499,7 +499,7 @@ def test_create_template_v2_async_enqueues_task(fake_async_session):
     assert len(background_tasks.tasks) == 1
 
 
-def test_create_template_v2_async_task_updates_slide_status_before_batch_completes(
+def test_create_template_async_task_updates_slide_status_before_batch_completes(
     tmp_path,
 ):
     pptx_path = tmp_path / "template.pptx"
@@ -520,28 +520,28 @@ def test_create_template_v2_async_task_updates_slide_status_before_batch_complet
         return generated_layouts[index]
 
     with patch(
-        "api.v1.ppt.endpoints.templates.async_session_maker",
+        "api.v1.ppt.endpoints.template.async_session_maker",
         new=lambda: _TemplateTaskSessionContext(session),
     ), patch(
-        "api.v1.ppt.endpoints.templates.resolve_app_path_to_filesystem",
+        "api.v1.ppt.endpoints.template.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
     ), patch(
-        "api.v1.ppt.endpoints.templates.EXPORT_TASK_SERVICE.convert_pptx_to_json",
+        "api.v1.ppt.endpoints.template.EXPORT_TASK_SERVICE.convert_pptx_to_json",
         new=AsyncMock(return_value=PptxToJsonDocument(**_two_raw_layouts())),
     ), patch(
-        "api.v1.ppt.endpoints.templates.generate_slide_layout",
+        "api.v1.ppt.endpoints.template.generate_slide_layout",
         new=Mock(side_effect=fake_generate_slide_layout),
     ), patch(
-        "api.v1.ppt.endpoints.templates.merge_similar_components",
+        "api.v1.ppt.endpoints.template.merge_similar_components",
         new=Mock(return_value=MERGED_COMPONENTS),
     ), patch(
-        "api.v1.ppt.endpoints.templates.random.randint",
+        "api.v1.ppt.endpoints.template.random.randint",
         side_effect=[4801, 4802],
     ):
         asyncio.run(
-            _run_create_template_v2_task(
+            _run_create_template_task(
                 task.id,
-                CreateTemplateV2Request(
+                CreateTemplateRequest(
                     pptx_url="/app_data/uploads/template.pptx",
                     slide_image_urls=[
                         "/app_data/images/slide-1.png",
@@ -576,11 +576,11 @@ def test_create_template_v2_async_task_updates_slide_status_before_batch_complet
     assert persisted_template.layouts["layouts"][1]["id"] == "slide_2_4802"
 
 
-def test_template_v2_request_ids_accept_non_uuid_strings():
-    layouts_request = CreateTemplateV2LayoutsRequest.model_validate(
+def test_template_request_ids_accept_non_uuid_strings():
+    layouts_request = CreateTemplateLayoutsRequest.model_validate(
         {"id": "general-template", "indices": [0]}
     )
-    blocks_request = GenerateTemplateV2BlocksRequest.model_validate(
+    blocks_request = GenerateTemplateBlocksRequest.model_validate(
         {"template_id": "sales-template"}
     )
 
@@ -588,19 +588,19 @@ def test_template_v2_request_ids_accept_non_uuid_strings():
     assert blocks_request.template_id == "sales-template"
 
 
-def test_init_template_v2_persists_assets_without_layouts(tmp_path, fake_async_session):
+def test_init_template_persists_assets_without_layouts(tmp_path, fake_async_session):
     pptx_path = tmp_path / "quarterly-review.pptx"
     pptx_path.write_bytes(b"pptx")
     with patch(
-        "api.v1.ppt.endpoints.templates.resolve_app_path_to_filesystem",
+        "api.v1.ppt.endpoints.template.resolve_app_path_to_filesystem",
         return_value=str(pptx_path),
     ), patch(
-        "api.v1.ppt.endpoints.templates.EXPORT_TASK_SERVICE.convert_pptx_to_json",
+        "api.v1.ppt.endpoints.template.EXPORT_TASK_SERVICE.convert_pptx_to_json",
         new=AsyncMock(return_value=PptxToJsonDocument(**RAW_LAYOUTS)),
     ) as convert_mock:
         template_id = asyncio.run(
-            init_template_v2(
-                InitTemplateV2Request(
+            init_template(
+                InitTemplateRequest(
                     pptx_url="/app_data/uploads/quarterly-review.pptx",
                     slide_image_urls=["/app_data/images/slide-1.png"],
                     fonts={"Inter": "https://example.com/inter.css"},
@@ -630,9 +630,9 @@ def test_init_template_v2_persists_assets_without_layouts(tmp_path, fake_async_s
     assert fake_async_session.commit_count == 1
 
 
-def test_list_templates_v2_returns_paginated_summary():
+def test_list_templates_returns_paginated_summary():
     response = asyncio.run(
-        list_templates_v2(page=1, page_size=20, sql_session=_ListSession())
+        list_templates(page=1, page_size=20, sql_session=_ListSession())
     )
 
     assert response.total == 1
@@ -645,37 +645,41 @@ def test_list_templates_v2_returns_paginated_summary():
     assert response.items[0].layout_count == 1
     assert response.items[0].thumbnail == "/app_data/images/slide-1.png"
     assert response.items[0].is_default is False
-    assert response.items[0].generation_template == (
-        "template-v2-00000000-0000-0000-0000-000000000001"
-    )
 
 
-def test_get_template_v2_returns_generation_id_and_layout_schema(fake_async_session):
+def test_get_template_returns_layouts_components_and_fonts(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(
         id=template_id,
         name="Customer Brand",
         description="User-generated customer template",
         layouts=TEMPLATE_LAYOUTS,
-        assets={"thumbnail": "/app_data/images/customer-template.png"},
+        merged_components={"components": [{"id": "hero"}]},
+        assets={
+            "thumbnail": "/app_data/images/customer-template.png",
+            "fonts": {"Inter": "https://example.com/inter.css"},
+        },
         is_default=False,
     )
     fake_async_session._get_results[template_id] = template
 
     response = asyncio.run(
-        get_template_v2(template_id, sql_session=fake_async_session)
+        get_template(template_id, sql_session=fake_async_session)
     )
 
     assert response.id == template_id
     assert response.name == "Customer Brand"
     assert response.is_default is False
-    assert response.generation_template == f"template-v2-{template_id}"
     assert response.layouts == TEMPLATE_LAYOUTS
-    assert response.layout_schema["layout_count"] == 1
-    assert response.layout_schema["layouts"][0]["layout_id"] == "slide_1"
+    assert response.merged_components == {"components": [{"id": "hero"}]}
+    assert response.fonts == {"Inter": "https://example.com/inter.css"}
+    assert not hasattr(response, "raw_layouts")
+    assert not hasattr(response, "components")
+    assert not hasattr(response, "assets")
+    assert not hasattr(response, "layout_schema")
 
 
-def test_create_template_v2_slide_layouts_returns_generated_layout(
+def test_create_template_slide_layouts_returns_generated_layout(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -689,19 +693,19 @@ def test_create_template_v2_slide_layouts_returns_generated_layout(
         },
     )
     fake_async_session._get_results[template_id] = template
-    request = CreateTemplateV2LayoutsRequest.model_validate(
+    request = CreateTemplateLayoutsRequest.model_validate(
         {"id": str(template_id), "indices": [0]}
     )
 
     with patch(
-        "api.v1.ppt.endpoints.templates.generate_slide_layout",
+        "api.v1.ppt.endpoints.template.generate_slide_layout",
         new=Mock(return_value=GENERATED_LAYOUTS.layouts[0]),
     ) as generate_mock, patch(
-        "api.v1.ppt.endpoints.templates.random.randint",
+        "api.v1.ppt.endpoints.template.random.randint",
         return_value=4801,
     ):
         response = asyncio.run(
-            create_template_v2_slide_layouts(
+            create_template_slide_layouts(
                 request,
                 sql_session=fake_async_session,
             )
@@ -724,7 +728,7 @@ def test_create_template_v2_slide_layouts_returns_generated_layout(
     }
 
 
-def test_create_template_v2_slide_layouts_rejects_invalid_index(
+def test_create_template_slide_layouts_rejects_invalid_index(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -737,8 +741,8 @@ def test_create_template_v2_slide_layouts_rejects_invalid_index(
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            create_template_v2_slide_layouts(
-                CreateTemplateV2LayoutsRequest(
+            create_template_slide_layouts(
+                CreateTemplateLayoutsRequest(
                     template_id=template_id,
                     indices=[1],
                 ),
@@ -750,7 +754,7 @@ def test_create_template_v2_slide_layouts_rejects_invalid_index(
     assert exc.value.detail == "Invalid slide index"
 
 
-def test_create_template_v2_slide_layouts_requires_slide_image(
+def test_create_template_slide_layouts_requires_slide_image(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -763,8 +767,8 @@ def test_create_template_v2_slide_layouts_requires_slide_image(
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            create_template_v2_slide_layouts(
-                CreateTemplateV2LayoutsRequest(
+            create_template_slide_layouts(
+                CreateTemplateLayoutsRequest(
                     template_id=template_id,
                     indices=[0],
                 ),
@@ -778,7 +782,7 @@ def test_create_template_v2_slide_layouts_requires_slide_image(
     )
 
 
-def test_create_template_v2_slide_layouts_preserves_image_url_indexes(
+def test_create_template_slide_layouts_preserves_image_url_indexes(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -800,12 +804,12 @@ def test_create_template_v2_slide_layouts_preserves_image_url_indexes(
     )
 
     with patch(
-        "api.v1.ppt.endpoints.templates.generate_slide_layout",
+        "api.v1.ppt.endpoints.template.generate_slide_layout",
         new=Mock(return_value=GENERATED_LAYOUTS.layouts[0]),
     ) as generate_mock:
         asyncio.run(
-            create_template_v2_slide_layouts(
-                CreateTemplateV2LayoutsRequest(
+            create_template_slide_layouts(
+                CreateTemplateLayoutsRequest(
                     template_id=template_id,
                     indices=[1],
                 ),
@@ -820,13 +824,13 @@ def test_create_template_v2_slide_layouts_preserves_image_url_indexes(
     assert generate_mock.call_args.kwargs == {"max_tokens": 16000}
 
 
-def test_create_template_v2_slide_layouts_returns_404_for_missing_template(
+def test_create_template_slide_layouts_returns_404_for_missing_template(
     fake_async_session,
 ):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            create_template_v2_slide_layouts(
-                CreateTemplateV2LayoutsRequest(
+            create_template_slide_layouts(
+                CreateTemplateLayoutsRequest(
                     template_id=str(uuid.uuid4()),
                     indices=[0],
                 ),
@@ -838,7 +842,7 @@ def test_create_template_v2_slide_layouts_returns_404_for_missing_template(
     assert exc.value.detail == "Template not found"
 
 
-def test_generate_template_v2_blocks_clusters_and_persists(fake_async_session):
+def test_generate_template_blocks_clusters_and_persists(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(
         name="Custom",
@@ -848,12 +852,12 @@ def test_generate_template_v2_blocks_clusters_and_persists(fake_async_session):
     fake_async_session._get_results[template_id] = template
 
     with patch(
-        "api.v1.ppt.endpoints.templates.merge_similar_components",
+        "api.v1.ppt.endpoints.template.merge_similar_components",
         new=Mock(return_value=MERGED_COMPONENTS),
     ) as merge_mock:
         response = asyncio.run(
-            generate_template_v2_blocks(
-                GenerateTemplateV2BlocksRequest.model_validate(
+            generate_template_blocks(
+                GenerateTemplateBlocksRequest.model_validate(
                     {"id": str(template_id)}
                 ),
                 sql_session=fake_async_session,
@@ -870,7 +874,7 @@ def test_generate_template_v2_blocks_clusters_and_persists(fake_async_session):
     assert fake_async_session.commit_count == 1
 
 
-def test_generate_template_v2_blocks_requires_layouts(fake_async_session):
+def test_generate_template_blocks_requires_layouts(fake_async_session):
     template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
@@ -880,8 +884,8 @@ def test_generate_template_v2_blocks_requires_layouts(fake_async_session):
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            generate_template_v2_blocks(
-                GenerateTemplateV2BlocksRequest(template_id=template_id),
+            generate_template_blocks(
+                GenerateTemplateBlocksRequest(template_id=template_id),
                 sql_session=fake_async_session,
             )
         )
@@ -891,7 +895,7 @@ def test_generate_template_v2_blocks_requires_layouts(fake_async_session):
     assert fake_async_session.commit_count == 0
 
 
-def test_patch_template_v2_slide_layout_updates_stored_layouts(fake_async_session):
+def test_patch_template_slide_layout_updates_stored_layouts(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(
         name="Custom",
@@ -906,9 +910,9 @@ def test_patch_template_v2_slide_layout_updates_stored_layouts(fake_async_sessio
     }
 
     response = asyncio.run(
-        patch_template_v2_slide_layout(
+        patch_template_slide_layout(
             template_id,
-            PatchTemplateV2SlideLayoutRequest(
+            PatchTemplateSlideLayoutRequest(
                 index=1,
                 layout=patched_layout,
             ),
@@ -923,7 +927,7 @@ def test_patch_template_v2_slide_layout_updates_stored_layouts(fake_async_sessio
     assert fake_async_session.commit_count == 1
 
 
-def test_patch_template_v2_slide_layout_updates_icon_type_from_layouts(
+def test_patch_template_slide_layout_updates_icon_type_from_layouts(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -937,9 +941,9 @@ def test_patch_template_v2_slide_layout_updates_icon_type_from_layouts(
     patched_layout = _template_layouts_with_icon_types()["layouts"][0]
 
     response = asyncio.run(
-        patch_template_v2_slide_layout(
+        patch_template_slide_layout(
             template_id,
-            PatchTemplateV2SlideLayoutRequest(
+            PatchTemplateSlideLayoutRequest(
                 index=0,
                 layout=patched_layout,
             ),
@@ -956,7 +960,7 @@ def test_patch_template_v2_slide_layout_updates_icon_type_from_layouts(
     assert fake_async_session.commit_count == 1
 
 
-def test_patch_template_v2_slide_layout_merges_out_of_order_init_saves(
+def test_patch_template_slide_layout_merges_out_of_order_init_saves(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -984,18 +988,18 @@ def test_patch_template_v2_slide_layout_merges_out_of_order_init_saves(
     }
 
     asyncio.run(
-        patch_template_v2_slide_layout(
+        patch_template_slide_layout(
             template_id,
-            PatchTemplateV2SlideLayoutRequest(
+            PatchTemplateSlideLayoutRequest(
                 layouts=[{"index": 1, "layout": second_layout}],
             ),
             sql_session=fake_async_session,
         )
     )
     asyncio.run(
-        patch_template_v2_slide_layout(
+        patch_template_slide_layout(
             template_id,
-            PatchTemplateV2SlideLayoutRequest(
+            PatchTemplateSlideLayoutRequest(
                 layouts=[{"index": 0, "layout": TEMPLATE_LAYOUTS["layouts"][0]}],
             ),
             sql_session=fake_async_session,
@@ -1008,7 +1012,7 @@ def test_patch_template_v2_slide_layout_merges_out_of_order_init_saves(
     assert fake_async_session.commit_count == 2
 
 
-def test_patch_template_v2_slide_layout_rejects_invalid_index(fake_async_session):
+def test_patch_template_slide_layout_rejects_invalid_index(fake_async_session):
     template_id = str(uuid.uuid4())
     fake_async_session._get_results[template_id] = TemplateV2(
         name="Custom",
@@ -1018,9 +1022,9 @@ def test_patch_template_v2_slide_layout_rejects_invalid_index(fake_async_session
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            patch_template_v2_slide_layout(
+            patch_template_slide_layout(
                 template_id,
-                PatchTemplateV2SlideLayoutRequest(
+                PatchTemplateSlideLayoutRequest(
                     index=1,
                     layout=TEMPLATE_LAYOUTS["layouts"][0],
                 ),
@@ -1033,7 +1037,7 @@ def test_patch_template_v2_slide_layout_rejects_invalid_index(fake_async_session
     assert fake_async_session.commit_count == 0
 
 
-def test_patch_template_v2_slide_layout_rejects_duplicate_layout_ids(
+def test_patch_template_slide_layout_rejects_duplicate_layout_ids(
     fake_async_session,
 ):
     template_id = str(uuid.uuid4())
@@ -1050,9 +1054,9 @@ def test_patch_template_v2_slide_layout_rejects_duplicate_layout_ids(
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            patch_template_v2_slide_layout(
+            patch_template_slide_layout(
                 template_id,
-                PatchTemplateV2SlideLayoutRequest(
+                PatchTemplateSlideLayoutRequest(
                     index=1,
                     layout=duplicate_layout,
                 ),
@@ -1065,31 +1069,30 @@ def test_patch_template_v2_slide_layout_rejects_duplicate_layout_ids(
     assert fake_async_session.commit_count == 0
 
 
-def test_get_template_v2_returns_template(fake_async_session):
+def test_get_template_returns_template(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(id=template_id, name="Custom", layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
     response = asyncio.run(
-        get_template_v2(template_id, sql_session=fake_async_session)
+        get_template(template_id, sql_session=fake_async_session)
     )
 
     assert response.id == template.id
     assert response.name == template.name
     assert response.layouts == template.layouts
-    assert response.generation_template == f"template-v2-{template_id}"
-    assert response.layout_schema["layout_count"] == 1
+    assert response.fonts == {}
 
 
-def test_update_template_v2_metadata_updates_name_and_description(fake_async_session):
+def test_update_template_metadata_updates_name_and_description(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", description=None, layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
     response = asyncio.run(
-        update_template_v2_metadata(
+        update_template_metadata(
             template_id,
-            UpdateTemplateV2MetadataRequest(
+            UpdateTemplateMetadataRequest(
                 name="  Sales Template  ",
                 description="  Quarterly report deck  ",
             ),
@@ -1104,7 +1107,7 @@ def test_update_template_v2_metadata_updates_name_and_description(fake_async_ses
     assert fake_async_session.commit_count == 1
 
 
-def test_update_template_v2_metadata_updates_icon_type(fake_async_session):
+def test_update_template_metadata_updates_icon_type(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(
         name="Custom",
@@ -1114,9 +1117,9 @@ def test_update_template_v2_metadata_updates_icon_type(fake_async_session):
     fake_async_session._get_results[template_id] = template
 
     response = asyncio.run(
-        update_template_v2_metadata(
+        update_template_metadata(
             template_id,
-            UpdateTemplateV2MetadataRequest(icon_type="thin"),
+            UpdateTemplateMetadataRequest(icon_type="thin"),
             sql_session=fake_async_session,
         )
     )
@@ -1128,16 +1131,16 @@ def test_update_template_v2_metadata_updates_icon_type(fake_async_session):
     assert fake_async_session.commit_count == 1
 
 
-def test_update_template_v2_metadata_rejects_blank_name(fake_async_session):
+def test_update_template_metadata_rejects_blank_name(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
-            update_template_v2_metadata(
+            update_template_metadata(
                 template_id,
-                UpdateTemplateV2MetadataRequest(name="   "),
+                UpdateTemplateMetadataRequest(name="   "),
                 sql_session=fake_async_session,
             )
         )
@@ -1148,13 +1151,13 @@ def test_update_template_v2_metadata_rejects_blank_name(fake_async_session):
     assert fake_async_session.commit_count == 0
 
 
-def test_delete_template_v2_deletes_template(fake_async_session):
+def test_delete_template_deletes_template(fake_async_session):
     template_id = str(uuid.uuid4())
     template = TemplateV2(name="Custom", layouts=RAW_LAYOUTS)
     fake_async_session._get_results[template_id] = template
 
     response = asyncio.run(
-        delete_template_v2(template_id, sql_session=fake_async_session)
+        delete_template(template_id, sql_session=fake_async_session)
     )
 
     assert response.status_code == 204
@@ -1162,9 +1165,9 @@ def test_delete_template_v2_deletes_template(fake_async_session):
     assert fake_async_session.commit_count == 1
 
 
-def test_get_template_v2_returns_404_for_missing_template(fake_async_session):
+def test_get_template_returns_404_for_missing_template(fake_async_session):
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(get_template_v2("missing-template", sql_session=fake_async_session))
+        asyncio.run(get_template("missing-template", sql_session=fake_async_session))
 
     assert exc.value.status_code == 404
     assert exc.value.detail == "Template not found"
