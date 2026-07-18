@@ -376,12 +376,16 @@ def test_prepare_presentation_preserves_payload_icon_weight():
             )
         )
 
-    assert response.layout["icon_weight"] == "thin"
-    assert response.layout["icon_type"] == "thin"
-    stream_layout = presentation_endpoint._get_presentation_stream_layout(response)
+    assert response.presentation_id == presentation_id
+    assert not hasattr(response, "layout")
+    assert not hasattr(response, "structure")
+    assert not hasattr(response, "theme")
+    assert presentation.layout["icon_weight"] == "thin"
+    assert presentation.layout["icon_type"] == "thin"
+    stream_layout = presentation_endpoint._get_presentation_stream_layout(presentation)
     assert stream_layout.icon_weight == "thin"
     assert stream_layout.icon_type == "thin"
-    assert response.language == ""
+    assert presentation.language == ""
 
 
 def test_prepare_presentation_clears_stale_language_for_reviewed_outlines():
@@ -423,7 +427,8 @@ def test_prepare_presentation_clears_stale_language_for_reviewed_outlines():
             )
         )
 
-    assert response.language == ""
+    assert response.presentation_id == presentation_id
+    assert presentation.language == ""
 
 
 def test_prepare_presentation_rejects_too_many_outlines():
@@ -549,15 +554,16 @@ def test_prepare_presentation_accepts_template_layout_id():
             )
         )
 
-    assert response.layout == {
+    assert response.presentation_id == presentation_id
+    assert presentation.layout == {
         **template_layouts,
         "icon_type": "bold",
         "icon_weight": "bold",
         "name": f"custom-{template_id}",
         "template_id": template_id,
     }
-    assert response.structure == {"slides": [0]}
-    assert response.fonts == {"Inter": "https://example.com/inter.css"}
+    assert presentation.structure == {"slides": [0]}
+    assert presentation.fonts == {"Inter": "https://example.com/inter.css"}
     structure_layout = generate_structure.await_args.kwargs["presentation_layout"]
     assert structure_layout.name == f"custom-{template_id}"
     assert structure_layout.slides[0].id == "template-layout-1"
@@ -662,8 +668,9 @@ def test_get_presentation_preserves_template_detail_payload():
     )
 
     assert response.version == PresentationVersion.V2_STANDARD
-    assert response.layout == template_layouts
-    assert response.structure == structure
+    assert not hasattr(response, "layout")
+    assert not hasattr(response, "structure")
+    assert not hasattr(response, "theme")
     assert not hasattr(response, "components")
     assert not hasattr(response, "merged_components")
     assert response.fonts == {

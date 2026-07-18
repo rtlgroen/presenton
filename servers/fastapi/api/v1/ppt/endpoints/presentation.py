@@ -20,6 +20,7 @@ from fastapi import (
     Request,
 )
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -104,6 +105,10 @@ logger = logging.getLogger(__name__)
 PRESENTATION_ROUTER = APIRouter(prefix="/presentation", tags=["Presentation"])
 ASYNC_TASK_TYPE_PRESENTATION_GENERATE = "presentation.generate"
 CUSTOM_TEMPLATE_PREFIX = "custom-"
+
+
+class PresentationPrepareResponse(BaseModel):
+    presentation_id: uuid.UUID
 
 
 def _presentation_task_progress_data(
@@ -259,7 +264,7 @@ def _extract_template_fonts_from_assets(assets: Any) -> Optional[dict[str, str]]
 
 
 def _presentation_response_data(presentation: PresentationModel) -> dict:
-    return presentation.model_dump()
+    return presentation.model_dump(exclude={"layout", "structure", "theme"})
 
 
 def _insert_toc_layouts(
@@ -1416,7 +1421,7 @@ async def create_presentation(
     return presentation
 
 
-@PRESENTATION_ROUTER.post("/prepare", response_model=PresentationModel)
+@PRESENTATION_ROUTER.post("/prepare", response_model=PresentationPrepareResponse)
 async def prepare_presentation(
     presentation_id: Annotated[uuid.UUID, Body()],
     outlines: Annotated[List[SlideOutlineModel], Body()],
@@ -1506,7 +1511,7 @@ async def prepare_presentation(
         presentation.outlines,
     )
 
-    return presentation
+    return PresentationPrepareResponse(presentation_id=presentation.id)
 
 
 @PRESENTATION_ROUTER.get("/stream/{id}", response_model=PresentationWithSlides)

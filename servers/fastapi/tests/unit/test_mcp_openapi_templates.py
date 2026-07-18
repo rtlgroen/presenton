@@ -34,3 +34,17 @@ def test_openapi_exposes_template_catalog_and_schema_detail():
     assert "components" not in detail["properties"]
     assert "assets" not in detail["properties"]
     assert "layout_schema" not in detail["properties"]
+
+
+def test_openapi_prepare_returns_minimal_response():
+    openapi_spec_path = Path(__file__).resolve().parents[2] / "openai_spec.json"
+    spec = json.loads(openapi_spec_path.read_text(encoding="utf-8"))
+
+    prepare_operation = spec["paths"]["/api/v1/ppt/presentation/prepare"]["post"]
+    response_schema = prepare_operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema == {"$ref": "#/components/schemas/PresentationPrepareResponse"}
+
+    prepare_response = spec["components"]["schemas"]["PresentationPrepareResponse"]
+    assert set(prepare_response["properties"]) == {"presentation_id"}
