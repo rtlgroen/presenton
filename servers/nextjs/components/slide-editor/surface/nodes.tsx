@@ -66,7 +66,6 @@ import {
   isManualPositioned,
   isRawIconElement,
   isStaticSvgIconSource,
-  isVectorLineElement,
   isVectorType,
   isRecord,
   keyForSelection,
@@ -463,8 +462,11 @@ export function RawComponentNode({
   const elements = readArray(renderedComponent.elements).filter(
     isRecord,
   ) as RawElement[];
+  const isSingleVectorElementComponent =
+    elements.length === 1 && isVectorType(readString(elements[0]?.type));
   const canNormalizeSingleVectorWrapper =
-    elements.length === 1 && (readNumber(component.rotation) ?? 0) === 0;
+    isSingleVectorElementComponent &&
+    (readNumber(component.rotation) ?? 0) === 0;
   const handleSingleElementComponentDragEnd = useCallback(
     (elementSelection: ElementSelection, delta: Point) => {
       if (
@@ -679,10 +681,10 @@ export function RawComponentNode({
             canNormalizeSingleVectorWrapper && elementIndex === 0
           }
           allowVectorPointEditing={
-            canNormalizeSingleVectorWrapper && elementIndex === 0
+            isSingleVectorElementComponent && elementIndex === 0
           }
           allowDirectVectorSelection={
-            canNormalizeSingleVectorWrapper && elementIndex === 0
+            isSingleVectorElementComponent && elementIndex === 0
           }
           fontRevision={fontRevision}
         />
@@ -824,7 +826,6 @@ function RawElementNode({
   const editing = editingKey === key;
   const type = readString(element.type);
   const isVector = isVectorType(type);
-  const isVectorLine = isVectorLineElement(element);
   const vectorPointEditing = vectorEditingKey === key;
   const [vectorDragPreview, setVectorDragPreview] =
     useState<RawElement | null>(null);
@@ -859,7 +860,7 @@ function RawElementNode({
     isVector &&
     allowVectorPointEditing &&
     !editing &&
-    (vectorPointEditing || isVectorLine);
+    vectorPointEditing;
   const vectorDraggable =
     isEditMode && isSelected && isVector && !editing && !showVectorPointHandles;
   useEffect(() => {
@@ -1122,7 +1123,6 @@ function RawElementNode({
           }
           event.cancelBubble = true;
           onSelect(selection);
-          if (isVectorLine) onOpenEditor(selection);
           return;
         }
         if (vectorDraggable) {
@@ -1141,7 +1141,6 @@ function RawElementNode({
           }
           event.cancelBubble = true;
           onSelect(selection);
-          if (isVectorLine) onOpenEditor(selection);
           return;
         }
         if (vectorDraggable) {

@@ -132,7 +132,6 @@ import {
   isManualPositioned,
   isRecord,
   isRawIconElement,
-  isVectorLineElement,
   isVectorType,
   keyForSelection,
   keysForSelection,
@@ -481,8 +480,7 @@ function TemplateV2KonvaSlideComponent({
     selectedIsVectorElement &&
     selection?.kind === "element" &&
     selectedCanEditVectorPoints &&
-    (isVectorLineElement(selectedElement) ||
-      vectorEditingKey === keyForSelection(selection));
+    vectorEditingKey === keyForSelection(selection);
   const shouldHideParentComponentBoundary = inlineEdit || selectedIsVectorElement;
   const transformerParentComponentKey = shouldHideParentComponentBoundary
     ? null
@@ -765,6 +763,7 @@ function TemplateV2KonvaSlideComponent({
   const clearEditorUiState = useCallback(
     (options?: { clearActiveSurface?: boolean }) => {
       multiComponentDragRef.current = null;
+      selectionRef.current = null;
       setSelection(null);
       clearTableCellSelection();
       clearTableCellEditing();
@@ -899,14 +898,16 @@ function TemplateV2KonvaSlideComponent({
     if (!previous) return;
     redoStackRef.current.push(currentUiRef.current);
     commitUi(previous, false);
-  }, [commitUi]);
+    clearEditorUiState();
+  }, [clearEditorUiState, commitUi]);
 
   const redo = useCallback(() => {
     const next = redoStackRef.current.pop();
     if (!next) return;
     undoStackRef.current.push(currentUiRef.current);
     commitUi(next, false);
-  }, [commitUi]);
+    clearEditorUiState();
+  }, [clearEditorUiState, commitUi]);
 
   const select = useCallback(
     (nextSelection: Selection, options?: SelectOptions) => {
@@ -1564,12 +1565,15 @@ function TemplateV2KonvaSlideComponent({
     trackEvent(MixpanelEvent.Editor_Component_Ungrouped, {
       ...editorAnalyticsProps(),
     });
+    selectionRef.current = result.selection;
     setSelection(result.selection);
+    activateSurface(result.selection);
     clearInlineEdit();
     clearTableCellSelection();
     setVectorEditSelection(null);
     setIconEditorSelection(null);
   }, [
+    activateSurface,
     clearInlineEdit,
     clearTableCellSelection,
     commitUi,
@@ -2113,7 +2117,9 @@ function TemplateV2KonvaSlideComponent({
               selectedKeys={selectedKeys}
               selectionKind={selection?.kind ?? null}
               horizontalResizeOnly={horizontalResizeOnly}
-              fullElementTransform={selectedIsVectorElement}
+              fullElementTransform={
+                selectedIsVectorElement && selectedCanEditVectorPoints
+              }
               suppressSelectedOutline={Boolean(
                 selectedTableCell ||
                   inlineEdit ||

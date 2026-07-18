@@ -123,9 +123,35 @@ async function loadInsertElements() {
   return import(pathToFileURL(outfile).href);
 }
 
+async function loadUngroup() {
+  const outDir = await mkdtemp(path.join(tmpdir(), "ungroup-test-"));
+  const outfile = path.join(outDir, "ungroup.mjs");
+
+  await build({
+    entryPoints: [
+      path.join(
+        projectRoot,
+        "components",
+        "slide-editor",
+        "model",
+        "template-v2-ungroup.ts",
+      ),
+    ],
+    outfile,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    sourcemap: false,
+    logLevel: "silent",
+  });
+
+  return import(pathToFileURL(outfile).href);
+}
+
 const modelPromise = loadModel();
 const shapeToolbarPromise = loadShapeToolbar();
 const insertElementsPromise = loadInsertElements();
+const ungroupPromise = loadUngroup();
 
 test("adds and removes vector shape points", async () => {
   const {
@@ -688,6 +714,175 @@ test("updates a single-vector component boundary after vector shape drag", async
     { x: 40, y: 0 },
     { x: 40, y: 40 },
   ]);
+});
+
+test("ungroups vector elements without shifting point offsets", async () => {
+  const {
+    childArrayInfo,
+    componentBox,
+    elementBox,
+    layoutChildren,
+  } = await modelPromise;
+  const { ungroupTemplateV2ComponentInUi } = await ungroupPromise;
+
+  const result = ungroupTemplateV2ComponentInUi(
+    {
+      components: [
+        {
+          id: "combo",
+          position: { x: 100, y: 50 },
+          elements: [
+            {
+              type: "vector",
+              points: [
+                { x: 20, y: 10 },
+                { x: 60, y: 10 },
+                { x: 60, y: 30 },
+                { x: 20, y: 30 },
+              ],
+              closed: true,
+            },
+            {
+              type: "shape",
+              position: { x: 80, y: 40 },
+              size: { width: 30, height: 20 },
+            },
+          ],
+        },
+      ],
+    },
+    0,
+    { childArrayInfo, componentBox, elementBox, layoutChildren },
+  );
+
+  assert.ok(result);
+  assert.equal(result.selection, null);
+  assert.deepEqual(result.ui.components[0].position, { x: 120, y: 60 });
+  assert.deepEqual(result.ui.components[0].elements[0].points, [
+    { x: 0, y: 0 },
+    { x: 40, y: 0 },
+    { x: 40, y: 20 },
+    { x: 0, y: 20 },
+  ]);
+  assert.deepEqual(componentBox(result.ui.components[0]), {
+    x: 120,
+    y: 60,
+    width: 40,
+    height: 20,
+  });
+  assert.deepEqual(result.ui.components[1].position, { x: 180, y: 90 });
+  assert.deepEqual(result.ui.components[1].elements[0].position, { x: 0, y: 0 });
+});
+
+test("ungrouped elements keep parent component rotation placement", async () => {
+  const {
+    childArrayInfo,
+    componentBox,
+    elementBox,
+    layoutChildren,
+  } = await modelPromise;
+  const { ungroupTemplateV2ComponentInUi } = await ungroupPromise;
+  const roundPoint = (point) => ({
+    x: Math.round(point.x * 1_000_000) / 1_000_000,
+    y: Math.round(point.y * 1_000_000) / 1_000_000,
+  });
+
+  const result = ungroupTemplateV2ComponentInUi(
+    {
+      components: [
+        {
+          id: "rotated",
+          position: { x: 100, y: 100 },
+          rotation: 90,
+          elements: [
+            {
+              type: "shape",
+              position: { x: 0, y: 0 },
+              size: { width: 20, height: 20 },
+            },
+            {
+              type: "shape",
+              position: { x: 80, y: 0 },
+              size: { width: 20, height: 20 },
+            },
+          ],
+        },
+      ],
+    },
+    0,
+    { childArrayInfo, componentBox, elementBox, layoutChildren },
+  );
+
+  assert.ok(result);
+  assert.equal(result.ui.components[0].rotation, 90);
+  assert.equal(result.ui.components[1].rotation, 90);
+  assert.deepEqual(roundPoint(result.ui.components[0].position), {
+    x: 140,
+    y: 60,
+  });
+  assert.deepEqual(roundPoint(result.ui.components[1].position), {
+    x: 140,
+    y: 140,
+  });
+});
+
+test("ungrouped layout children keep layout element rotation placement", async () => {
+  const {
+    childArrayInfo,
+    componentBox,
+    elementBox,
+    layoutChildren,
+  } = await modelPromise;
+  const { ungroupTemplateV2ComponentInUi } = await ungroupPromise;
+  const roundPoint = (point) => ({
+    x: Math.round(point.x * 1_000_000) / 1_000_000,
+    y: Math.round(point.y * 1_000_000) / 1_000_000,
+  });
+
+  const result = ungroupTemplateV2ComponentInUi(
+    {
+      components: [
+        {
+          id: "group-wrapper",
+          position: { x: 100, y: 100 },
+          elements: [
+            {
+              type: "group",
+              position: { x: 0, y: 0 },
+              size: { width: 100, height: 20 },
+              rotation: 90,
+              elements: [
+                {
+                  type: "shape",
+                  position: { x: 0, y: 0 },
+                  size: { width: 20, height: 20 },
+                },
+                {
+                  type: "shape",
+                  position: { x: 80, y: 0 },
+                  size: { width: 20, height: 20 },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    0,
+    { childArrayInfo, componentBox, elementBox, layoutChildren },
+  );
+
+  assert.ok(result);
+  assert.equal(result.ui.components[0].rotation, 90);
+  assert.equal(result.ui.components[1].rotation, 90);
+  assert.deepEqual(roundPoint(result.ui.components[0].position), {
+    x: 140,
+    y: 60,
+  });
+  assert.deepEqual(roundPoint(result.ui.components[1].position), {
+    x: 140,
+    y: 140,
+  });
 });
 
 test("preserves inserted vector elements", async () => {
