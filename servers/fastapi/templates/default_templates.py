@@ -10,7 +10,7 @@ from sqlmodel import select
 
 from models.sql.template_v2 import TemplateV2
 from services.database import async_session_maker
-from templates.v2.models.layouts import MergedComponents, RawSlideLayouts, SlideLayouts
+from templates.v2.models.layouts import MergedComponents, SlideLayouts
 from utils.get_env import get_app_data_directory_env
 from utils.icon_weights import extract_icon_type_from_settings
 
@@ -120,7 +120,6 @@ def _load_default_template(template_dir: Path) -> TemplateV2:
 
     layouts = _coerce_slide_layouts(rewritten.get("layouts"))
     merged_components = _coerce_merged_components(rewritten.get("merged_components"))
-    raw_layouts = _coerce_raw_layouts(rewritten.get("raw_layouts"))
     components = rewritten.get("components")
     assets = _build_assets(rewritten, template_id, layouts, merged_components)
 
@@ -128,7 +127,7 @@ def _load_default_template(template_dir: Path) -> TemplateV2:
         id=template_id,
         name=_read_required_string(rewritten, "name", template_id),
         description=_read_optional_string(rewritten.get("description")),
-        raw_layouts=raw_layouts,
+        raw_layouts=None,
         components=components if isinstance(components, dict) else None,
         merged_components=merged_components,
         layouts=layouts,
@@ -209,16 +208,6 @@ def _coerce_merged_components(value: Any) -> dict[str, Any] | None:
         return None
     payload = {"components": value} if isinstance(value, list) else value
     return MergedComponents.model_validate(payload).model_dump(
-        mode="json",
-        exclude_none=True,
-    )
-
-
-def _coerce_raw_layouts(value: Any) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    payload = {"layouts": value} if isinstance(value, list) else value
-    return RawSlideLayouts.model_validate(payload).model_dump(
         mode="json",
         exclude_none=True,
     )

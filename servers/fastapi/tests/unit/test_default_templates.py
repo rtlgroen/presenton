@@ -28,7 +28,25 @@ def _component() -> dict[str, Any]:
     }
 
 
-def _write_template_bundle(root: Path) -> Path:
+def _raw_layout() -> dict[str, Any]:
+    return {
+        "id": "slide_1",
+        "description": "Raw slide layout that should not be stored for defaults.",
+        "elements": [
+            {
+                "type": "image",
+                "position": {"x": 10, "y": 20},
+                "size": {"width": 320, "height": 180},
+                "data": "static/image.png",
+                "decorative": False,
+                "name": "raw_photo",
+                "is_icon": False,
+            }
+        ],
+    }
+
+
+def _write_template_bundle(root: Path, *, include_raw_layouts: bool = False) -> Path:
     template_dir = root / "general"
     static_dir = template_dir / "static"
     static_dir.mkdir(parents=True)
@@ -56,6 +74,11 @@ def _write_template_bundle(root: Path) -> Path:
                         "variants": [_component()],
                     }
                 ],
+                **(
+                    {"raw_layouts": {"layouts": [_raw_layout()]}}
+                    if include_raw_layouts
+                    else {}
+                ),
             }
         ),
         encoding="utf-8",
@@ -133,6 +156,7 @@ def test_default_template_import_normalizes_shapes_and_copies_static(
     template = session.added[0]
     assert template.id == "general"
     assert template.is_default is True
+    assert template.raw_layouts is None
     assert list(template.layouts) == ["layouts"]
     assert list(template.merged_components) == ["components"]
     assert (
@@ -205,12 +229,13 @@ def test_default_template_import_removes_static_directory_removed_from_bundle(
 
 def test_default_template_import_updates_existing_database_row(tmp_path, monkeypatch):
     templates_root = tmp_path / "templates"
-    _write_template_bundle(templates_root)
+    _write_template_bundle(templates_root, include_raw_layouts=True)
     app_data_dir = tmp_path / "app_data"
     existing = TemplateV2(
         id="general",
         name="Old name",
         description="Old description",
+        raw_layouts={"layouts": [_raw_layout()]},
         layouts={"layouts": []},
         merged_components={"components": []},
         assets={"thumbnail": "/old.png"},
@@ -231,6 +256,7 @@ def test_default_template_import_updates_existing_database_row(tmp_path, monkeyp
     assert existing.name == "General"
     assert existing.description == "General purpose default template."
     assert existing.is_default is True
+    assert existing.raw_layouts is None
     assert list(existing.layouts) == ["layouts"]
     assert list(existing.merged_components) == ["components"]
     assert existing.assets["thumbnail"] == (
