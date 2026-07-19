@@ -410,19 +410,27 @@ function isAuthorInfoCard(group: GroupElement) {
 }
 
 function authorInfoCardRightEdge(group: GroupElement) {
-  const background = group.children.find(
-    (child) =>
-      child.type === "rectangle" &&
-      (child.position?.x ?? 0) <= 0.05 &&
-      (child.position?.y ?? 0) <= 0.05 &&
-      child.size?.width,
-  );
+  const backgroundRightEdge = group.children
+    .filter((child): child is Extract<SlideElement, { type: "vector" }> =>
+      child.type === "vector",
+    )
+    .map(vectorBackgroundRightEdge)
+    .find((rightEdge): rightEdge is number => rightEdge != null);
 
-  if (background?.size?.width) {
-    return (background.position?.x ?? 0) + background.size.width;
-  }
+  if (backgroundRightEdge != null) return backgroundRightEdge;
 
   return group.size.width;
+}
+
+function vectorBackgroundRightEdge(
+  element: Extract<SlideElement, { type: "vector" }>,
+) {
+  if (element.points.length === 0 || !element.fill?.color) return null;
+  const minX = Math.min(...element.points.map((point) => point.x));
+  const minY = Math.min(...element.points.map((point) => point.y));
+  const maxX = Math.max(...element.points.map((point) => point.x));
+  if (minX > 0.05 || minY > 0.05 || maxX <= 0) return null;
+  return maxX;
 }
 
 function isAuthorInfoText(
@@ -830,13 +838,15 @@ function adaptVector(raw: UnknownRecord): SlideElement | null {
   if (!hasVisiblePaint(fill, stroke, base.opacity)) return null;
   if (points.length < 2) return null;
 
-  const { position, size, ...pointBase } = base;
+  const { position, size, decorative, ...pointBase } = base;
   void position;
   void size;
+  void decorative;
 
   return {
     ...pointBase,
     type: "vector",
+    shape: readEnum(raw, ["polygon", "ellipse"], "shape") ?? undefined,
     points,
     closed: adaptVectorClosed(raw, points),
     corner_radii: adaptCornerRadii(raw, points.length),
@@ -982,27 +992,31 @@ function adaptChart(raw: UnknownRecord): SlideElement {
 }
 
 function adaptInfographic(raw: UnknownRecord): SlideElement {
-  const minValue = readNumber(raw, "min_value") ?? 0;
-  const rawMaxValue = readNumber(raw, "max_value") ?? 100;
+  const data = readRecord(raw, "data") ?? {};
+  const minValue =
+    readNumber(data, "min_value") ??
+    0;
+  const rawMaxValue =
+    readNumber(data, "max_value") ??
+    100;
   const maxValue =
     rawMaxValue === minValue ? minValue + 1 : rawMaxValue;
+  const colors = readArray(raw, "colors")
+    .map(readColor)
+    .filter((color): color is string => Boolean(color));
 
   return {
     ...baseElement(raw),
     type: "infographic",
-    infographic_type:
-      readEnum(
-        raw,
-        ["progress_bar", "gauge"],
-        "infographic_type",
-      ) ?? "gauge",
-    min_value: minValue,
-    max_value: maxValue,
-    value: readNumber(raw, "value") ?? minValue,
-    base_color: readColor(readValue(raw, "base_color")),
-    highlight_color: readColor(
-      readValue(raw, "highlight_color"),
-    ),
+    data: {
+      type:
+        readEnum(data, ["progress_bar", "gauge"], "type") ??
+        "gauge",
+      min_value: minValue,
+      max_value: maxValue,
+      value: readNumber(data, "value") ?? minValue,
+    },
+    colors,
   };
 }
 
@@ -1573,7 +1587,6 @@ function isFullSlideFilledShape(
   bounds: { width: number; height: number },
 ) {
   if (
-    element.type !== "rectangle" &&
     element.type !== "vector"
   ) return false;
   return (

@@ -411,6 +411,51 @@ def test_get_component_schema_extracts_generated_component_content():
     }
 
 
+def test_get_component_schema_extracts_infographic_content_without_vector_content():
+    component = {
+        "id": "metric_badge",
+        "description": "Reusable metric badge component.",
+        "elements": [
+            {
+                "type": "vector",
+                "shape": "ellipse",
+                "points": [
+                    {"x": 0, "y": 40},
+                    {"x": 50, "y": 0},
+                    {"x": 100, "y": 40},
+                    {"x": 50, "y": 80},
+                ],
+                "closed": True,
+            },
+            {
+                "type": "infographic",
+                "decorative": False,
+                "name": "progress",
+                "data": {
+                    "type": "progress_bar",
+                    "min_value": 0,
+                    "max_value": 100,
+                    "value": 64,
+                },
+                "colors": ["E5E7EB", "2563EB"],
+            },
+        ],
+    }
+
+    schema = get_component_schema(component)
+    properties = schema["properties"]
+
+    assert list(properties) == ["progress"]
+    assert properties["progress"]["x-element-type"] == "infographic"
+    assert properties["progress"]["properties"]["data"]["oneOf"][0]["properties"][
+        "type"
+    ] == {"const": "progress_bar"}
+    assert properties["progress"]["properties"]["data"]["oneOf"][1]["properties"][
+        "type"
+    ] == {"const": "gauge"}
+    assert properties["progress"]["required"] == ["data"]
+
+
 def test_get_component_schema_collapses_repeated_component_children_to_array():
     component = {
         "id": "card_grid",

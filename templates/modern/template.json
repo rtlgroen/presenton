@@ -19,6 +19,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -55,6 +56,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -91,6 +93,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -127,6 +130,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -163,6 +167,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -199,6 +204,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -290,6 +296,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#1E4CD9",
                     "opacity": 1
@@ -671,6 +678,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -697,6 +705,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -737,6 +746,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -763,6 +773,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -809,6 +820,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -835,6 +847,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -877,6 +890,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -903,6 +917,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -1317,6 +1332,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -1403,6 +1419,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -1483,6 +1500,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -1569,6 +1587,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -1649,6 +1668,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -1735,6 +1755,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -1815,6 +1836,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -1901,6 +1923,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -1981,6 +2004,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -2067,6 +2091,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -2147,6 +2172,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -2233,6 +2259,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -2341,6 +2368,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -2472,6 +2500,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -2603,6 +2632,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -2734,6 +2764,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -2879,6 +2910,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -2921,6 +2953,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -2963,6 +2996,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -3011,6 +3045,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#F5F8FE",
                 "opacity": 1
@@ -3103,6 +3138,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -3471,6 +3507,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -3988,6 +4025,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -4014,6 +4052,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -4040,6 +4079,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -4066,6 +4106,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -4092,6 +4133,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -4118,6 +4160,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4137,6 +4180,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4156,6 +4200,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4175,6 +4220,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4194,6 +4240,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4213,6 +4260,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4232,6 +4280,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4251,6 +4300,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4270,6 +4320,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4289,6 +4340,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -4348,6 +4400,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -4426,6 +4479,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -4612,6 +4666,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -4690,6 +4745,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -4915,6 +4971,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -4941,6 +4998,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -5079,6 +5137,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -5105,6 +5164,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -5243,6 +5303,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -5269,6 +5330,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -5407,6 +5469,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -5433,6 +5496,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -5634,6 +5698,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#CBE3CC",
                     "opacity": 1
@@ -5760,6 +5825,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -5912,6 +5978,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -6064,6 +6131,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -6216,6 +6284,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -8229,8 +8298,8 @@
   ],
   "layouts": [
     {
-      "id": "balanced_cover_layout_8282",
-      "description": "A two-column cover slide with a left text introduction, compact attribution card, and a large rounded image panel on the right.",
+      "id": "left_cover_text_right_image_8282",
+      "description": "A split cover slide with a left text introduction, compact attribution card, and a large rounded image panel on the right.",
       "components": [
         {
           "id": "plain_background",
@@ -8242,6 +8311,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -8327,6 +8397,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#1E4CD9",
                     "opacity": 1
@@ -8656,8 +8727,8 @@
       ]
     },
     {
-      "id": "split_grid_layout_7051",
-      "description": "A two-column slide with a large text panel on the left and a six-card feature grid on the right.",
+      "id": "left_title_right_feature_grid_7051",
+      "description": "A split slide with a large text panel on the left and a feature card grid on the right.",
       "components": [
         {
           "id": "slide_canvas",
@@ -8669,6 +8740,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -8695,6 +8767,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -8830,6 +8903,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -8916,6 +8990,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -8996,6 +9071,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -9082,6 +9158,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -9162,6 +9239,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -9248,6 +9326,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -9328,6 +9407,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -9414,6 +9494,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -9494,6 +9575,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -9580,6 +9662,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -9660,6 +9743,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#F5F8FE",
                     "opacity": 1
@@ -9746,6 +9830,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#234CD9",
                     "opacity": 1
@@ -9818,8 +9903,8 @@
       ]
     },
     {
-      "id": "split_cards_layout_9936",
-      "description": "A two-column slide with a large text block on the left and stacked rounded information cards on the right.",
+      "id": "left_title_right_stacked_cards_9936",
+      "description": "A split slide with a large text block on the left and stacked rounded information cards on the right.",
       "components": [
         {
           "id": "slide_background",
@@ -9831,6 +9916,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -9974,6 +10060,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -10105,6 +10192,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -10236,6 +10324,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -10367,6 +10456,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -10506,6 +10596,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -10541,8 +10632,8 @@
       ]
     },
     {
-      "id": "split_text_chart_layout_2511",
-      "description": "Two-column slide with a left-aligned text block, rounded chart panel on the right, and a thin bottom accent rule.",
+      "id": "left_title_description_right_chart_2511",
+      "description": "Split slide with a left-aligned text block, rounded chart panel on the right, and a thin bottom accent rule.",
       "components": [
         {
           "id": "base_canvas",
@@ -10554,6 +10645,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -10580,6 +10672,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -10710,6 +10803,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#F5F8FE",
                 "opacity": 1
@@ -10795,8 +10889,8 @@
       ]
     },
     {
-      "id": "split_chart_table_layout_2157",
-      "description": "Two-column layout with a large left title and chart card balanced by explanatory text and a metric table on the right.",
+      "id": "left_title_chart_right_table_2157",
+      "description": "Split layout with a large left title and chart card balanced by explanatory text and a metric table on the right.",
       "components": [
         {
           "id": "page_background",
@@ -10808,6 +10902,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -10834,6 +10929,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -10924,6 +11020,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11080,6 +11177,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11597,6 +11695,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11623,6 +11722,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11649,6 +11749,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11675,6 +11776,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11701,6 +11803,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -11727,6 +11830,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11746,6 +11850,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11765,6 +11870,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11784,6 +11890,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11803,6 +11910,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11822,6 +11930,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11841,6 +11950,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11860,6 +11970,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11879,6 +11990,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11898,6 +12010,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#E5E7EB",
                 "opacity": 1,
@@ -11920,8 +12033,8 @@
       ]
     },
     {
-      "id": "split_media_copy_7780",
-      "description": "A clean two-column slide with a large image on the left and stacked title plus paragraph text on the right.",
+      "id": "left_image_right_title_description_7780",
+      "description": "A clean split slide with a large image on the left and stacked title plus paragraph text on the right.",
       "components": [
         {
           "id": "full_bleed_canvas",
@@ -11933,6 +12046,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -12086,8 +12200,8 @@
       ]
     },
     {
-      "id": "title_mosaic_footer_3239",
-      "description": "A clean slide with a large header, two side-by-side mosaic card groups, and a thin footer accent line.",
+      "id": "title_mosaic_card_groups_3239",
+      "description": "A clean slide with a large header, side-by-side mosaic card groups, and a thin footer accent line.",
       "components": [
         {
           "id": "plain_background",
@@ -12099,6 +12213,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -12207,6 +12322,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -12285,6 +12401,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -12471,6 +12588,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -12549,6 +12667,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F7FE",
                         "opacity": 1
@@ -12743,6 +12862,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -12778,8 +12898,8 @@
       ]
     },
     {
-      "id": "titled_card_row_5986",
-      "description": "A clean title-led slide with four equal profile cards aligned horizontally above a thin bottom accent line.",
+      "id": "title_profile_cards_5986",
+      "description": "A clean title-led slide with equal profile cards aligned horizontally above a thin bottom accent line.",
       "components": [
         {
           "id": "background_accent",
@@ -12791,6 +12911,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -12817,6 +12938,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1
@@ -12934,6 +13056,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -12960,6 +13083,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -13098,6 +13222,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -13124,6 +13249,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -13262,6 +13388,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -13288,6 +13415,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -13426,6 +13554,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#F5F8FE",
                         "opacity": 1
@@ -13452,6 +13581,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#FFFFFF",
                         "opacity": 1
@@ -13591,8 +13721,8 @@
       ]
     },
     {
-      "id": "two_column_info_layout_8378",
-      "description": "A clean two-column slide with a left title, map visual and paragraph, plus a stacked metric summary column on the right.",
+      "id": "left_title_map_right_metrics_8378",
+      "description": "A clean split slide with a left title, map visual and paragraph, plus a stacked metric summary column on the right.",
       "components": [
         {
           "id": "background_layer",
@@ -13604,6 +13734,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -13689,6 +13820,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#CBE3CC",
                     "opacity": 1
@@ -13809,6 +13941,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -13961,6 +14094,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -14113,6 +14247,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -14265,6 +14400,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#234CD9",
                         "opacity": 1
@@ -14418,8 +14554,8 @@
       ]
     },
     {
-      "id": "two_column_index_grid_5706",
-      "description": "A clean index-style slide layout with a large header, two-column numbered card grid, and thin bottom accent rule.",
+      "id": "title_index_grid_5706",
+      "description": "A clean index-style slide layout with a large header, card-based navigation grid, and thin bottom accent rule.",
       "components": [
         {
           "id": "background_canvas",
@@ -14431,6 +14567,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -16367,6 +16504,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#1E4CD9",
                 "opacity": 1

@@ -580,9 +580,15 @@ def test_update_slide_element_applies_toolbar_style_patch():
             "size": {"width": 100, "height": 80},
             "elements": [
                 {
-                    "type": "rectangle",
-                    "position": {"x": 0, "y": 0},
-                    "size": {"width": 100, "height": 80},
+                    "type": "vector",
+                    "shape": "polygon",
+                    "points": [
+                        {"x": 0, "y": 0},
+                        {"x": 100, "y": 0},
+                        {"x": 100, "y": 80},
+                        {"x": 0, "y": 80},
+                    ],
+                    "closed": True,
                     "fill": {"color": "#FFFFFF", "opacity": 1},
                     "stroke": {"color": "#111111", "width": 0},
                 }

@@ -30,6 +30,7 @@ export const useAutoSave = ({
 
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const acknowledgedDataRef = useRef<AutoSaveSnapshot | null>(null);
+    const wasAutoSavePausedRef = useRef(false);
     const isSavingRef = useRef(false);
     const [isSaving, setIsSaving] = useState<boolean>(false);
  
@@ -136,12 +137,25 @@ export const useAutoSave = ({
     useEffect(() => {
         if (!presentationData) return;
 
-        if (!enabled || isStreaming || isLoading || isLayoutLoading) {
+        const autoSavePaused = !enabled || isStreaming || isLoading || isLayoutLoading;
+
+        if (autoSavePaused) {
             // Changes arriving while editing is paused are server-originated
             // hydration/streaming updates and are already persisted.
+            wasAutoSavePausedRef.current = true;
             if (!isSavingRef.current) {
                 acknowledgedDataRef.current = createAutoSaveSnapshot(presentationData);
             }
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+            return;
+        }
+
+        if (wasAutoSavePausedRef.current) {
+            // The final streaming/loading payload can land in the same render
+            // that flips editing back on. Treat that first active snapshot as
+            // already persisted instead of issuing slide updates for it.
+            wasAutoSavePausedRef.current = false;
+            acknowledgedDataRef.current = createAutoSaveSnapshot(presentationData);
             if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
             return;
         }

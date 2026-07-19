@@ -6,6 +6,8 @@ import shutil
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from sqlmodel import select
+
 from models.sql.template_v2 import TemplateV2
 from services.database import async_session_maker
 from templates.v2.models.layouts import MergedComponents, RawSlideLayouts, SlideLayouts
@@ -31,11 +33,12 @@ async def import_default_templates_on_startup(
     ]
     if not template_dirs:
         LOGGER.info("No default templates found in: %s", root)
-        return
 
     async with async_session_maker() as session:
+        imported_template_ids: set[str] = set()
         for template_dir in template_dirs:
             template = _load_default_template(template_dir)
+            imported_template_ids.add(template.id)
             existing = await session.get(TemplateV2, template.id)
 
             _copy_default_template_static_assets(template_dir, template.id)
@@ -47,6 +50,8 @@ async def import_default_templates_on_startup(
                 session.add(template)
                 LOGGER.info("Imported default template: %s", template.id)
             await session.commit()
+
+        await _remove_stale_default_templates(session, imported_template_ids)
 
 
 def _default_templates_root() -> Path:
@@ -141,6 +146,29 @@ def _update_template_from_default(existing: TemplateV2, template: TemplateV2) ->
     existing.layouts = template.layouts
     existing.assets = template.assets
     existing.is_default = True
+
+
+async def _remove_stale_default_templates(
+    session: Any,
+    imported_template_ids: set[str],
+) -> None:
+    result = await session.execute(
+        select(TemplateV2).where(TemplateV2.is_default.is_(True))
+    )
+    stale_templates = [
+        template
+        for template in result.scalars().all()
+        if template.id not in imported_template_ids
+    ]
+    if not stale_templates:
+        return
+
+    for template in stale_templates:
+        await session.delete(template)
+        _remove_default_template_assets(template.id)
+        LOGGER.info("Removed stale default template: %s", template.id)
+
+    await session.commit()
 
 
 def _read_template_id(raw: dict[str, Any], template_dir: Path) -> str:
@@ -284,3 +312,12 @@ def _copy_default_template_static_assets(template_dir: Path, template_id: str) -
     shutil.rmtree(destination, ignore_errors=True)
     if source.is_dir():
         shutil.copytree(source, destination)
+
+
+def _remove_default_template_assets(template_id: str) -> None:
+    app_data_dir = get_app_data_directory_env()
+    if not app_data_dir:
+        raise RuntimeError("APP_DATA_DIRECTORY must be set to import default templates")
+
+    destination = Path(app_data_dir) / "templates" / template_id
+    shutil.rmtree(destination, ignore_errors=True)

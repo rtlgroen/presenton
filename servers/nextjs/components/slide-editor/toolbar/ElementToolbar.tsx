@@ -8,7 +8,6 @@ import { BulletsToolbar } from "@/components/slide-editor/text/BulletsToolbar";
 import { ChartToolbar } from "@/components/slide-editor/charts/ChartToolbar";
 import { DesignVariablesToolbar } from "@/components/slide-editor/toolbar/DesignVariablesToolbar";
 import { ImageToolbar } from "@/components/slide-editor/images/ImageToolbar";
-import { LineToolbar } from "@/components/slide-editor/shapes/LineToolbar";
 import { ShapeToolbar } from "@/components/slide-editor/shapes/ShapeToolbar";
 import { TableToolbar } from "@/components/slide-editor/tables/TableToolbar";
 import { TextToolbar } from "@/components/slide-editor/text/TextToolbar";
@@ -94,42 +93,9 @@ const TOOLBAR_RENDERERS: Partial<
         onChange={(index, element) => onChange(index, element, path)}
       />
     ) : null,
-  rectangle: ({ anchorBox, componentActions, element, index, onChange, path, scale }) =>
-    element.type === "rectangle" || element.type === "ellipse" ? (
-      <ShapeToolbar
-        element={element}
-        index={index}
-        anchorBox={anchorBox}
-        scale={scale}
-        componentActions={componentActions}
-        onChange={(index, element) => onChange(index, element, path)}
-      />
-    ) : null,
-  ellipse: ({ anchorBox, componentActions, element, index, onChange, path, scale }) =>
-    element.type === "rectangle" || element.type === "ellipse" ? (
-      <ShapeToolbar
-        element={element}
-        index={index}
-        anchorBox={anchorBox}
-        scale={scale}
-        componentActions={componentActions}
-        onChange={(index, element) => onChange(index, element, path)}
-      />
-    ) : null,
   vector: ({ anchorBox, componentActions, element, index, onChange, path, scale }) =>
     element.type === "vector" ? (
       <ShapeToolbar
-        element={element}
-        index={index}
-        anchorBox={anchorBox}
-        scale={scale}
-        componentActions={componentActions}
-        onChange={(index, element) => onChange(index, element, path)}
-      />
-    ) : null,
-  line: ({ anchorBox, componentActions, element, index, onChange, path, scale }) =>
-    element.type === "line" ? (
-      <LineToolbar
         element={element}
         index={index}
         anchorBox={anchorBox}

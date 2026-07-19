@@ -7,9 +7,15 @@ export const BLANK_TEMPLATE_V2_LAYOUT = {
   components: [],
   elements: [
     {
-      type: "rectangle",
-      position: { x: 0, y: 0 },
-      size: { width: 1280, height: 720 },
+      type: "vector",
+      shape: "polygon",
+      points: [
+        { x: 0, y: 0 },
+        { x: 1280, y: 0 },
+        { x: 1280, y: 720 },
+        { x: 0, y: 720 },
+      ],
+      closed: true,
       fill: { color: "#FFFFFF" },
       decorative: true,
     },
@@ -32,7 +38,7 @@ export function cloneBlankTemplateV2Layout() {
   return cloneJson(BLANK_TEMPLATE_V2_LAYOUT);
 }
 
-export function isTemplateV2TemplateId(value: unknown): boolean {
+export function isTemplateV2TemplateId(value: unknown): value is string {
   if (typeof value !== "string") return false;
 
   const templateId = value.trim();

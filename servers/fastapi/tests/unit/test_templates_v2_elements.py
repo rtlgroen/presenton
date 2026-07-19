@@ -6,10 +6,12 @@ from templates.v2.models.elements import (
     Container,
     Image,
     Infographic,
+    ProgressBarInfographicData,
     Table,
     Text,
     TextList,
     Vector,
+    VectorShape,
 )
 from templates.v2.models.layouts import RawSlideLayout
 
@@ -135,7 +137,7 @@ def test_image_element_accepts_flip_flags():
         )
 
 
-@pytest.mark.parametrize("element_type", ["line", "rectangle", "ellipse"])
+@pytest.mark.parametrize("element_type", ["line", "rectangle", "ellipse", "circle"])
 def test_legacy_geometry_is_not_adapted_to_vectors(element_type: str):
     with pytest.raises(ValidationError):
         RawSlideLayout.model_validate(
@@ -205,6 +207,40 @@ def test_vector_accepts_smooth_curves_only():
         )
 
 
+def test_vector_accepts_polygon_and_ellipse_shapes_only():
+    ellipse = Vector.model_validate(
+        {
+            "type": "vector",
+            "shape": "ellipse",
+            "points": [{"x": 0, "y": 0}, {"x": 100, "y": 80}],
+            "fill": {"color": "#F4F3FF"},
+        }
+    )
+
+    assert ellipse.shape == VectorShape.ELLIPSE
+
+    polygon = Vector.model_validate(
+        {
+            "type": "vector",
+            "shape": "polygon",
+            "points": [{"x": 0, "y": 0}, {"x": 100, "y": 80}],
+            "stroke": {"color": "#111111", "width": 2},
+        }
+    )
+
+    assert polygon.shape == VectorShape.POLYGON
+
+    with pytest.raises(ValidationError):
+        Vector.model_validate(
+            {
+                "type": "vector",
+                "shape": "rect",
+                "points": [{"x": 0, "y": 0}, {"x": 100, "y": 80}],
+                "fill": {"color": "#F4F3FF"},
+            }
+        )
+
+
 def test_element_models_match_export_schema_changes():
     assert "decorative" not in Container.model_fields
     assert not {
@@ -216,7 +252,15 @@ def test_element_models_match_export_schema_changes():
     assert "axis_color" in Chart.model_fields
     assert "title_color" in Chart.model_fields
     assert "legend" in Chart.model_fields
-    assert {"base_color", "highlight_color"}.issubset(Infographic.model_fields)
+    assert {"data", "colors"}.issubset(Infographic.model_fields)
+    assert not {
+        "infographic_type",
+        "max_value",
+        "min_value",
+        "value",
+        "base_color",
+        "highlight_color",
+    }.intersection(Infographic.model_fields)
 
     chart = Chart.model_validate(
         {
@@ -307,19 +351,21 @@ def test_element_models_match_export_schema_changes():
             "type": "infographic",
             "decorative": False,
             "name": "progress",
-            "infographic_type": "progress_bar",
-            "min_value": 0,
-            "max_value": 100,
-            "value": 70,
-            "base_color": "E5E7EB",
-            "highlight_color": "2563EB",
+            "data": {
+                "type": "progress_bar",
+                "min_value": 0,
+                "max_value": 100,
+                "value": 70,
+            },
+            "colors": ["E5E7EB", "2563EB"],
         }
     )
     assert infographic.type == "infographic"
     assert infographic.decorative is False
-    assert infographic.infographic_type.value == "progress_bar"
-    assert infographic.base_color == "E5E7EB"
-    assert infographic.highlight_color == "2563EB"
+    assert isinstance(infographic.data, ProgressBarInfographicData)
+    assert infographic.data.type == "progress_bar"
+    assert infographic.data.value == 70
+    assert infographic.colors == ["E5E7EB", "2563EB"]
 
     with pytest.raises(ValidationError):
         Infographic.model_validate(
@@ -327,10 +373,12 @@ def test_element_models_match_export_schema_changes():
                 "type": "infographics",
                 "decorative": False,
                 "name": "progress",
-                "infographics_type": "progress_bar",
-                "min_value": 0,
-                "max_value": 100,
-                "value": 70,
+                "data": {
+                    "type": "progress_bar",
+                    "min_value": 0,
+                    "max_value": 100,
+                    "value": 70,
+                },
             }
         )
 

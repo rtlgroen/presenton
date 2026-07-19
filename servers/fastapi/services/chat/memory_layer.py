@@ -54,6 +54,7 @@ BLANK_TEMPLATE_LAYOUT: dict[str, Any] = {
     "elements": [
         {
             "type": "vector",
+            "shape": "polygon",
             "points": [
                 {"x": 0, "y": 0},
                 {"x": 1280, "y": 0},
@@ -62,11 +63,17 @@ BLANK_TEMPLATE_LAYOUT: dict[str, Any] = {
             ],
             "closed": True,
             "fill": {"color": "#FFFFFF"},
-            "decorative": True,
         }
     ],
 }
-TEMPLATE_GENERATED_ELEMENT_TYPES = {"text", "image", "text-list", "table", "chart"}
+TEMPLATE_GENERATED_ELEMENT_TYPES = {
+    "text",
+    "image",
+    "text-list",
+    "table",
+    "chart",
+    "infographic",
+}
 # Keep URL runtime fields during validation because many slide schemas require them.
 # Speaker note is handled separately and should not affect JSON-schema checks.
 RUNTIME_CONTENT_FIELDS = {"__speaker_note__"}
@@ -434,10 +441,10 @@ class PresentationChatMemoryLayer:
             ),
             "speaker_note": slide.speaker_note,
         }
+        ui = self._slide_ui_layout(slide)
         if include_full_content:
             response["content"] = slide.content
-            response["ui"] = slide.ui
-        ui = self._slide_ui_layout(slide)
+            response["ui"] = ui if ui is not None else slide.ui
         if ui is not None:
             response["ui_summary"] = await self.get_slide_ui_elements(
                 index=slide.index,
@@ -3615,11 +3622,38 @@ class PresentationChatMemoryLayer:
             _apply_chart_content_update(element, value, theme)
             return
 
+        if element_type == "infographic" and isinstance(value, dict):
+            cls._set_template_infographic_content(element, value)
+            return
+
         if element_type == "table":
             if isinstance(value, dict):
                 cls._set_template_table_content(element, value)
             elif isinstance(value, list):
                 cls._set_template_table_rows(element, value)
+
+    @staticmethod
+    def _set_template_infographic_content(
+        element: dict[str, Any],
+        value: dict[str, Any],
+    ) -> None:
+        data = value.get("data")
+        if isinstance(data, dict) and data.get("type") in {"progress_bar", "gauge"}:
+            next_data: dict[str, Any] = {"type": data["type"]}
+            for key in ("min_value", "max_value", "value"):
+                raw = data.get(key)
+                if isinstance(raw, (int, float)):
+                    next_data[key] = float(raw)
+            if {"min_value", "max_value", "value"}.issubset(next_data):
+                element["data"] = next_data
+
+        colors = value.get("colors")
+        if isinstance(colors, list):
+            element["colors"] = [
+                color
+                for color in colors
+                if isinstance(color, str) and color.strip()
+            ]
 
     @classmethod
     def _set_template_runs_text(cls, element: dict[str, Any], text: str) -> None:

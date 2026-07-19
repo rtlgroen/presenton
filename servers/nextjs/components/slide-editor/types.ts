@@ -39,6 +39,20 @@ export type ChartType =
   | "stacked_bar";
 export type InfographicType = "progress_bar" | "gauge";
 
+export type ProgressBarInfographicData = {
+  type: "progress_bar";
+  max_value: number;
+  min_value: number;
+  value: number;
+};
+
+export type GaugeInfographicData = {
+  type: "gauge";
+  max_value: number;
+  min_value: number;
+  value: number;
+};
+
 export type Position = {
   // Elements may intentionally bleed beyond the slide and are clipped by the
   // slide surface. Keep interaction bounds separate from persisted geometry.
@@ -245,34 +259,19 @@ export type TableElement = ElementBase & {
   min_rows?: number | null;
 };
 
-export type RectangleElement = ElementBase & {
-  type: "rectangle";
-  fill?: Fill | null;
-  stroke?: Stroke | null;
-  border_radius?: BorderRadius | null;
-};
-
-export type RectElement = RectangleElement;
-
-export type EllipseElement = ElementBase & {
-  type: "ellipse";
-  fill?: Fill | null;
-  stroke?: Stroke | null;
-};
-
-export type LineElement = ElementBase & {
-  type: "line";
-  stroke: Stroke;
-};
-
 export type VectorCurve = {
   type: "smooth";
   tension?: number | null;
   segments?: number | null;
 };
 
-export type VectorElement = ElementBase & {
+export type VectorShape = "polygon" | "ellipse";
+
+export type VectorElement = Omit<ElementBase, "decorative" | "name"> & {
   type: "vector";
+  decorative?: never;
+  name?: never;
+  shape?: VectorShape | null;
   points: Position[];
   closed?: boolean | null;
   curve?: VectorCurve | null;
@@ -311,12 +310,8 @@ export type ChartElement = ElementBase & {
 
 export type InfographicElement = ElementBase & {
   type: "infographic";
-  infographic_type: InfographicType;
-  max_value: number;
-  min_value: number;
-  value: number;
-  base_color?: string | null;
-  highlight_color?: string | null;
+  data: ProgressBarInfographicData | GaugeInfographicData;
+  colors?: string[] | null;
 };
 
 export type FlexElement = RequiredElementBase & {
@@ -362,9 +357,6 @@ export type SlideElement =
   | ImageElement
   | TextListElement
   | TableElement
-  | RectangleElement
-  | EllipseElement
-  | LineElement
   | VectorElement
   | SvgElement
   | ChartElement
@@ -456,9 +448,6 @@ export type LayoutImageElement = ImageElement;
 export type LayoutTextListElement = TextListElement;
 export type LayoutTableCell = TableCell;
 export type LayoutTableElement = TableElement;
-export type LayoutRectangleElement = RectangleElement;
-export type LayoutEllipseElement = EllipseElement;
-export type LayoutLineElement = LineElement;
 export type LayoutVectorElement = VectorElement;
 export type LayoutSvgElement = SvgElement;
 export type LayoutChartElement = ChartElement;

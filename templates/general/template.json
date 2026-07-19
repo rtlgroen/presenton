@@ -18,6 +18,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -53,6 +54,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -89,6 +91,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -124,6 +127,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -166,6 +170,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -237,6 +242,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -309,6 +315,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -380,6 +387,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -450,6 +458,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -568,6 +577,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA"
               },
@@ -644,6 +654,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#FFFFFF"
                   },
@@ -686,49 +697,29 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "ellipse",
                   "fill": {
                     "color": "#9333EA"
                   },
                   "points": [
                     {
-                      "x": 73,
-                      "y": 51
+                      "x": 49,
+                      "y": 27
                     },
                     {
-                      "x": 65.97056274847714,
-                      "y": 67.97056274847714
+                      "x": 73,
+                      "y": 51
                     },
                     {
                       "x": 49,
                       "y": 75
                     },
                     {
-                      "x": 32.029437251522864,
-                      "y": 67.97056274847714
-                    },
-                    {
                       "x": 25,
                       "y": 51
-                    },
-                    {
-                      "x": 32.02943725152286,
-                      "y": 34.029437251522864
-                    },
-                    {
-                      "x": 48.99999999999999,
-                      "y": 27
-                    },
-                    {
-                      "x": 65.97056274847714,
-                      "y": 34.02943725152286
                     }
                   ],
-                  "closed": true,
-                  "curve": {
-                    "type": "smooth",
-                    "tension": 1,
-                    "segments": 8
-                  }
+                  "closed": true
                 },
                 {
                   "type": "text",
@@ -905,6 +896,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA",
                 "opacity": 1
@@ -1032,6 +1024,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#9333EA"
                   },
@@ -1114,6 +1107,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -1218,6 +1212,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -1285,6 +1280,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -1354,6 +1350,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -1424,6 +1421,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -1476,6 +1474,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -1548,6 +1547,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -1735,49 +1735,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -1889,49 +1869,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -2043,49 +2003,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -2197,49 +2137,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -2428,6 +2348,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -2523,6 +2444,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -2598,6 +2520,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -2693,6 +2616,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -2878,6 +2802,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -3001,6 +2926,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -3144,6 +3070,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -3287,6 +3214,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -3604,6 +3532,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -3769,6 +3698,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -3934,6 +3864,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -4388,6 +4319,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA"
               },
@@ -4463,6 +4395,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA",
                 "opacity": 1
@@ -5137,6 +5070,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#000000"
               },
@@ -5179,6 +5113,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#000000",
                 "opacity": 0.5
@@ -5211,147 +5146,88 @@
             },
             {
               "type": "vector",
+              "shape": "ellipse",
               "fill": {
                 "color": "#9333EA",
                 "opacity": 0.2
               },
               "points": [
                 {
-                  "x": 128,
-                  "y": 64
+                  "x": 64,
+                  "y": 0
                 },
                 {
-                  "x": 109.25483399593904,
-                  "y": 109.25483399593904
+                  "x": 128,
+                  "y": 64
                 },
                 {
                   "x": 64,
                   "y": 128
                 },
                 {
-                  "x": 18.745166004060962,
-                  "y": 109.25483399593904
-                },
-                {
                   "x": 0,
-                  "y": 64.00000000000001
-                },
-                {
-                  "x": 18.74516600406095,
-                  "y": 18.745166004060962
-                },
-                {
-                  "x": 63.999999999999986,
-                  "y": 0
-                },
-                {
-                  "x": 109.25483399593904,
-                  "y": 18.74516600406095
+                  "y": 64
                 }
               ],
-              "closed": true,
-              "curve": {
-                "type": "smooth",
-                "tension": 1,
-                "segments": 8
-              }
+              "closed": true
             },
             {
               "type": "vector",
+              "shape": "ellipse",
               "fill": {
                 "color": "#C084FC",
                 "opacity": 0.2
               },
               "points": [
                 {
-                  "x": 1280,
-                  "y": 640
+                  "x": 1200,
+                  "y": 560
                 },
                 {
-                  "x": 1256.5685424949238,
-                  "y": 696.5685424949238
+                  "x": 1280,
+                  "y": 640
                 },
                 {
                   "x": 1200,
                   "y": 720
                 },
                 {
-                  "x": 1143.4314575050762,
-                  "y": 696.5685424949238
-                },
-                {
                   "x": 1120,
                   "y": 640
-                },
-                {
-                  "x": 1143.4314575050762,
-                  "y": 583.4314575050762
-                },
-                {
-                  "x": 1200,
-                  "y": 560
-                },
-                {
-                  "x": 1256.5685424949238,
-                  "y": 583.4314575050762
                 }
               ],
-              "closed": true,
-              "curve": {
-                "type": "smooth",
-                "tension": 1,
-                "segments": 8
-              }
+              "closed": true
             },
             {
               "type": "vector",
+              "shape": "ellipse",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 0.1
               },
               "points": [
                 {
-                  "x": 416,
-                  "y": 408
+                  "x": 368,
+                  "y": 360
                 },
                 {
-                  "x": 401.94112549695427,
-                  "y": 441.94112549695427
+                  "x": 416,
+                  "y": 408
                 },
                 {
                   "x": 368,
                   "y": 456
                 },
                 {
-                  "x": 334.05887450304573,
-                  "y": 441.94112549695427
-                },
-                {
                   "x": 320,
                   "y": 408
-                },
-                {
-                  "x": 334.05887450304573,
-                  "y": 374.05887450304573
-                },
-                {
-                  "x": 368,
-                  "y": 360
-                },
-                {
-                  "x": 401.94112549695427,
-                  "y": 374.05887450304573
                 }
               ],
-              "closed": true,
-              "curve": {
-                "type": "smooth",
-                "tension": 1,
-                "segments": 8
-              }
+              "closed": true
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#111827"
               },
@@ -5439,6 +5315,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA"
               },
@@ -5522,6 +5399,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#9333EA",
                 "width": 1
@@ -5580,6 +5458,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#9333EA",
                 "width": 1
@@ -5614,6 +5493,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#E5E7EB",
                 "opacity": 1
@@ -6190,6 +6070,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -6381,6 +6262,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -6570,6 +6452,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -6757,6 +6640,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -6944,6 +6828,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -7162,6 +7047,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -7349,6 +7235,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -7536,6 +7423,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -7723,6 +7611,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -7910,6 +7799,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -8135,6 +8025,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -8325,6 +8216,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -8515,6 +8407,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -8705,6 +8598,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -8898,8 +8792,8 @@
   ],
   "layouts": [
     {
-      "id": "two_column_profile_layout_1311",
-      "description": "A clean two column presentation layout with a large rounded image card and a structured text panel with attribution card.",
+      "id": "left_image_right_profile_card_1311",
+      "description": "A clean split presentation layout with a large rounded image card and a structured text panel with attribution card.",
       "components": [
         {
           "id": "background_canvas",
@@ -8911,6 +8805,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -8946,6 +8841,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -9057,6 +8953,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA"
               },
@@ -9133,6 +9030,7 @@
               "children": [
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#FFFFFF"
                   },
@@ -9175,49 +9073,29 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "ellipse",
                   "fill": {
                     "color": "#9333EA"
                   },
                   "points": [
                     {
-                      "x": 73,
-                      "y": 51
+                      "x": 49,
+                      "y": 27
                     },
                     {
-                      "x": 65.97056274847714,
-                      "y": 67.97056274847714
+                      "x": 73,
+                      "y": 51
                     },
                     {
                       "x": 49,
                       "y": 75
                     },
                     {
-                      "x": 32.029437251522864,
-                      "y": 67.97056274847714
-                    },
-                    {
                       "x": 25,
                       "y": 51
-                    },
-                    {
-                      "x": 32.02943725152286,
-                      "y": 34.029437251522864
-                    },
-                    {
-                      "x": 48.99999999999999,
-                      "y": 27
-                    },
-                    {
-                      "x": 65.97056274847714,
-                      "y": 34.02943725152286
                     }
                   ],
-                  "closed": true,
-                  "curve": {
-                    "type": "smooth",
-                    "tension": 1,
-                    "segments": 8
-                  }
+                  "closed": true
                 },
                 {
                   "type": "text",
@@ -9347,8 +9225,8 @@
       ]
     },
     {
-      "id": "two_column_overview_7327",
-      "description": "A clean two-column presentation layout with a large rounded visual card on the left and stacked headline copy on the right.",
+      "id": "left_image_right_title_description_7327",
+      "description": "A clean split presentation layout with a large rounded visual card on the left and stacked headline copy on the right.",
       "components": [
         {
           "id": "slide_background",
@@ -9360,6 +9238,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -9396,6 +9275,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -9508,6 +9388,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA",
                 "opacity": 1
@@ -9577,8 +9458,8 @@
       ]
     },
     {
-      "id": "asymmetric_services_layout_2087",
-      "description": "A clean asymmetric slide with a large title, four service feature blocks, decorative accents, and a rounded image panel on the right.",
+      "id": "title_services_right_image_2087",
+      "description": "A clean asymmetric slide with a large title, service feature blocks, decorative accents, and a rounded image panel on the right.",
       "components": [
         {
           "id": "background_accents",
@@ -9590,6 +9471,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -9768,49 +9650,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -9922,49 +9784,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -10076,49 +9918,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -10230,49 +10052,29 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "ellipse",
                       "fill": {
                         "color": "#9333EA"
                       },
                       "points": [
                         {
-                          "x": 48,
-                          "y": 24
+                          "x": 24,
+                          "y": 0
                         },
                         {
-                          "x": 40.97056274847714,
-                          "y": 40.970562748477136
+                          "x": 48,
+                          "y": 24
                         },
                         {
                           "x": 24,
                           "y": 48
                         },
                         {
-                          "x": 7.029437251522861,
-                          "y": 40.97056274847714
-                        },
-                        {
                           "x": 0,
-                          "y": 24.000000000000004
-                        },
-                        {
-                          "x": 7.029437251522857,
-                          "y": 7.029437251522861
-                        },
-                        {
-                          "x": 23.999999999999996,
-                          "y": 0
-                        },
-                        {
-                          "x": 40.970562748477136,
-                          "y": 7.029437251522857
+                          "y": 24
                         }
                       ],
-                      "closed": true,
-                      "curve": {
-                        "type": "smooth",
-                        "tension": 1,
-                        "segments": 8
-                      }
+                      "closed": true
                     },
                     {
                       "type": "image",
@@ -10392,6 +10194,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -10456,8 +10259,8 @@
       ]
     },
     {
-      "id": "asymmetric_problem_layout_3503",
-      "description": "A clean two-column presentation layout with a large visual panel on the left and explanatory feature blocks on the right.",
+      "id": "left_image_right_feature_blocks_3503",
+      "description": "A clean split presentation layout with a large visual panel on the left and explanatory feature blocks on the right.",
       "components": [
         {
           "id": "slide_background",
@@ -10469,6 +10272,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -10586,6 +10390,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -10719,6 +10524,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -10814,6 +10620,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -10889,6 +10696,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -10984,6 +10792,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -11060,7 +10869,7 @@
       ]
     },
     {
-      "id": "split_chart_sidebar_layout_8545",
+      "id": "header_chart_right_info_cards_8545",
       "description": "A clean presentation layout with a top-left header, large chart panel, and stacked rounded information cards in a right sidebar.",
       "components": [
         {
@@ -11073,6 +10882,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -11198,6 +11008,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -11315,6 +11126,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -11458,6 +11270,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -11601,6 +11414,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -11745,8 +11559,8 @@
       ]
     },
     {
-      "id": "centered_metrics_layout_2114",
-      "description": "A clean centered slide with decorative side panels, a prominent title, and three evenly spaced metric cards across the middle.",
+      "id": "center_title_metric_cards_2114",
+      "description": "A clean centered slide with decorative side panels, a prominent title, and evenly spaced metric cards across the middle.",
       "components": [
         {
           "id": "decorative_background",
@@ -11758,6 +11572,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -11981,6 +11796,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -12146,6 +11962,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -12311,6 +12128,7 @@
                     },
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -12397,7 +12215,7 @@
       ]
     },
     {
-      "id": "split_visual_metrics_4254",
+      "id": "left_image_right_metrics_4254",
       "description": "A clean split layout with a large visual card on the left and headline, body copy, and metrics on the right.",
       "components": [
         {
@@ -12410,6 +12228,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -12480,6 +12299,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -12854,8 +12674,8 @@
       ]
     },
     {
-      "id": "sectioned_summary_layout_7307",
-      "description": "A clean presentation layout with a large title, supporting image, four numbered text sections, and a decorative footer accent.",
+      "id": "title_image_text_sections_7307",
+      "description": "A clean presentation layout with a large title, supporting image, structured text sections, and a decorative footer accent.",
       "components": [
         {
           "id": "background_canvas",
@@ -12867,6 +12687,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -12959,6 +12780,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA"
               },
@@ -13540,7 +13362,7 @@
       ]
     },
     {
-      "id": "centered_quote_hero_9120",
+      "id": "center_quote_image_background_9120",
       "description": "A full-bleed photographic hero slide with dark overlay, decorative corner circles, and centered quote content stack.",
       "components": [
         {
@@ -13553,6 +13375,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#000000"
               },
@@ -13595,6 +13418,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#000000",
                 "opacity": 0.5
@@ -13627,147 +13451,88 @@
             },
             {
               "type": "vector",
+              "shape": "ellipse",
               "fill": {
                 "color": "#9333EA",
                 "opacity": 0.2
               },
               "points": [
                 {
-                  "x": 128,
-                  "y": 64
+                  "x": 64,
+                  "y": 0
                 },
                 {
-                  "x": 109.25483399593904,
-                  "y": 109.25483399593904
+                  "x": 128,
+                  "y": 64
                 },
                 {
                   "x": 64,
                   "y": 128
                 },
                 {
-                  "x": 18.745166004060962,
-                  "y": 109.25483399593904
-                },
-                {
                   "x": 0,
-                  "y": 64.00000000000001
-                },
-                {
-                  "x": 18.74516600406095,
-                  "y": 18.745166004060962
-                },
-                {
-                  "x": 63.999999999999986,
-                  "y": 0
-                },
-                {
-                  "x": 109.25483399593904,
-                  "y": 18.74516600406095
+                  "y": 64
                 }
               ],
-              "closed": true,
-              "curve": {
-                "type": "smooth",
-                "tension": 1,
-                "segments": 8
-              }
+              "closed": true
             },
             {
               "type": "vector",
+              "shape": "ellipse",
               "fill": {
                 "color": "#C084FC",
                 "opacity": 0.2
               },
               "points": [
                 {
-                  "x": 1280,
-                  "y": 640
+                  "x": 1200,
+                  "y": 560
                 },
                 {
-                  "x": 1256.5685424949238,
-                  "y": 696.5685424949238
+                  "x": 1280,
+                  "y": 640
                 },
                 {
                   "x": 1200,
                   "y": 720
                 },
                 {
-                  "x": 1143.4314575050762,
-                  "y": 696.5685424949238
-                },
-                {
                   "x": 1120,
                   "y": 640
-                },
-                {
-                  "x": 1143.4314575050762,
-                  "y": 583.4314575050762
-                },
-                {
-                  "x": 1200,
-                  "y": 560
-                },
-                {
-                  "x": 1256.5685424949238,
-                  "y": 583.4314575050762
                 }
               ],
-              "closed": true,
-              "curve": {
-                "type": "smooth",
-                "tension": 1,
-                "segments": 8
-              }
+              "closed": true
             },
             {
               "type": "vector",
+              "shape": "ellipse",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 0.1
               },
               "points": [
                 {
-                  "x": 416,
-                  "y": 408
+                  "x": 368,
+                  "y": 360
                 },
                 {
-                  "x": 401.94112549695427,
-                  "y": 441.94112549695427
+                  "x": 416,
+                  "y": 408
                 },
                 {
                   "x": 368,
                   "y": 456
                 },
                 {
-                  "x": 334.05887450304573,
-                  "y": 441.94112549695427
-                },
-                {
                   "x": 320,
                   "y": 408
-                },
-                {
-                  "x": 334.05887450304573,
-                  "y": 374.05887450304573
-                },
-                {
-                  "x": 368,
-                  "y": 360
-                },
-                {
-                  "x": 401.94112549695427,
-                  "y": 374.05887450304573
                 }
               ],
-              "closed": true,
-              "curve": {
-                "type": "smooth",
-                "tension": 1,
-                "segments": 8
-              }
+              "closed": true
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#111827"
               },
@@ -13849,6 +13614,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA"
               },
@@ -13932,6 +13698,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#9333EA",
                 "width": 1
@@ -13990,6 +13757,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "stroke": {
                 "color": "#9333EA",
                 "width": 1
@@ -14011,7 +13779,7 @@
       ]
     },
     {
-      "id": "centered_table_layout_3129",
+      "id": "center_title_comparison_table_3129",
       "description": "A centered presentation layout with subtle side accents, prominent heading, rounded comparison card, and explanatory note beneath.",
       "components": [
         {
@@ -14024,6 +13792,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -14136,6 +13905,7 @@
             },
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#9333EA",
                 "opacity": 1
@@ -14172,6 +13942,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#E5E7EB",
                 "opacity": 1
@@ -14706,8 +14477,8 @@
       ]
     },
     {
-      "id": "two_column_index_layout_2601",
-      "description": "A clean contents slide with centered heading, small decorative accent, and two balanced columns of numbered navigation rows.",
+      "id": "center_title_index_columns_2601",
+      "description": "A clean contents slide with centered heading, small decorative accent, and balanced columns of navigation rows.",
       "components": [
         {
           "id": "background_canvas",
@@ -14719,6 +14490,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF",
                 "opacity": 1
@@ -14845,6 +14617,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -15036,6 +14809,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -15225,6 +14999,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -15412,6 +15187,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -15599,6 +15375,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -15817,6 +15594,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -16004,6 +15782,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -16191,6 +15970,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -16378,6 +16158,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -16565,6 +16346,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#9333EA"
                       },
@@ -16753,8 +16535,8 @@
       ]
     },
     {
-      "id": "team_profile_grid_2803",
-      "description": "A clean two-column presentation layout with introductory copy on the left and a four-card profile grid on the right.",
+      "id": "left_intro_right_team_grid_2803",
+      "description": "A clean split presentation layout with introductory copy on the left and a profile card grid on the right.",
       "components": [
         {
           "id": "background_canvas",
@@ -16766,6 +16548,7 @@
           "elements": [
             {
               "type": "vector",
+              "shape": "polygon",
               "fill": {
                 "color": "#FFFFFF"
               },
@@ -16868,6 +16651,7 @@
                 },
                 {
                   "type": "vector",
+                  "shape": "polygon",
                   "fill": {
                     "color": "#9333EA"
                   },
@@ -16968,6 +16752,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -17158,6 +16943,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -17348,6 +17134,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },
@@ -17538,6 +17325,7 @@
                   "children": [
                     {
                       "type": "vector",
+                      "shape": "polygon",
                       "fill": {
                         "color": "#E5E7EB"
                       },

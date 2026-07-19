@@ -82,9 +82,6 @@ const ELEMENT_TYPES = new Set([
   "text-list",
   "table",
   "vector",
-  "rectangle",
-  "ellipse",
-  "line",
   "svg",
   "chart",
   "infographic",
@@ -426,14 +423,6 @@ function renderItem(item: JsonRecord, mode: RenderMode): string {
   switch (readString(item.type)) {
     case "vector":
       return renderPolygon(item, mode);
-    case "rectangle":
-      return renderPolygon(item, mode);
-    case "ellipse":
-      return `<div style="${frameStyle(item, mode)}${boxStyle(
-        item
-      )}border-radius:50%"></div>`;
-    case "line":
-      return renderPolygon(item, mode);
     case "svg":
       return renderSvg(item, mode);
     case "image":
@@ -703,6 +692,10 @@ function renderGroup(item: JsonRecord, mode: RenderMode): string {
 }
 
 function renderPolygon(item: JsonRecord, mode: RenderMode): string {
+  if (readString(item.type) === "vector" && vectorShape(item) === "ellipse") {
+    return renderEllipseVector(item, mode);
+  }
+
   const points = polygonPoints(item);
   if (points.length < 2) return "";
 
@@ -745,6 +738,48 @@ function renderPolygon(item: JsonRecord, mode: RenderMode): string {
   )}" preserveAspectRatio="none" style="display:block;overflow:visible">${shape}</svg></div>`;
 }
 
+function renderEllipseVector(item: JsonRecord, mode: RenderMode): string {
+  const points = polygonSourcePoints(item);
+  if (points.length < 2) return "";
+
+  const box = polygonBox(item, points);
+  const stroke = readRecord(item.stroke);
+  const fill = readRecord(item.fill);
+  const fillColor = colorWithOpacity(
+    readString(fill.color) ?? "",
+    readNumber(fill.opacity)
+  );
+  const strokeWidth = Math.max(0, readNumber(stroke.width) ?? 1);
+  const strokeColor = colorWithOpacity(
+    readString(stroke.color) ?? "",
+    readNumber(stroke.opacity)
+  );
+  if (!fillColor && !(strokeColor && strokeWidth > 0)) return "";
+
+  const dash = readArray(stroke.dash)
+    .map(readNumber)
+    .filter((value): value is number => value != null)
+    .join(" ");
+  const width = box.width ?? 1;
+  const height = box.height ?? 1;
+  const shape = `<ellipse cx="${cssNumber(width / 2)}" cy="${cssNumber(
+    height / 2
+  )}" rx="${cssNumber(width / 2)}" ry="${cssNumber(height / 2)}"${fillColor
+    ? ` fill="${escapeAttribute(fillColor)}"`
+    : ` fill="none"`}${strokeColor && strokeWidth > 0
+    ? ` stroke="${escapeAttribute(strokeColor)}" stroke-width="${cssNumber(strokeWidth)}"`
+    : ""
+  }${dash ? ` stroke-dasharray="${dash}"` : ""}/>`;
+
+  return `<div style="${frameStyleFromBox(box, mode)}${transformStyle(
+    item
+  )}overflow:visible"><svg width="100%" height="100%" viewBox="0 0 ${cssNumber(
+    width
+  )} ${cssNumber(
+    height
+  )}" preserveAspectRatio="none" style="display:block;overflow:visible">${shape}</svg></div>`;
+}
+
 function renderSvg(item: JsonRecord, mode: RenderMode): string {
   const svg = readStringValue(item.svg);
   if (!svg) return "";
@@ -769,9 +804,8 @@ function renderChart(item: JsonRecord, mode: RenderMode): string {
 }
 
 function renderInfographic(item: JsonRecord, mode: RenderMode): string {
-  const kind = infographicKindFromValue(
-    readString(item.infographicType ?? item.infographic_type)
-  );
+  const data = infographicData(item);
+  const kind = infographicKindFromValue(readString(data.type));
   if (kind === "gauge") return renderGaugeInfographic(item, mode);
   return renderProgressBarInfographic(item, mode);
 }
@@ -1535,12 +1569,17 @@ function infographicKindFromValue(value: string | null): InfographicKind {
   return value === "gauge" ? "gauge" : "progress_bar";
 }
 
+function infographicData(item: JsonRecord): JsonRecord {
+  return readRecord(item.data);
+}
+
 function infographicMetrics(item: JsonRecord): InfographicMetrics {
-  const rawMin = readNumber(item.minValue ?? item.min_value) ?? 0;
-  const rawMax = readNumber(item.maxValue ?? item.max_value) ?? 100;
+  const data = infographicData(item);
+  const rawMin = readNumber(data.min_value) ?? 0;
+  const rawMax = readNumber(data.max_value) ?? 100;
   const min = Math.min(rawMin, rawMax);
   const max = Math.max(rawMin, rawMax);
-  const value = clamp(readNumber(item.value) ?? min, min, max);
+  const value = clamp(readNumber(data.value) ?? min, min, max);
   const ratio = max === min ? 0 : (value - min) / (max - min);
 
   return {
@@ -1550,20 +1589,17 @@ function infographicMetrics(item: JsonRecord): InfographicMetrics {
 }
 
 function infographicHighlightColor(item: JsonRecord): string {
-  const fill = readRecord(item.fill);
+  const colors = readArray(item.colors);
   return (
-    normalizeChartColor(
-      readString(
-        item.highlightColor ?? item.highlight_color ?? item.color ?? fill.color
-      )
-    ) ??
+    normalizeChartColor(readString(colors[1])) ??
     DEFAULT_CHART_COLORS[0]
   );
 }
 
 function infographicBaseColor(item: JsonRecord): string {
+  const colors = readArray(item.colors);
   return (
-    normalizeChartColor(readString(item.baseColor ?? item.base_color)) ??
+    normalizeChartColor(readString(colors[0])) ??
     "#E5E7EB"
   );
 }
@@ -1725,12 +1761,13 @@ function readBox(
   const position = readRecord(item.position);
   const size = readRecord(item.size);
   const type = readString(item.type);
-  if (
-    type === "vector" ||
-    type === "line" ||
-    type === "rectangle"
-  ) {
-    return polygonBox(item, polygonPoints(item));
+  if (type === "vector") {
+    return polygonBox(
+      item,
+      vectorShape(item) === "ellipse"
+        ? polygonSourcePoints(item)
+        : polygonPoints(item)
+    );
   }
   return {
     x: readNumber(position.x) ?? 0,
@@ -1756,33 +1793,6 @@ function childrenBounds(
 }
 
 function polygonSourcePoints(item: JsonRecord): Point[] {
-  const type = readString(item.type);
-  if (type === "line") {
-    const position = readRecord(item.position);
-    const size = readRecord(item.size);
-    const x = readNumber(position.x) ?? 0;
-    const y = readNumber(position.y) ?? 0;
-    return [
-      { x, y },
-      {
-        x: x + (readNumber(size.width) ?? 0),
-        y: y + (readNumber(size.height) ?? 0),
-      },
-    ];
-  }
-
-  if (type === "rectangle") {
-    const box = readBox({ ...item, type: "__legacy_rectangle_box" });
-    const width = box.width ?? 1;
-    const height = box.height ?? 1;
-    return [
-      { x: box.x, y: box.y },
-      { x: box.x + width, y: box.y },
-      { x: box.x + width, y: box.y + height },
-      { x: box.x, y: box.y + height },
-    ];
-  }
-
   return readArray(item.points)
     .map(readRecord)
     .map((point) => {
@@ -1793,8 +1803,15 @@ function polygonSourcePoints(item: JsonRecord): Point[] {
     .filter((point): point is Point => point != null);
 }
 
+function vectorShape(item: JsonRecord): "polygon" | "ellipse" {
+  return readString(item.shape) === "ellipse" ? "ellipse" : "polygon";
+}
+
 function polygonPoints(item: JsonRecord): Point[] {
   const points = polygonSourcePoints(item);
+  if (readString(item.type) === "vector" && vectorShape(item) === "ellipse") {
+    return points;
+  }
   const closed = polygonClosed(item, points);
   const rounded = closed
     ? roundedPolygonPoints(points, cornerRadii(item, points.length))
@@ -1920,6 +1937,9 @@ function sampleSmoothCurve(points: Point[], closed: boolean, tension: number, se
 }
 
 function polygonClosed(item: JsonRecord, points: Point[]): boolean {
+  if (readString(item.type) === "vector" && vectorShape(item) === "ellipse") {
+    return true;
+  }
   const value = item.closed;
   if (value === false || value === "false" || value === "0") return false;
   if (value === true || value === "true" || value === "1") return true;

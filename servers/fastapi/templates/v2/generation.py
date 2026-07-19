@@ -72,7 +72,7 @@ _CONTENT_VALUE_KEYS_BY_ELEMENT_TYPE = {
         "y_axis_title",
     },
     "image": {"data", "prompt"},
-    "infographic": {"max_value", "min_value", "value"},
+    "infographic": {"data"},
     "text": {"runs"},
     "text-list": {"items"},
 }
@@ -91,7 +91,10 @@ Convert the provided raw slide elements to components.
 
 # General Rules:
 - `id` and `description` must be related to layout and must not be derived from slide content.
-- `id` should be about 2 to 5 words in snake_case format.
+- `id` should use 3 to 6 structural words in snake_case format.
+- Do not include fixed counts or number words in `id` or `description`, such as two, three, four, numbered, or 4_bullet.
+- Use plural dynamic region names instead, such as cards, bullets, sections, columns, rows, metrics, or callouts.
+- Prefer clear structural ids such as `title_slide_with_image`, `title_description_right_image`, or `title_cards_bottom`.
 - `description` should be around 15 to 30 words.
 - `name` of element must be derived from layout, not from content.
 
@@ -137,6 +140,10 @@ Convert the provided raw slide elements to components.
 - Detect infographic visuals by comparing the raw PPTX JSON with the reference slide image.
 - When an infographic is built from multiple raw elements, replace all elements that form the infographic with one `infographic` element.
 - If an infographic is represented as an `image` element in the raw slide layout, convert that image into an `infographic` element and remove the original `image` element.
+
+# Vector Rules:
+- For vector circles or ellipses, use `shape="ellipse"` instead of approximating the shape with many smooth polygon points.
+- For freeform paths and polygons, use `shape="polygon"` or omit `shape`.
 
 # Schema Rules:
 - Set `decorative=true` for elements that should stay fixed as part of the template design.

@@ -168,6 +168,10 @@ function renderPolygon(
   key: string,
   mode: RenderMode
 ) {
+  if (vectorShape(element) === "ellipse") {
+    return renderEllipseVector(element, key, mode);
+  }
+
   const points = polygonPoints(element);
   if (points.length < 2) return null;
 
@@ -203,6 +207,52 @@ function renderPolygon(
         <ShapeTag
           points={pointString}
           fill={closed ? fillColor ?? "none" : "none"}
+          stroke={strokeColor ?? undefined}
+          strokeWidth={strokeColor ? strokeWidth : undefined}
+        />
+      </svg>
+    </div>
+  );
+}
+
+function renderEllipseVector(
+  element: TemplateV2Element,
+  key: string,
+  mode: RenderMode
+) {
+  const points = polygonSourcePoints(element);
+  if (points.length < 2) return null;
+
+  const box = polygonBox(element, points);
+  const fill = readRecord(element.fill);
+  const stroke = readRecord(element.stroke);
+  const fillColor = readString(fill.color);
+  const strokeColor = readString(stroke.color);
+  const strokeWidth = Math.max(0, readNumber(stroke.width) ?? 1);
+  if (!fillColor && !(strokeColor && strokeWidth > 0)) return null;
+
+  return (
+    <div
+      key={key}
+      style={{
+        ...frameStyleFromBox(box, mode),
+        overflow: "visible",
+        transform: transformStyle(element),
+      }}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${box.width ?? 1} ${box.height ?? 1}`}
+        preserveAspectRatio="none"
+        style={{ display: "block", overflow: "visible" }}
+      >
+        <ellipse
+          cx={(box.width ?? 1) / 2}
+          cy={(box.height ?? 1) / 2}
+          rx={(box.width ?? 1) / 2}
+          ry={(box.height ?? 1) / 2}
+          fill={fillColor ?? "none"}
           stroke={strokeColor ?? undefined}
           strokeWidth={strokeColor ? strokeWidth : undefined}
         />
@@ -610,7 +660,12 @@ function readBox(
   const position = readRecord(element.position);
   const size = readRecord(element.size);
   if (element.type === "vector") {
-    return polygonBox(element, polygonPoints(element));
+    return polygonBox(
+      element,
+      vectorShape(element) === "ellipse"
+        ? polygonSourcePoints(element)
+        : polygonPoints(element)
+    );
   }
   return {
     x: readNumber(position.x) ?? 0,
@@ -641,8 +696,13 @@ function polygonSourcePoints(element: TemplateV2Element): PreviewPoint[] {
   return readPointArray(element.points);
 }
 
+function vectorShape(element: TemplateV2Element): "polygon" | "ellipse" {
+  return element.shape === "ellipse" ? "ellipse" : "polygon";
+}
+
 function polygonPoints(element: TemplateV2Element): PreviewPoint[] {
   const points = polygonSourcePoints(element);
+  if (vectorShape(element) === "ellipse") return points;
   const closed = polygonClosed(element, points);
   const rounded = closed
     ? roundedPolygonPoints(points, cornerRadii(element, points.length))
@@ -794,6 +854,7 @@ function polygonClosed(
   element: TemplateV2Element,
   points: Array<{ x: number; y: number }>
 ) {
+  if (vectorShape(element) === "ellipse") return true;
   if (element.closed === false || element.closed === "false" || element.closed === "0") {
     return false;
   }

@@ -56,19 +56,6 @@ export interface FontInfo {
   path?: string;
 }
 
-export interface TemplateCreationInitResponse {
-  id: string;
-  total_slides: number;
-}
-
-export interface SlideLayoutResponse {
-  slide_index: number;
-  react_component: string;
-  layout_id: string;
-  layout_name: string;
-  layout_description?: string;
-}
-
 export interface TemplateCreationState {
   step: TemplateCreationStep;
   isLoading: boolean;
@@ -84,8 +71,6 @@ export interface TemplateCreationState {
   templateId: string | null;
   totalSlides: number;
 
-  // Slide layouts
-  slideLayouts: SlideLayoutResponse[];
   currentSlideIndex: number;
 }
 
@@ -202,7 +187,6 @@ export interface EachSlideProps {
   index: number;
   retrySlide: (index: number) => void;
   setSlides: React.Dispatch<React.SetStateAction<ProcessedSlide[]>>;
-  onSlideUpdate?: (updatedSlideData: any) => void;
   isProcessing: boolean;
   onOpenSchemaEditor?: (index: number | null) => void;
   isSchemaEditorOpen?: boolean;

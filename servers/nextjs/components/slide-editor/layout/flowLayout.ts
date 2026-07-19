@@ -622,7 +622,7 @@ function markGridArea(
 function isFramelessDecorativeShape(child: FlowLayoutElement) {
   if (readOptionalSize(child.size) || asRecord(child.position)) return false;
   const type = readString(child.type);
-  return type === "rectangle" || type === "ellipse" || type === "line";
+  return type === "vector";
 }
 
 function clampLayoutSize(

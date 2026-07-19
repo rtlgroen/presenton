@@ -9,7 +9,14 @@ from typing import Any
 from .models.layouts import RawSlideLayout
 
 
-CONTENT_TYPES = {"text", "image", "text-list", "table", "chart"}
+CONTENT_TYPES = {
+    "text",
+    "image",
+    "text-list",
+    "table",
+    "chart",
+    "infographic",
+}
 CHART_TYPE_VALUES = [
     "area",
     "bar",
@@ -226,6 +233,9 @@ def _content_schema_for_element(element: dict[str, Any]) -> dict[str, Any]:
 
     if element_type == "chart":
         return _chart_content_schema()
+
+    if element_type == "infographic":
+        return _infographic_content_schema()
 
     raise ValueError(f"unsupported content element type: {element_type}")
 
@@ -951,6 +961,8 @@ def _component_content_field_schema(field: dict[str, Any]) -> dict[str, Any]:
         }
     elif element_type == "chart":
         schema = _chart_content_schema()
+    elif element_type == "infographic":
+        schema = _infographic_content_schema()
     else:
         schema = {}
 
@@ -959,6 +971,41 @@ def _component_content_field_schema(field: dict[str, Any]) -> dict[str, Any]:
         "title": _component_content_field_title(field["name"]),
         "x-element-type": element_type,
         "x-element-path": field["path"],
+    }
+
+
+def _infographic_data_content_schema(infographic_type: str) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "type": {"const": infographic_type},
+            "min_value": {"type": "number"},
+            "max_value": {"type": "number"},
+            "value": {"type": "number"},
+        },
+        "required": ["type", "min_value", "max_value", "value"],
+    }
+
+
+def _infographic_content_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "data": {
+                "oneOf": [
+                    _infographic_data_content_schema("progress_bar"),
+                    _infographic_data_content_schema("gauge"),
+                ]
+            },
+            "colors": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+            },
+        },
+        "required": ["data"],
     }
 
 

@@ -10,10 +10,7 @@ _PATH_SEGMENT_RE = re.compile(r"^(?P<key>components|elements|children)\[(?P<inde
 CONTENT_EDITABLE_ELEMENT_TYPES = {"text", "text-list", "table", "image", "chart"}
 VISIBLE_ELEMENT_TYPES = CONTENT_EDITABLE_ELEMENT_TYPES | {
     "container",
-    "rectangle",
-    "polygon",
-    "ellipse",
-    "line",
+    "vector",
     "infographic",
     "flex",
     "grid",
@@ -1890,19 +1887,17 @@ def _apply_direct_color_patch(
         font = element.get("font") if isinstance(element.get("font"), dict) else {}
         element["font"] = {**font, "color": value}
         return
-    if element_type == "line":
+    if element_type == "vector":
         stroke = element.get("stroke") if isinstance(element.get("stroke"), dict) else {}
         element["stroke"] = {**stroke, "color": value}
         return
     if "fill" not in patch and element_type in {
         "container",
-        "ellipse",
         "flex",
         "grid",
         "grid-view",
         "group",
         "infographic",
-        "rectangle",
     }:
         fill = element.get("fill") if isinstance(element.get("fill"), dict) else {}
         element["fill"] = {**fill, "color": value}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type Konva from "konva";
 import { Transformer } from "react-konva";
+import { TRANSFORM_ANCHOR_ATTR } from "@/components/slide-editor/selection/transformSession";
 
 const CORNER_HANDLE_SIZE = 14;
 const EDGE_HANDLE_LENGTH = 28;
@@ -159,6 +160,16 @@ function fixedSideTransformFromTransformer(
   return fixedSide.right != null || fixedSide.bottom != null
     ? fixedSide
     : null;
+}
+
+function rememberTransformAnchorForNodes(
+  transformer: Konva.Transformer | null,
+) {
+  if (!transformer) return;
+  const anchor = transformer.getActiveAnchor() ?? null;
+  transformer.getNodes().forEach((node) => {
+    node.setAttr(TRANSFORM_ANCHOR_ATTR, anchor);
+  });
 }
 
 function preventInvertedAnchorDrag(
@@ -370,8 +381,6 @@ export function TemplateV2SelectionTransformers({
       });
     }
   });
-  const isLineElementSelection =
-    selectionKind === "element" && horizontalResizeOnly;
   const canTransformSelection =
     selectionKind === "component" || isTransformableElementSelection;
   const boundAnchorDrag = useCallback(
@@ -381,6 +390,8 @@ export function TemplateV2SelectionTransformers({
   );
   const boundTransformBox = useCallback(
     (oldBox: TransformerBox, newBox: TransformerBox) => {
+      const transformer = selectedTransformerRef.current;
+      rememberTransformAnchorForNodes(transformer);
       const boundedBox = preventInvertedTransform(
         oldBox,
         newBox,
@@ -388,7 +399,7 @@ export function TemplateV2SelectionTransformers({
       );
       if (boundedBox === oldBox) return oldBox;
       return pinFixedSideTransformBox(
-        selectedTransformerRef.current?.getActiveAnchor(),
+        transformer?.getActiveAnchor(),
         oldBox,
         boundedBox,
         fixedSideTransformRef.current,
@@ -397,9 +408,9 @@ export function TemplateV2SelectionTransformers({
     [horizontalResizeOnly],
   );
   const handleTransformStart = useCallback(() => {
-    fixedSideTransformRef.current = fixedSideTransformFromTransformer(
-      selectedTransformerRef.current,
-    );
+    const transformer = selectedTransformerRef.current;
+    fixedSideTransformRef.current = fixedSideTransformFromTransformer(transformer);
+    rememberTransformAnchorForNodes(transformer);
   }, []);
   const handleTransformEnd = useCallback(() => {
     fixedSideTransformRef.current = null;

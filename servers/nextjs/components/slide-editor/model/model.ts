@@ -44,8 +44,6 @@ import {
   alignmentOffset,
   asRecord,
   clamp,
-  DECORATIVE_LINE_LENGTH,
-  DECORATIVE_LINE_THICKNESS,
   isRecord,
   normalizeId,
   readArray,
@@ -549,6 +547,44 @@ export function clampRelativePosition(pos: Point, box: Box, parentSize: Size): P
     x: clamp(pos.x, 0, Math.max(0, parentSize.width - box.width)),
     y: clamp(pos.y, 0, Math.max(0, parentSize.height - box.height)),
   };
+}
+
+export function anchoredFramePositionForResize(
+  box: Box,
+  nextSize: Size,
+  anchor: string | null | undefined,
+  fallback: Point,
+  bounds: Size,
+): Point {
+  return clampRelativePosition(
+    anchoredFramePositionForResizeUnclamped(box, nextSize, anchor, fallback),
+    { ...box, ...nextSize },
+    bounds,
+  );
+}
+
+export function anchoredFramePositionForResizeUnclamped(
+  box: Box,
+  nextSize: Size,
+  anchor: string | null | undefined,
+  fallback: Point,
+): Point {
+  let x = fallback.x;
+  let y = fallback.y;
+
+  if (anchor?.includes("left")) {
+    x = box.x + box.width - nextSize.width;
+  } else if (anchor?.includes("right")) {
+    x = box.x;
+  }
+
+  if (anchor?.includes("top")) {
+    y = box.y + box.height - nextSize.height;
+  } else if (anchor?.includes("bottom")) {
+    y = box.y;
+  }
+
+  return { x, y };
 }
 
 export function layoutChildren(
@@ -1318,29 +1354,9 @@ export function componentContentSize(component: RawComponent): Size {
   return readSize(component.size, { width: STAGE_WIDTH, height: STAGE_HEIGHT });
 }
 
-function lineDelta(element: RawElement): Size {
-  const size = asRecord(element.size);
-  return {
-    width: readNumber(size?.width) ?? 0,
-    height: readNumber(size?.height) ?? 0,
-  };
-}
-
 export function lineStrokeWidth(element: RawElement): number {
   const stroke = asRecord(element.stroke);
   return Math.max(0, readNumber(stroke?.width) ?? 1);
-}
-
-export function lineRenderBox(element: RawElement): Box {
-  const position = readPoint(element.position);
-  const delta = lineDelta(element);
-  const width = lineStrokeWidth(element);
-  return {
-    x: position.x + Math.min(0, delta.width),
-    y: position.y + Math.min(0, delta.height),
-    width: Math.max(Math.abs(delta.width), width, 1),
-    height: Math.max(Math.abs(delta.height), width, 1),
-  };
 }
 
 export function isVectorType(type: string | null | undefined) {
@@ -1376,9 +1392,14 @@ export function vectorVertexEntriesForElement(element: RawElement): VectorVertex
 
 export function isVectorLineElement(element: RawElement | null | undefined) {
   if (!element || !isVectorType(readString(element.type))) return false;
+  if (vectorShapeForElement(element) === "ellipse") return false;
   const vertices = vectorVertexEntriesForElement(element);
   if (vertices.length !== 2) return false;
   return !(readBoolean(element.closed) ?? false);
+}
+
+export function vectorShapeForElement(element: RawElement): "polygon" | "ellipse" {
+  return readString(element.shape) === "ellipse" ? "ellipse" : "polygon";
 }
 
 function translatePointArray(value: unknown, delta: Point) {
@@ -1488,60 +1509,7 @@ export function translateVectorElement(
 }
 
 function polygonSourcePointsForElement(element: RawElement): Point[] {
-  const type = readString(element.type);
-  if (type === "line") {
-    const position = readPoint(element.position);
-    const delta = lineDelta(element);
-    return [
-      position,
-      { x: position.x + delta.width, y: position.y + delta.height },
-    ];
-  }
-
-  if (type === "rectangle") {
-    const position = readPoint(element.position);
-    const size = readOptionalSize(element.size) ?? {
-      width: DECORATIVE_LINE_LENGTH,
-      height: DECORATIVE_LINE_LENGTH,
-    };
-    return [
-      position,
-      { x: position.x + size.width, y: position.y },
-      { x: position.x + size.width, y: position.y + size.height },
-      { x: position.x, y: position.y + size.height },
-    ];
-  }
-
-  if (type === "ellipse") {
-    const position = readPoint(element.position);
-    const size = readOptionalSize(element.size) ?? {
-      width: DECORATIVE_LINE_LENGTH,
-      height: DECORATIVE_LINE_LENGTH,
-    };
-    return ellipsePoints(position.x, position.y, size.width, size.height);
-  }
-
   return readPointArray(element.points);
-}
-
-function ellipsePoints(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  segments = 8,
-): Point[] {
-  const radiusX = width / 2;
-  const radiusY = height / 2;
-  const centerX = x + radiusX;
-  const centerY = y + radiusY;
-  return Array.from({ length: segments }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / segments;
-    return {
-      x: centerX + radiusX * Math.cos(angle),
-      y: centerY + radiusY * Math.sin(angle),
-    };
-  });
 }
 
 function pointAt(points: Point[], index: number) {
@@ -1597,11 +1565,7 @@ function roundedPolygonPoints(points: Point[], radii: number[], segments = 8): P
 
 function curveSettings(element: RawElement) {
   const curve = asRecord(element.curve);
-  if (!curve) {
-    return readString(element.type) === "ellipse"
-      ? { type: "smooth", tension: 1, segments: 8 }
-      : null;
-  }
+  if (!curve) return null;
   const rawType = readString(curve.type)?.trim().toLowerCase();
   if (rawType !== "smooth") return null;
   return {
@@ -1675,6 +1639,9 @@ function sampleSmoothCurve(
 
 export function polygonPointsForElement(element: RawElement): Point[] {
   const points = polygonSourcePointsForElement(element);
+  if (isVectorType(readString(element.type)) && vectorShapeForElement(element) === "ellipse") {
+    return points;
+  }
   const closed = polygonClosedForElement(element, points);
   const rounded = closed
     ? roundedPolygonPoints(points, normalizedCornerRadii(element, points))
@@ -1691,13 +1658,19 @@ export function polygonClosedForElement(
   element: RawElement,
   points = polygonPointsForElement(element),
 ): boolean {
+  if (isVectorType(readString(element.type)) && vectorShapeForElement(element) === "ellipse") {
+    return true;
+  }
   const explicit = readBoolean(element.closed);
   if (explicit != null) return explicit;
   return points.length > 2;
 }
 
 export function polygonRenderBox(element: RawElement): Box {
-  const points = polygonPointsForElement(element);
+  const points =
+    isVectorType(readString(element.type)) && vectorShapeForElement(element) === "ellipse"
+      ? polygonSourcePointsForElement(element)
+      : polygonPointsForElement(element);
   if (points.length === 0) {
     return {
       ...readPoint(element.position),
@@ -1735,8 +1708,6 @@ export function elementBox(element: RawElement): Box {
   const box =
     isVectorType(type)
       ? polygonRenderBox(element)
-      : type === "line"
-      ? lineRenderBox(element)
       : {
           ...readPoint(element.position),
           ...elementSize(element),
@@ -1758,10 +1729,6 @@ export function elementSize(element: RawElement, fallback?: Size): Size {
   const type = readString(element.type);
   if (isVectorType(type)) {
     const box = polygonRenderBox(element);
-    return { width: box.width, height: box.height };
-  }
-  if (type === "line") {
-    const box = lineRenderBox(element);
     return { width: box.width, height: box.height };
   }
 
@@ -1798,18 +1765,6 @@ export function elementSize(element: RawElement, fallback?: Size): Size {
     return {
       width: Math.max(1, width),
       height: Math.max(1, estimateTextHeight(text, font, width)),
-    };
-  }
-  if (type === "line") {
-    return {
-      width: fallback?.width ?? DECORATIVE_LINE_LENGTH,
-      height: fallback?.height ?? DECORATIVE_LINE_THICKNESS,
-    };
-  }
-  if (type === "rectangle" || type === "ellipse") {
-    return {
-      width: fallback?.width ?? DECORATIVE_LINE_LENGTH,
-      height: fallback?.height ?? DECORATIVE_LINE_LENGTH,
     };
   }
   if (
@@ -1879,7 +1834,6 @@ export function shouldClipElementChildren(
 
 export function isBoxVisualType(type: string | null) {
   return (
-    type === "rectangle" ||
     type === "container" ||
     type === "flex" ||
     type === "grid" ||
@@ -2261,45 +2215,6 @@ export function editorTableCellToRaw(value: unknown, fallback: unknown) {
   };
 }
 
-export function linePointsForElement(
-  element: RawElement,
-  width: number,
-  height: number,
-) {
-  const delta = lineDelta(element);
-  return [
-    delta.width < 0 ? width : 0,
-    delta.height < 0 ? height : 0,
-    delta.width < 0 ? 0 : Math.abs(delta.width),
-    delta.height < 0 ? 0 : Math.abs(delta.height),
-  ];
-}
-
-function scaledLineDelta(value: number, scale: number) {
-  if (value === 0) return 0;
-  const safeScale = Number.isFinite(scale) ? Math.abs(scale) : 1;
-  const magnitude = Math.max(0, Math.abs(value) * safeScale);
-  return value < 0 ? -magnitude : magnitude;
-}
-
-export function lineElementGeometryFromFrame(
-  element: RawElement,
-  framePosition: Point,
-  scaleX: number,
-  scaleY: number,
-): { position: Point; size: Size } {
-  const current = lineDelta(element);
-  const width = scaledLineDelta(current.width, scaleX);
-  const height = scaledLineDelta(current.height, scaleY);
-  return {
-    position: {
-      x: framePosition.x + (width < 0 ? Math.abs(width) : 0),
-      y: framePosition.y + (height < 0 ? Math.abs(height) : 0),
-    },
-    size: { width, height },
-  };
-}
-
 export function polygonElementFromFrame(
   element: RawElement,
   framePosition: Point,
@@ -2343,9 +2258,12 @@ export function polygonElementFromFrame(
 }
 
 export function valueProgress(element: RawElement) {
-  const min = readNumber(element.min_value) ?? readNumber(element.minValue) ?? 0;
-  const max = readNumber(element.max_value) ?? readNumber(element.maxValue) ?? 100;
-  const value = readNumber(element.value) ?? min;
+  const data = asRecord(element.data);
+  const min =
+    readNumber(data?.min_value) ?? 0;
+  const max =
+    readNumber(data?.max_value) ?? 100;
+  const value = readNumber(data?.value) ?? min;
   const range = max - min;
   if (!Number.isFinite(range) || range === 0) return 0;
   return clamp((value - min) / range, 0, 1);

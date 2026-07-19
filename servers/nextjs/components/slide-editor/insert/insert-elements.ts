@@ -519,12 +519,13 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
       type: "infographic",
       position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION },
       size: { width: 420, height: 74 },
-      infographic_type: "progress_bar",
-      min_value: 0,
-      max_value: 100,
-      value: 68,
-      base_color: "E5E7EB",
-      highlight_color: "2563EB",
+      data: {
+        type: "progress_bar",
+        min_value: 0,
+        max_value: 100,
+        value: 68,
+      },
+      colors: ["E5E7EB", "2563EB"],
     };
   }
 
@@ -532,12 +533,13 @@ function makeInfographicElement(infographicType: InfographicType): SlideElement 
     type: "infographic",
     position: { ...DEFAULT_INFOGRAPHIC_INSERT_POSITION },
     size: { width: 320, height: 190 },
-    infographic_type: "gauge",
-    min_value: 0,
-    max_value: 100,
-    value: 76,
-    base_color: "E5E7EB",
-    highlight_color: "2563EB",
+    data: {
+      type: "gauge",
+      min_value: 0,
+      max_value: 100,
+      value: 76,
+    },
+    colors: ["E5E7EB", "2563EB"],
   };
 }
 
@@ -710,17 +712,21 @@ export function createImageInsertContent(kind?: string): EditorInsertContent {
 
 const DEFAULT_VECTOR_FILL: Fill = { color: "F4F3FF", opacity: 1 };
 const DEFAULT_VECTOR_STROKE: Stroke = { color: "7A5AF8", width: 1.5 };
-const DEFAULT_VECTOR_LINE_STROKE: Stroke = { color: "101323", width: 2 };
-const DEFAULT_VECTOR_CURVE = { type: "smooth" as const, tension: 1, segments: 8 };
+const DEFAULT_VECTOR_LINE_STROKE: Stroke = {
+  ...DEFAULT_VECTOR_STROKE,
+  width: 2,
+};
 
 function makeVector({
   points,
+  shape,
   closed = true,
   fill = DEFAULT_VECTOR_FILL,
   stroke = DEFAULT_VECTOR_STROKE,
   curve,
 }: {
   points: Array<{ x: number; y: number }>;
+  shape?: "polygon" | "ellipse";
   closed?: boolean;
   fill?: Fill | null;
   stroke?: Stroke | null;
@@ -728,6 +734,7 @@ function makeVector({
 }): SlideElement {
   return {
     type: "vector",
+    ...(shape ? { shape } : {}),
     points,
     closed,
     ...(curve ? { curve } : {}),
@@ -752,15 +759,15 @@ export function createElementInsertElements(kind?: string): SlideElement[] {
     case "vector-circle":
       return [
         makeVector({
+          shape: "ellipse",
           points: ellipseVectorPoints(134, 134, 220, 220),
-          curve: DEFAULT_VECTOR_CURVE,
         }),
       ];
     case "vector-ellipse":
       return [
         makeVector({
+          shape: "ellipse",
           points: ellipseVectorPoints(134, 134, 346, 198),
-          curve: DEFAULT_VECTOR_CURVE,
         }),
       ];
     case "vector-triangle":
@@ -832,19 +839,17 @@ function ellipseVectorPoints(
   y: number,
   width: number,
   height: number,
-  segments = 8,
 ) {
   const radiusX = width / 2;
   const radiusY = height / 2;
   const centerX = x + radiusX;
   const centerY = y + radiusY;
-  return Array.from({ length: segments }, (_, index) => {
-    const angle = (Math.PI * 2 * index) / segments;
-    return {
-      x: centerX + radiusX * Math.cos(angle),
-      y: centerY + radiusY * Math.sin(angle),
-    };
-  });
+  return [
+    { x: centerX, y },
+    { x: x + width, y: centerY },
+    { x: centerX, y: y + height },
+    { x, y: centerY },
+  ];
 }
 
 function regularPolygonVectorPoints(

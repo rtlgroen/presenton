@@ -22,6 +22,7 @@ import {
 } from "react-konva";
 import { effectiveLineHeight } from "@/components/slide-editor/text/text-line-height";
 import { textRunsContent } from "@/components/slide-editor/text/text-runs";
+import { TRANSFORM_ANCHOR_ATTR } from "@/components/slide-editor/selection/transformSession";
 import {
   displayText,
   layoutTextListRenderItems,
@@ -49,6 +50,8 @@ import {
 } from "@/components/slide-editor/model/component-resize";
 import {
   asRecord,
+  anchoredFramePositionForResize,
+  anchoredFramePositionForResizeUnclamped,
   borderRadius,
   childArrayInfo,
   clamp,
@@ -63,13 +66,10 @@ import {
   isManualPositioned,
   isRawIconElement,
   isStaticSvgIconSource,
-  isVectorLineElement,
   isVectorType,
   isRecord,
   keyForSelection,
   layoutChildren,
-  lineElementGeometryFromFrame,
-  linePointsForElement,
   lineStrokeWidth,
   nullableBoxEqual,
   numberPathEqual,
@@ -99,9 +99,11 @@ import {
   strokeWidth,
   removeVectorPointFromElement,
   translateVectorElement,
+  unclampedPositionFromNodeInParent,
   updateVectorVertexPoint,
   valueProgress,
   vectorVertexEntriesForElement,
+  vectorShapeForElement,
   pointOnCircle,
   withHash,
   type Box,
@@ -189,7 +191,9 @@ function componentTransformAnchorForNode(
   node: Konva.Node,
 ): ComponentTransformAnchor | null {
   const transformer = componentTransformerForNode(node);
-  const activeAnchor = transformer?.getActiveAnchor();
+  const activeAnchor =
+    transformer?.getActiveAnchor() ??
+    readString(node.getAttr(TRANSFORM_ANCHOR_ATTR));
   return isComponentTransformAnchor(activeAnchor) ? activeAnchor : null;
 }
 
@@ -458,6 +462,11 @@ export function RawComponentNode({
   const elements = readArray(renderedComponent.elements).filter(
     isRecord,
   ) as RawElement[];
+  const isSingleVectorElementComponent =
+    elements.length === 1 && isVectorType(readString(elements[0]?.type));
+  const canNormalizeSingleVectorWrapper =
+    isSingleVectorElementComponent &&
+    (readNumber(component.rotation) ?? 0) === 0;
   const handleSingleElementComponentDragEnd = useCallback(
     (elementSelection: ElementSelection, delta: Point) => {
       if (
@@ -615,6 +624,7 @@ export function RawComponentNode({
       transformSourceBoxRef.current = null;
       sideTransformAnchorRef.current = null;
       latestSideTransformRef.current = null;
+      node.setAttr(TRANSFORM_ANCHOR_ATTR, null);
       onComponentChange(componentIndex, () => next);
     },
     [component, componentIndex, isEditMode, onComponentChange],
@@ -667,6 +677,15 @@ export function RawComponentNode({
             height: box.height,
           }}
           layoutManaged={false}
+          allowVectorResizeBeyondParent={
+            canNormalizeSingleVectorWrapper && elementIndex === 0
+          }
+          allowVectorPointEditing={
+            isSingleVectorElementComponent && elementIndex === 0
+          }
+          allowDirectVectorSelection={
+            isSingleVectorElementComponent && elementIndex === 0
+          }
           fontRevision={fontRevision}
         />
       ))}
@@ -748,6 +767,9 @@ function RawElementNode({
   textConstraintBox,
   renderBox,
   layoutManaged = false,
+  allowVectorResizeBeyondParent = false,
+  allowVectorPointEditing = true,
+  allowDirectVectorSelection = true,
   fontRevision,
 }: {
   element: RawElement;
@@ -780,9 +802,14 @@ function RawElementNode({
   textConstraintBox?: Box | null;
   renderBox?: Box | null;
   layoutManaged?: boolean;
+  allowVectorResizeBeyondParent?: boolean;
+  allowVectorPointEditing?: boolean;
+  allowDirectVectorSelection?: boolean;
   fontRevision: number;
 }) {
   const groupRef = useRef<Konva.Group | null>(null);
+  const transformSourceBoxRef = useRef<Box | null>(null);
+  const transformAnchorRef = useRef<ComponentTransformAnchor | null>(null);
   const box = renderBox ?? elementBox(element);
   const selection = useMemo<ElementSelection>(
     () => ({
@@ -799,7 +826,6 @@ function RawElementNode({
   const editing = editingKey === key;
   const type = readString(element.type);
   const isVector = isVectorType(type);
-  const isVectorLine = isVectorLineElement(element);
   const vectorPointEditing = vectorEditingKey === key;
   const [vectorDragPreview, setVectorDragPreview] =
     useState<RawElement | null>(null);
@@ -832,8 +858,9 @@ function RawElementNode({
     isEditMode &&
     isSelected &&
     isVector &&
+    allowVectorPointEditing &&
     !editing &&
-    (vectorPointEditing || isVectorLine);
+    vectorPointEditing;
   const vectorDraggable =
     isEditMode && isSelected && isVector && !editing && !showVectorPointHandles;
   useEffect(() => {
@@ -953,6 +980,120 @@ function RawElementNode({
     },
     [layoutManaged, onElementChange, selection],
   );
+  const handleTransformStart = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      transformSourceBoxRef.current = box;
+      transformAnchorRef.current = null;
+      const node = groupRef.current;
+      if (node) {
+        transformAnchorRef.current = componentTransformAnchorForNode(node);
+      }
+    },
+    [box, isEditMode],
+  );
+  const handleTransform = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) return;
+      const anchor = componentTransformAnchorForNode(node);
+      if (anchor) transformAnchorRef.current = anchor;
+    },
+    [isEditMode],
+  );
+  const handleTransformEnd = useCallback(
+    (event: Konva.KonvaEventObject<Event>) => {
+      if (!isEditMode) return;
+      event.cancelBubble = true;
+      const node = groupRef.current;
+      if (!node) {
+        transformSourceBoxRef.current = null;
+        transformAnchorRef.current = null;
+        return;
+      }
+      const anchor =
+        componentTransformAnchorForNode(node) ?? transformAnchorRef.current;
+      const sourceBox = transformSourceBoxRef.current ?? box;
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      const nextSize = {
+        width: Math.max(1, sourceBox.width * scaleX),
+        height: Math.max(1, sourceBox.height * scaleY),
+      };
+      const canOverflowParent =
+        isVector &&
+        allowVectorResizeBeyondParent &&
+        (anchor?.includes("left") || anchor?.includes("top"));
+      node.scaleX(1);
+      node.scaleY(1);
+      const fontScale = fontScaleFromResize(scaleX, scaleY);
+      const measuredPosition = canOverflowParent
+        ? unclampedPositionFromNodeInParent(node, parentBox, {
+            ...sourceBox,
+            ...nextSize,
+          })
+        : positionFromNodeInParent(node, parentBox, {
+            ...sourceBox,
+            ...nextSize,
+          });
+      const nextPosition = isVector
+        ? canOverflowParent
+          ? anchoredFramePositionForResizeUnclamped(
+              sourceBox,
+              nextSize,
+              anchor,
+              measuredPosition,
+            )
+          : anchoredFramePositionForResize(
+              sourceBox,
+              nextSize,
+              anchor,
+              measuredPosition,
+              parentBox,
+            )
+        : measuredPosition;
+      node.position({
+        x: centerOrigin ? nextPosition.x + nextSize.width / 2 : nextPosition.x,
+        y: centerOrigin ? nextPosition.y + nextSize.height / 2 : nextPosition.y,
+      });
+      transformSourceBoxRef.current = null;
+      transformAnchorRef.current = null;
+      node.setAttr(TRANSFORM_ANCHOR_ATTR, null);
+      onElementChange(selection, (current) => {
+        const scaled = scaleRawElementTextMetrics(current, fontScale);
+        const type = readString(current.type);
+        const geometry =
+          isVectorType(type)
+            ? polygonElementFromFrame(scaled, nextPosition, scaleX, scaleY)
+            : {
+                ...scaled,
+                position: nextPosition,
+                size: nextSize,
+              };
+        return {
+          ...geometry,
+          rotation: node.rotation(),
+          ...(layoutManaged || isManualPositioned(current)
+            ? { __presenton_manual_position: true }
+            : {}),
+        };
+      });
+    },
+    [
+      box,
+      allowVectorResizeBeyondParent,
+      centerOrigin,
+      isEditMode,
+      isVector,
+      layoutManaged,
+      onElementChange,
+      parentBox,
+      selection,
+    ],
+  );
 
   return (
     <Group
@@ -976,9 +1117,12 @@ function RawElementNode({
       onMouseDown={(event) => {
         if (!isEditMode) return;
         if (isVector) {
+          if (!allowDirectVectorSelection) {
+            event.cancelBubble = false;
+            return;
+          }
           event.cancelBubble = true;
           onSelect(selection);
-          if (isVectorLine) onOpenEditor(selection);
           return;
         }
         if (vectorDraggable) {
@@ -991,9 +1135,12 @@ function RawElementNode({
       onTouchStart={(event) => {
         if (!isEditMode) return;
         if (isVector) {
+          if (!allowDirectVectorSelection) {
+            event.cancelBubble = false;
+            return;
+          }
           event.cancelBubble = true;
           onSelect(selection);
-          if (isVectorLine) onOpenEditor(selection);
           return;
         }
         if (vectorDraggable) {
@@ -1032,58 +1179,9 @@ function RawElementNode({
       onDragStart={handleVectorDragStart}
       onDragMove={handleVectorDragMove}
       onDragEnd={handleVectorDragEnd}
-      onTransformEnd={(event) => {
-        if (!isEditMode) return;
-        event.cancelBubble = true;
-        const node = groupRef.current;
-        if (!node) return;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        const nextSize = {
-          width: Math.max(1, box.width * scaleX),
-          height: Math.max(1, box.height * scaleY),
-        };
-        node.scaleX(1);
-        node.scaleY(1);
-        const fontScale = fontScaleFromResize(scaleX, scaleY);
-        const nextPosition = positionFromNodeInParent(
-          node,
-          parentBox,
-          { ...box, ...nextSize },
-        );
-        node.position({
-          x: centerOrigin ? nextPosition.x + nextSize.width / 2 : nextPosition.x,
-          y: centerOrigin ? nextPosition.y + nextSize.height / 2 : nextPosition.y,
-        });
-        onElementChange(selection, (current) => {
-          const scaled = scaleRawElementTextMetrics(current, fontScale);
-          const type = readString(current.type);
-          const geometry =
-            isVectorType(type)
-              ? polygonElementFromFrame(scaled, nextPosition, scaleX, scaleY)
-              : {
-                  ...scaled,
-                  ...(type === "line"
-                    ? lineElementGeometryFromFrame(
-                        current,
-                        nextPosition,
-                        scaleX,
-                        scaleY,
-                      )
-                    : {
-                        position: nextPosition,
-                        size: nextSize,
-                      }),
-                };
-          return {
-            ...geometry,
-            rotation: node.rotation(),
-            ...(layoutManaged || isManualPositioned(current)
-              ? { __presenton_manual_position: true }
-              : {}),
-          };
-        });
-      }}
+      onTransformStart={handleTransformStart}
+      onTransform={handleTransform}
+      onTransformEnd={handleTransformEnd}
     >
       {isEditMode ? (
         <SelectionBoundsRect width={box.width} height={box.height} />
@@ -1130,6 +1228,9 @@ function RawElementNode({
           onOpenEditor={onOpenEditor}
           onElementChange={onElementChange}
           onElementDragEnd={onElementDragEnd}
+          allowVectorResizeBeyondParent={false}
+          allowVectorPointEditing={allowVectorPointEditing}
+          allowDirectVectorSelection={allowDirectVectorSelection}
           parentBox={{
             x: parentBox.x + box.x,
             y: parentBox.y + box.y,
@@ -1152,6 +1253,10 @@ export const MemoizedRawElementNode = memo(RawElementNode, (previous, next) => {
     previous.componentIndex !== next.componentIndex ||
     previous.isEditMode !== next.isEditMode ||
     previous.layoutManaged !== next.layoutManaged ||
+    previous.allowVectorResizeBeyondParent !==
+      next.allowVectorResizeBeyondParent ||
+    previous.allowVectorPointEditing !== next.allowVectorPointEditing ||
+    previous.allowDirectVectorSelection !== next.allowDirectVectorSelection ||
     previous.fontRevision !== next.fontRevision ||
     previous.vectorEditingKey !== next.vectorEditingKey ||
     previous.selectedTableCell !== next.selectedTableCell ||
@@ -1204,12 +1309,15 @@ function VectorVertexHandles({
 }) {
   const vertices = vectorVertexEntriesForElement(element);
   if (vertices.length === 0) return null;
-  const closed = readBoolean(element.closed) ?? vertices.length > 2;
-  const canRemove = vertices.length > (closed ? 3 : 2);
-  const edges = vertices.flatMap((vertex, orderIndex) => {
-    const next = vertices[orderIndex + 1] ?? (closed ? vertices[0] : null);
-    return next ? [{ current: vertex, next }] : [];
-  });
+  const isEllipse = vectorShapeForElement(element) === "ellipse";
+  const closed = isEllipse || (readBoolean(element.closed) ?? vertices.length > 2);
+  const canRemove = !isEllipse && vertices.length > (closed ? 3 : 2);
+  const edges = isEllipse
+    ? []
+    : vertices.flatMap((vertex, orderIndex) => {
+        const next = vertices[orderIndex + 1] ?? (closed ? vertices[0] : null);
+        return next ? [{ current: vertex, next }] : [];
+      });
 
   return (
     <>
@@ -1453,50 +1561,37 @@ function RawElementVisual({
       />
     );
   }
-  if (type === "ellipse") {
-    return (
-      <Ellipse
-        x={width / 2}
-        y={height / 2}
-        radiusX={width / 2}
-        radiusY={height / 2}
-        fill={
-          colorWithOpacity(fillColor(element.fill), fillOpacity(element.fill)) ??
-          "transparent"
-        }
-        stroke={colorWithOpacity(
-          strokeColor(element.stroke),
-          strokeOpacity(element.stroke),
-        )}
-        strokeWidth={strokeWidth(element.stroke)}
-        {...shadowProps(element)}
-        listening={interactive}
-      />
-    );
-  }
-  if (type === "line") {
+  if (isVectorType(type)) {
+    const vectorShape = vectorShapeForElement(element);
     const stroke = colorWithOpacity(
-      strokeColor(element.stroke) ?? "#000000",
+      strokeColor(element.stroke),
       strokeOpacity(element.stroke),
     );
     const lineWidth = lineStrokeWidth(element);
     const lineDash = readArray(asRecord(element.stroke)?.dash)
       .map(readNumber)
       .filter((value): value is number => value != null);
-    if (!stroke || lineWidth <= 0) return null;
-    return (
-      <Line
-        points={linePointsForElement(element, width, height)}
-        stroke={stroke}
-        strokeWidth={lineWidth}
-        dash={lineDash.length ? lineDash : undefined}
-        hitStrokeWidth={Math.max(20, lineWidth)}
-        {...shadowProps(element)}
-        listening={interactive}
-      />
-    );
-  }
-  if (isVectorType(type)) {
+
+    if (vectorShape === "ellipse") {
+      const fill = colorWithOpacity(fillColor(element.fill), fillOpacity(element.fill));
+      if (!fill && !(stroke && lineWidth > 0)) return null;
+      return (
+        <Ellipse
+          x={width / 2}
+          y={height / 2}
+          radiusX={width / 2}
+          radiusY={height / 2}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={stroke ? lineWidth : 0}
+          dash={lineDash.length ? lineDash : undefined}
+          hitStrokeWidth={Math.max(20, lineWidth)}
+          {...shadowProps(element)}
+          listening={interactive}
+        />
+      );
+    }
+
     const points = polygonLocalPointsForElement(
       element,
       vectorOriginBox ?? undefined,
@@ -1505,23 +1600,19 @@ function RawElementVisual({
     const fill = closed
       ? colorWithOpacity(fillColor(element.fill), fillOpacity(element.fill))
       : undefined;
-    const stroke = colorWithOpacity(
+    const polygonStroke = colorWithOpacity(
       strokeColor(element.stroke) ?? (!closed ? "#000000" : undefined),
       strokeOpacity(element.stroke),
     );
-    const lineWidth = lineStrokeWidth(element);
-    const lineDash = readArray(asRecord(element.stroke)?.dash)
-      .map(readNumber)
-      .filter((value): value is number => value != null);
     if (points.length < 4) return null;
-    if (!fill && !(stroke && lineWidth > 0)) return null;
+    if (!fill && !(polygonStroke && lineWidth > 0)) return null;
     return (
       <Line
         points={points}
         closed={closed}
         fill={fill}
-        stroke={stroke}
-        strokeWidth={stroke ? lineWidth : 0}
+        stroke={polygonStroke}
+        strokeWidth={polygonStroke ? lineWidth : 0}
         dash={lineDash.length ? lineDash : undefined}
         hitStrokeWidth={Math.max(20, lineWidth)}
         {...shadowProps(element)}
@@ -2566,18 +2657,16 @@ function RawInfographicElement({
   height: number;
   interactive: boolean;
 }) {
-  const infographicType =
-    readString(element.infographic_type) ??
-    readString(element.infographicType) ??
-    "gauge";
+  const data = asRecord(element.data);
+  const colors = readArray(element.colors);
+  const infographicType = readString(data?.type) ?? "gauge";
   const progress = valueProgress(element);
   const baseColor =
-    withHash(readString(element.base_color) ?? readString(element.baseColor)) ??
+    withHash(readString(colors[0])) ??
     "#E5E7EB";
   const highlightColor =
-    withHash(
-      readString(element.highlight_color) ?? readString(element.highlightColor),
-    ) ?? "#2563EB";
+    withHash(readString(colors[1])) ?? "#2563EB";
+  const value = readNumber(data?.value) ?? 0;
 
   if (infographicType === "progress_bar") {
     const radius = Math.min(height / 2, 8);
@@ -2642,7 +2731,7 @@ function RawInfographicElement({
         y={height * 0.5}
         width={width}
         height={height * 0.3}
-        text={String(Math.round(readNumber(element.value) ?? 0))}
+        text={String(Math.round(value))}
         fontFamily="Arial, Helvetica, sans-serif"
         fontSize={Math.max(10, Math.min(width, height) * 0.22)}
         fontStyle="bold"

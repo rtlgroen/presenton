@@ -10,11 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { withHash } from "@/components/slide-editor/utils/color";
-import {
-  averageBorderRadius,
-  elementBox,
-  uniformBorderRadius,
-} from "@/components/slide-editor/model/element-model";
+import { elementBox } from "@/components/slide-editor/model/element-model";
 import type { ShapeSlideElement } from "@/components/slide-editor/state/state";
 import type {
   VectorCurve,
@@ -39,7 +35,6 @@ import {
 } from "@/components/slide-editor/toolbar/numericInput";
 
 type ShapePanel =
-  | "type"
   | "fill"
   | "stroke"
   | "radius"
@@ -47,15 +42,6 @@ type ShapePanel =
   | "shadow"
   | "opacity"
   | null;
-
-const SHAPE_TYPES: Array<{
-  icon: typeof Square;
-  label: string;
-  value: ShapeSlideElement["type"];
-}> = [
-  { icon: Square, label: "Rectangle", value: "rectangle" },
-  { icon: Circle, label: "Ellipse", value: "ellipse" },
-];
 
 const DEFAULT_SHAPE_SHADOW = {
   color: "#000000",
@@ -121,33 +107,22 @@ export function ShapeToolbar({
   const fillEnabled = element.fill != null;
   const strokeEnabled = element.stroke != null && stroke.width > 0;
   const shadowEnabled = element.shadow != null;
-  const isRectangle = element.type === "rectangle";
-  const isVector = element.type === "vector";
-  const vectorElement = isVector ? element : null;
-  const canChangeType = element.type === "rectangle" || element.type === "ellipse";
+  const vectorElement = element;
+  const vectorShape = vectorElement.shape === "ellipse" ? "ellipse" : "polygon";
   const canRoundCorners =
-    isRectangle ||
-    (isVector && element.closed !== false && element.points.length === 4);
+    vectorShape === "polygon" &&
+    element.closed !== false &&
+    element.points.length === 4;
   const maxRadius = Math.max(
     1,
     Math.min(128, box.w / 2, box.h / 2),
   );
-  const radius = isRectangle
-    ? Math.min(maxRadius, averageBorderRadius(element.border_radius))
-    : isVector
-      ? Math.min(maxRadius, averageCornerRadii(element.corner_radii))
-      : 0;
-  const vectorClosed = vectorElement ? vectorElement.closed !== false : false;
-  const vectorCurveMode = vectorElement ? curveMode(vectorElement.curve) : "none";
-  const vectorSegments = vectorElement
-    ? normalizedSegments(vectorElement.curve?.segments)
-    : 16;
-  const vectorTension = vectorElement
-    ? normalizedTension(vectorElement.curve?.tension)
-    : 0.4;
-  const vectorCornerRadii = vectorElement
-    ? cornerRadiiForVector(vectorElement)
-    : [];
+  const radius = Math.min(maxRadius, averageCornerRadii(element.corner_radii));
+  const vectorClosed = vectorShape === "ellipse" || vectorElement.closed !== false;
+  const vectorCurveMode = curveMode(vectorElement.curve);
+  const vectorSegments = normalizedSegments(vectorElement.curve?.segments);
+  const vectorTension = normalizedTension(vectorElement.curve?.tension);
+  const vectorCornerRadii = cornerRadiiForVector(vectorElement);
 
   const update = (changes: Partial<ShapeSlideElement>) => {
     onChange(index, { ...element, ...changes } as ShapeSlideElement);
@@ -187,17 +162,30 @@ export function ShapeToolbar({
     onChange(index, { ...vectorElement, ...changes } as ShapeSlideElement);
   };
 
-  const updateType = (type: ShapeSlideElement["type"]) => {
-    const next = { ...element, type } as ShapeSlideElement &
-      Record<string, unknown>;
-    if (type === "ellipse") delete next.border_radius;
-    onChange(index, next);
-    setOpenPanel(null);
-  };
-
   const togglePanel = (panel: Exclude<ShapePanel, null>) => {
     setOpenPanel((current) => (current === panel ? null : panel));
   };
+
+  useEffect(() => {
+    if (!openPanel || typeof document === "undefined") return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-template-v2-floating-toolbar='true']")
+      ) {
+        return;
+      }
+      setOpenPanel(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [openPanel]);
+
   const setCurveMode = (mode: CurveMode) => {
     if (!vectorElement) return;
     updateVector({ curve: curveForMode(vectorElement, mode) });
@@ -213,6 +201,14 @@ export function ShapeToolbar({
     const radii = cornerRadiiForVector(vectorElement);
     radii[cornerIndex] = value;
     updateVector({ corner_radii: radii });
+  };
+  const updateVectorShape = (shape: "polygon" | "ellipse") => {
+    if (!vectorElement) return;
+    updateVector(
+      shape === "ellipse"
+        ? { shape, closed: true, curve: null, corner_radii: null }
+        : { shape },
+    );
   };
 
   return (
@@ -329,43 +325,6 @@ export function ShapeToolbar({
         ) : null}
       </div>
 
-      {canChangeType ? (
-        <div className="relative">
-          <ToolbarButton
-            title="Shape type"
-            pressed={openPanel === "type"}
-            onClick={() => togglePanel("type")}
-          >
-            {isRectangle ? <Square size={16} aria-hidden="true" /> : <Circle size={16} aria-hidden="true" />}
-          </ToolbarButton>
-          {openPanel === "type" ? (
-            <Panel className="w-[180px] p-3">
-              <div className="space-y-1.5">
-                {SHAPE_TYPES.map((option) => {
-                  const Icon = option.icon;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={element.type === option.value}
-                      onClick={() => updateType(option.value)}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-[#F4F3FF]",
-                        element.type === option.value &&
-                          "bg-[#F4F1FF] text-[#7A5AF8]",
-                      )}
-                    >
-                      <Icon size={16} aria-hidden="true" />
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </Panel>
-          ) : null}
-        </div>
-      ) : null}
-
       {canRoundCorners ? (
         <div className="relative">
           <ToolbarButton
@@ -385,11 +344,7 @@ export function ShapeToolbar({
                 step={Math.max(0.001, maxRadius / 100)}
                 formatValue={(value) => formatNumber(value)}
                 onCommit={(value) =>
-                  update(
-                    isVector
-                      ? { corner_radii: [value, value, value, value] }
-                      : { border_radius: uniformBorderRadius(value) },
-                  )
+                  update({ corner_radii: [value, value, value, value] })
                 }
               />
               {vectorElement && vectorCornerRadii.length === 4 ? (
@@ -412,86 +367,111 @@ export function ShapeToolbar({
         </div>
       ) : null}
 
-      {vectorElement ? (
-        <div className="relative">
-          <ToolbarButton
-            title="Vector path"
-            pressed={openPanel === "vector"}
-            onClick={() => togglePanel("vector")}
-          >
-            <Spline size={16} aria-hidden="true" />
-          </ToolbarButton>
-          {openPanel === "vector" ? (
-            <Panel className="w-[300px] space-y-4 p-3">
-              <button
-                type="button"
-                aria-pressed={vectorClosed}
-                onClick={() => updateVector({ closed: !vectorClosed })}
-                className="flex w-full items-center justify-between rounded-md border border-[#EDEEEF] px-3 py-2 text-left text-xs text-[#4B5563] hover:bg-[#F8F8FA]"
-              >
-                <span className="font-medium text-[#191919]">Closed path</span>
-                <span className="flex items-center gap-1 text-[#7A5AF8]">
-                  {vectorClosed ? (
-                    <ToggleRight size={17} aria-hidden="true" />
-                  ) : (
-                    <ToggleLeft size={17} aria-hidden="true" />
-                  )}
-                  {vectorClosed ? "On" : "Off"}
-                </span>
-              </button>
-
-              <div className="space-y-2">
-                <div className="text-[12px] font-medium text-[#4B5563]">
-                  Curve
-                </div>
-                <div className="grid grid-cols-2 gap-1 rounded-md bg-[#F6F6F9] p-1">
-                  {(["none", "smooth"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={vectorCurveMode === mode}
-                      onClick={() => setCurveMode(mode)}
-                      className={cn(
-                        "h-8 rounded-[4px] text-xs capitalize text-[#4B5563] hover:bg-white",
-                        vectorCurveMode === mode &&
-                          "bg-white text-[#7A5AF8] shadow-sm",
-                      )}
-                    >
-                      {mode === "none" ? "Straight" : mode}
-                    </button>
-                  ))}
-                </div>
+      <div className="relative">
+        <ToolbarButton
+          title="Vector path"
+          pressed={openPanel === "vector"}
+          onClick={() => togglePanel("vector")}
+        >
+          <Spline size={16} aria-hidden="true" />
+        </ToolbarButton>
+        {openPanel === "vector" ? (
+          <Panel className="w-[300px] space-y-4 p-3">
+              <div className="grid grid-cols-2 gap-1 rounded-md bg-[#F6F6F9] p-1">
+                {(["polygon", "ellipse"] as const).map((shape) => (
+                  <button
+                    key={shape}
+                    type="button"
+                    aria-pressed={vectorShape === shape}
+                    onClick={() => updateVectorShape(shape)}
+                    className={cn(
+                      "flex h-8 items-center justify-center gap-1 rounded-[4px] text-xs capitalize text-[#4B5563] hover:bg-white",
+                      vectorShape === shape &&
+                        "bg-white text-[#7A5AF8] shadow-sm",
+                    )}
+                  >
+                    {shape === "polygon" ? (
+                      <Square size={14} aria-hidden="true" />
+                    ) : (
+                      <Circle size={14} aria-hidden="true" />
+                    )}
+                    {shape}
+                  </button>
+                ))}
               </div>
 
-              {vectorCurveMode === "smooth" ? (
-                <div className="space-y-3">
-                  <SliderField
-                    label="Tension"
-                    value={vectorTension}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    formatValue={(value) => formatNumber(value)}
-                    onCommit={(tension) => updateCurve({ tension })}
-                  />
-                  <SliderField
-                    label="Smoothness"
-                    value={vectorSegments}
-                    min={1}
-                    max={96}
-                    step={1}
-                    formatValue={(value) => `${Math.round(value)}`}
-                    onCommit={(segments) =>
-                      updateCurve({ segments: Math.round(segments) })
-                    }
-                  />
-                </div>
+              {vectorShape === "polygon" ? (
+                <>
+                  <button
+                    type="button"
+                    aria-pressed={vectorClosed}
+                    onClick={() => updateVector({ closed: !vectorClosed })}
+                    className="flex w-full items-center justify-between rounded-md border border-[#EDEEEF] px-3 py-2 text-left text-xs text-[#4B5563] hover:bg-[#F8F8FA]"
+                  >
+                    <span className="font-medium text-[#191919]">Closed path</span>
+                    <span className="flex items-center gap-1 text-[#7A5AF8]">
+                      {vectorClosed ? (
+                        <ToggleRight size={17} aria-hidden="true" />
+                      ) : (
+                        <ToggleLeft size={17} aria-hidden="true" />
+                      )}
+                      {vectorClosed ? "On" : "Off"}
+                    </span>
+                  </button>
+
+                  <div className="space-y-2">
+                    <div className="text-[12px] font-medium text-[#4B5563]">
+                      Curve
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 rounded-md bg-[#F6F6F9] p-1">
+                      {(["none", "smooth"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          aria-pressed={vectorCurveMode === mode}
+                          onClick={() => setCurveMode(mode)}
+                          className={cn(
+                            "h-8 rounded-[4px] text-xs capitalize text-[#4B5563] hover:bg-white",
+                            vectorCurveMode === mode &&
+                              "bg-white text-[#7A5AF8] shadow-sm",
+                          )}
+                        >
+                          {mode === "none" ? "Straight" : mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {vectorCurveMode === "smooth" ? (
+                    <div className="space-y-3">
+                      <SliderField
+                        label="Tension"
+                        value={vectorTension}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        formatValue={(value) => formatNumber(value)}
+                        onCommit={(tension) => updateCurve({ tension })}
+                      />
+                      <SliderField
+                        label="Smoothness"
+                        value={vectorSegments}
+                        min={1}
+                        max={96}
+                        step={1}
+                        formatValue={(value) => `${Math.round(value)}`}
+                        onCommit={(segments) =>
+                          updateCurve({ segments: Math.round(segments) })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
-            </Panel>
-          ) : null}
-        </div>
-      ) : null}
+          </Panel>
+        ) : null}
+      </div>
 
       <Divider />
 

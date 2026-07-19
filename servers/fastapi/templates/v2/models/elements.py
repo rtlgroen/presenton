@@ -262,6 +262,11 @@ class Table(BaseModel):
     min_rows: int
 
 
+class VectorShape(str, Enum):
+    POLYGON = "polygon"
+    ELLIPSE = "ellipse"
+
+
 class VectorCurve(BaseModel):
     type: Literal["smooth"]
     tension: Optional[float] = Field(default=None, ge=0, le=1)
@@ -270,6 +275,7 @@ class VectorCurve(BaseModel):
 
 class Vector(BaseModel):
     type: Literal["vector"]
+    shape: Optional[VectorShape] = None
     points: list[Position] = Field(min_length=2)
     closed: Optional[bool] = None
     curve: Optional[VectorCurve] = None
@@ -347,19 +353,32 @@ class InfographicType(str, Enum):
     GAUGE = "gauge"
 
 
+class ProgressBarInfographicData(BaseModel):
+    type: Literal["progress_bar"]
+    max_value: float
+    min_value: float
+    value: float
+
+
+class GaugeInfographicData(BaseModel):
+    type: Literal["gauge"]
+    max_value: float
+    min_value: float
+    value: float
+
+
 class Infographic(BaseModel):
     type: Literal["infographic"]
     position: Optional[Position] = None
     size: Optional[Size] = None
     rotation: Optional[float] = None
-    infographic_type: InfographicType
-    max_value: float
-    min_value: float
-    value: float
+    data: Annotated[
+        Union[ProgressBarInfographicData, GaugeInfographicData],
+        Field(discriminator="type"),
+    ]
 
     # Design
-    base_color: Optional[str] = None
-    highlight_color: Optional[str] = None
+    colors: List[str] = Field(default_factory=list)
 
     # Schema
     decorative: bool
@@ -456,10 +475,12 @@ __all__ = [
     "IconType",
     "Infographic",
     "InfographicType",
+    "GaugeInfographicData",
     "LayoutAlignment",
     "Marker",
     "Padding",
     "Position",
+    "ProgressBarInfographicData",
     "Shadow",
     "Size",
     "SlideElement",
@@ -473,4 +494,5 @@ __all__ = [
     "VerticalAlignment",
     "Vector",
     "VectorCurve",
+    "VectorShape",
 ]

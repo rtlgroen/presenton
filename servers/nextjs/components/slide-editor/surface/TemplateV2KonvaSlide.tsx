@@ -132,7 +132,6 @@ import {
   isManualPositioned,
   isRecord,
   isRawIconElement,
-  isVectorLineElement,
   isVectorType,
   keyForSelection,
   keysForSelection,
@@ -190,6 +189,14 @@ function autoSizeInlineTextFrame(
     ...frame,
     height: Math.max(1, contentHeight),
   };
+}
+
+function canEditVectorPointsForSelection(ui: RawUi, selection: ElementSelection) {
+  if (selection.componentIndex === ROOT_ELEMENTS_COMPONENT_INDEX) return true;
+  if (selection.elementPath.length !== 1) return false;
+  const component = asRecord(readArray(ui.components)[selection.componentIndex]);
+  const elements = readArray(component?.elements).filter(isRecord);
+  return elements.length === 1;
 }
 
 const MIN_EDITING_SCENE_PIXEL_RATIO = 1;
@@ -462,17 +469,18 @@ function TemplateV2KonvaSlideComponent({
       uiDraft,
     ],
   );
-  const horizontalResizeOnly =
-    editorToolbarTarget?.element.type === "line" ||
-    readString(selectedElement?.type) === "line";
+  const horizontalResizeOnly = false;
   const selectedIsVectorElement =
     selection?.kind === "element" &&
     isVectorType(readString(selectedElement?.type));
+  const selectedCanEditVectorPoints =
+    selection?.kind === "element" &&
+    canEditVectorPointsForSelection(uiDraft, selection);
   const selectedIsVectorPointEditing =
     selectedIsVectorElement &&
     selection?.kind === "element" &&
-    (isVectorLineElement(selectedElement) ||
-      vectorEditingKey === keyForSelection(selection));
+    selectedCanEditVectorPoints &&
+    vectorEditingKey === keyForSelection(selection);
   const shouldHideParentComponentBoundary = inlineEdit || selectedIsVectorElement;
   const transformerParentComponentKey = shouldHideParentComponentBoundary
     ? null
@@ -755,6 +763,7 @@ function TemplateV2KonvaSlideComponent({
   const clearEditorUiState = useCallback(
     (options?: { clearActiveSurface?: boolean }) => {
       multiComponentDragRef.current = null;
+      selectionRef.current = null;
       setSelection(null);
       clearTableCellSelection();
       clearTableCellEditing();
@@ -889,14 +898,16 @@ function TemplateV2KonvaSlideComponent({
     if (!previous) return;
     redoStackRef.current.push(currentUiRef.current);
     commitUi(previous, false);
-  }, [commitUi]);
+    clearEditorUiState();
+  }, [clearEditorUiState, commitUi]);
 
   const redo = useCallback(() => {
     const next = redoStackRef.current.pop();
     if (!next) return;
     undoStackRef.current.push(currentUiRef.current);
     commitUi(next, false);
-  }, [commitUi]);
+    clearEditorUiState();
+  }, [clearEditorUiState, commitUi]);
 
   const select = useCallback(
     (nextSelection: Selection, options?: SelectOptions) => {
@@ -1554,12 +1565,15 @@ function TemplateV2KonvaSlideComponent({
     trackEvent(MixpanelEvent.Editor_Component_Ungrouped, {
       ...editorAnalyticsProps(),
     });
+    selectionRef.current = result.selection;
     setSelection(result.selection);
+    activateSurface(result.selection);
     clearInlineEdit();
     clearTableCellSelection();
     setVectorEditSelection(null);
     setIconEditorSelection(null);
   }, [
+    activateSurface,
     clearInlineEdit,
     clearTableCellSelection,
     commitUi,
@@ -1838,7 +1852,11 @@ function TemplateV2KonvaSlideComponent({
         clearInlineEdit();
         setIconEditorSelection(null);
         setChartEditorSelection(null);
-        setVectorEditSelection(elementSelection);
+        setVectorEditSelection(
+          canEditVectorPointsForSelection(currentUiRef.current, elementSelection)
+            ? elementSelection
+            : null,
+        );
         return;
       }
       openInlineEditor(elementSelection);
@@ -2099,7 +2117,9 @@ function TemplateV2KonvaSlideComponent({
               selectedKeys={selectedKeys}
               selectionKind={selection?.kind ?? null}
               horizontalResizeOnly={horizontalResizeOnly}
-              fullElementTransform={selectedIsVectorElement}
+              fullElementTransform={
+                selectedIsVectorElement && selectedCanEditVectorPoints
+              }
               suppressSelectedOutline={Boolean(
                 selectedTableCell ||
                   inlineEdit ||

@@ -773,6 +773,41 @@ def test_chat_template_image_content_stores_prompt():
     assert icon["prompt"] == "success check"
 
 
+def test_chat_template_infographic_content_updates_new_element_type():
+    infographic = {
+        "type": "infographic",
+        "decorative": False,
+        "name": "progress",
+        "data": {
+            "type": "progress_bar",
+            "min_value": 0,
+            "max_value": 100,
+            "value": 40,
+        },
+        "colors": ["E5E7EB", "2563EB"],
+    }
+    PresentationChatMemoryLayer._set_template_element_value(
+        infographic,
+        {
+            "data": {
+                "type": "gauge",
+                "min_value": 20,
+                "max_value": 80,
+                "value": 64,
+            },
+            "colors": ["F2F4F7", "12B76A"],
+        },
+    )
+
+    assert infographic["data"] == {
+        "type": "gauge",
+        "min_value": 20.0,
+        "max_value": 80.0,
+        "value": 64.0,
+    }
+    assert infographic["colors"] == ["F2F4F7", "12B76A"]
+
+
 def test_apply_template_image_content_avoids_stretching_generated_photos():
     ui = {
         "id": "layout-1",

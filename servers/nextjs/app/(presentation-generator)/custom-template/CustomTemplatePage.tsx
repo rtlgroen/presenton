@@ -1409,13 +1409,7 @@ function SaveTemplateModal({
   );
 }
 
-type CustomTemplatePageProps = {
-  useTemplateV2Generation?: boolean;
-};
-
-const CustomTemplatePage = ({
-  useTemplateV2Generation = true,
-}: CustomTemplatePageProps) => {
+const CustomTemplatePage = () => {
   const router = useRouter();
   const llmConfig = useSelector((state: RootState) => state.userConfig.llm_config);
   const [reviewSlideIndex, setReviewSlideIndex] = useState(0);
@@ -1444,7 +1438,7 @@ const CustomTemplatePage = ({
     uploadFont,
     fontUploadAndPreview,
     retrySlide,
-  } = useTemplateCreation({ useTemplateV2Generation });
+  } = useTemplateCreation();
 
   const defaultTemplateName = getDefaultTemplateName(selectedFile) || "Untitled Template";
   const activeStep = activeStudioStep(state.step);
