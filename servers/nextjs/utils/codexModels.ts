@@ -4,7 +4,6 @@ export interface CodexModel {
 }
 
 export const CODEX_MODELS: CodexModel[] = [
-  { id: "gpt-5.6", name: "GPT-5.6" },
   { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
   { id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
   { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
@@ -14,7 +13,7 @@ export const CODEX_MODELS: CodexModel[] = [
   { id: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark (Pro preview)" },
 ];
 
-export const DEFAULT_CODEX_MODEL = "gpt-5.6";
+export const DEFAULT_CODEX_MODEL = "gpt-5.6-luna";
 
 const CODEX_MODEL_IDS = new Set(CODEX_MODELS.map((model) => model.id));
 
