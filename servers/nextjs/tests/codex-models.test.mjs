@@ -27,12 +27,11 @@ async function loadCodexModels() {
 
 const codexModelsPromise = loadCodexModels();
 
-test("lists GPT-5.6 as the default supported Codex model", async () => {
+test("lists named GPT-5.6 models with Luna as the default", async () => {
   const { CODEX_MODELS, DEFAULT_CODEX_MODEL, isSupportedCodexModel } = await codexModelsPromise;
 
-  assert.equal(DEFAULT_CODEX_MODEL, "gpt-5.6");
-  assert.deepEqual(CODEX_MODELS.slice(0, 4), [
-    { id: "gpt-5.6", name: "GPT-5.6" },
+  assert.equal(DEFAULT_CODEX_MODEL, "gpt-5.6-luna");
+  assert.deepEqual(CODEX_MODELS.slice(0, 3), [
     { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
     { id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
     { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
@@ -40,5 +39,6 @@ test("lists GPT-5.6 as the default supported Codex model", async () => {
   assert.equal(isSupportedCodexModel("gpt-5.6-sol"), true);
   assert.equal(isSupportedCodexModel("gpt-5.6-terra"), true);
   assert.equal(isSupportedCodexModel("gpt-5.6-luna"), true);
+  assert.equal(isSupportedCodexModel("gpt-5.6"), false);
   assert.equal(isSupportedCodexModel("gpt-5.2"), false);
 });

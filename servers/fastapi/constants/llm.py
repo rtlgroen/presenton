@@ -15,7 +15,6 @@ DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_LITELLM_MODEL = "gpt-4.1"
 DEFAULT_LMSTUDIO_MODEL = "openai/gpt-oss-20b"
 SUPPORTED_CODEX_MODELS = {
-    "gpt-5.6",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
@@ -24,4 +23,4 @@ SUPPORTED_CODEX_MODELS = {
     "gpt-5.4-mini",
     "gpt-5.3-codex-spark",
 }
-DEFAULT_CODEX_MODEL = "gpt-5.6"
+DEFAULT_CODEX_MODEL = "gpt-5.6-luna"
